@@ -320,10 +320,10 @@ export function AppShell({
   const workspaceNav: SidebarNavItem[] = [
     { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-200 bg-amber-500/10" },
   ];
-  const premiumNav = user.premium
-    ? [{ href: "/app/ai-import", label: t(locale, "aiMagic"), icon: "Sparkles", accent: "text-fuchsia-200 bg-fuchsia-500/10" }]
-    : [];
-  const workspaceItems = [...workspaceNav, ...premiumNav];
+  const aiMagicNav: SidebarNavItem[] = [
+    { href: "/app/ai-import", label: t(locale, "aiMagic"), icon: "Sparkles", accent: "text-fuchsia-200 bg-fuchsia-500/10" },
+  ];
+  const workspaceItems = [...workspaceNav, ...aiMagicNav];
   const ids = useMemo(() => workspaceCategories.map((item) => item.id), [workspaceCategories]);
   const isActive = (href: string) => (href === "/app" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`));
   const currentHref = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
