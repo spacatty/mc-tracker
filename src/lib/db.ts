@@ -24,6 +24,7 @@ import type {
   WorkspaceRole,
   WebsiteNotification,
 } from "./types";
+import { ensureSupportedCurrency } from "./currencies";
 import { addBillingPeriod, normalizeMonthlyAmount, nowIso, slugify } from "./utils";
 import {
   buildEntrySignature,
@@ -109,6 +110,7 @@ function mapUser(row: DbRow): User {
     role: row.role as UserRole,
     totpEnabled: bool(row.totp_enabled),
     premium: bool(row.premium),
+    displayCurrency: String(row.display_currency || "USD").trim().toUpperCase() || "USD",
     createdAt: String(row.created_at),
   };
 }
@@ -179,6 +181,7 @@ function mapNotificationChannel(row: DbRow): NotificationChannel {
     botToken: String(row.bot_token || ""),
     chatId: String(row.chat_id || ""),
     topicId: String(row.topic_id || ""),
+    proxyUrl: String(row.proxy_url || ""),
     createdAt: String(row.created_at),
   };
 }
@@ -417,6 +420,7 @@ function migrate(db: Database.Database) {
       totp_secret TEXT,
       totp_enabled INTEGER NOT NULL DEFAULT 0,
       premium INTEGER NOT NULL DEFAULT 0,
+      display_currency TEXT NOT NULL DEFAULT 'USD',
       created_at TEXT NOT NULL
     );
 
@@ -528,6 +532,14 @@ function migrate(db: Database.Database) {
       value TEXT NOT NULL
     );
 
+    CREATE TABLE IF NOT EXISTS exchange_rates (
+      base_currency TEXT NOT NULL,
+      target_currency TEXT NOT NULL,
+      rate REAL NOT NULL,
+      fetched_at TEXT NOT NULL,
+      PRIMARY KEY (base_currency, target_currency)
+    );
+
     CREATE TABLE IF NOT EXISTS notification_channels (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -536,6 +548,7 @@ function migrate(db: Database.Database) {
       bot_token TEXT,
       chat_id TEXT,
       topic_id TEXT,
+      proxy_url TEXT,
       created_at TEXT NOT NULL
     );
 
@@ -590,6 +603,9 @@ function migrate(db: Database.Database) {
   if (!columnExists(db, "users", "premium")) {
     db.prepare("ALTER TABLE users ADD COLUMN premium INTEGER NOT NULL DEFAULT 0").run();
   }
+  if (!columnExists(db, "users", "display_currency")) {
+    db.prepare("ALTER TABLE users ADD COLUMN display_currency TEXT NOT NULL DEFAULT 'USD'").run();
+  }
   if (!columnExists(db, "items", "account_name")) {
     db.prepare("ALTER TABLE items ADD COLUMN account_name TEXT").run();
   }
@@ -607,6 +623,9 @@ function migrate(db: Database.Database) {
   }
   if (!columnExists(db, "notification_channels", "workspace_id")) {
     db.prepare("ALTER TABLE notification_channels ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE").run();
+  }
+  if (!columnExists(db, "notification_channels", "proxy_url")) {
+    db.prepare("ALTER TABLE notification_channels ADD COLUMN proxy_url TEXT").run();
   }
   if (!columnExists(db, "notifications", "workspace_id")) {
     db.prepare("ALTER TABLE notifications ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE").run();
@@ -661,7 +680,7 @@ export async function createInitialSuperadmin(username: string, password: string
   const hash = await bcrypt.hash(password, 12);
   const db = getDb();
   const result = db
-    .prepare("INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, 'superadmin', ?)")
+    .prepare("INSERT INTO users (username, password_hash, role, display_currency, created_at) VALUES (?, ?, 'superadmin', 'USD', ?)")
     .run(username.trim(), hash, now);
   const userId = Number(result.lastInsertRowid);
   const workspaceId = Number(
@@ -702,7 +721,7 @@ export async function createUser(username: string, password: string, role: UserR
   const db = getDb();
   const now = nowIso();
   const result = db
-    .prepare("INSERT INTO users (username, password_hash, role, created_at) VALUES (?, ?, ?, ?)")
+    .prepare("INSERT INTO users (username, password_hash, role, display_currency, created_at) VALUES (?, ?, ?, 'USD', ?)")
     .run(username.trim(), hash, role, now);
   const userId = Number(result.lastInsertRowid);
   const workspaceId = Number(
@@ -732,6 +751,10 @@ export function updateUserRole(id: number, role: UserRole) {
 
 export function updateUserPremium(id: number, premium: boolean) {
   getDb().prepare("UPDATE users SET premium = ? WHERE id = ?").run(premium ? 1 : 0, id);
+}
+
+export function updateUserDisplayCurrency(id: number, displayCurrency: string) {
+  getDb().prepare("UPDATE users SET display_currency = ? WHERE id = ?").run(displayCurrency.trim().toUpperCase() || "USD", id);
 }
 
 export function setUserTotpSecret(id: number, secret: string, enabled: boolean) {
@@ -1241,7 +1264,7 @@ export function upsertItemForWorkspace(formData: FormData, ownerId: number, work
   const category = categoryId ? getCategoryForWorkspace(categoryId, workspaceId, ownerId) : null;
   const paymentType = String(formData.get("paymentType") || "single") as PaymentType;
   const amount = Number(formData.get("amount") || 0);
-  const currency = String(formData.get("currency") || "USD").trim().toUpperCase() || "USD";
+  const currency = ensureSupportedCurrency(String(formData.get("currency") || "USD"));
   const period = paymentType === "recurring" ? (String(formData.get("period") || "1m") as BillingPeriod) : null;
   const customPeriodDays = period === "custom" ? Number(formData.get("customPeriodDays") || 30) : null;
   const customFields: Record<string, unknown> = {};
@@ -2032,25 +2055,128 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
   return result;
 }
 
-export function dashboardStats(userId?: number): DashboardStats {
+function normalizeDashboardCurrency(value: string | null | undefined) {
+  return ensureSupportedCurrency(value, "USD");
+}
+
+async function getConversionRates(displayCurrency: string, currencies: string[]) {
+  const display = normalizeDashboardCurrency(displayCurrency);
+  const uniqueCurrencies = [...new Set(currencies.map((currency) => normalizeDashboardCurrency(currency)))];
+  const rates = new Map<string, number>([[display, 1]]);
+  const sources = uniqueCurrencies.filter((currency) => currency !== display);
+  if (!sources.length) return rates;
+
+  const db = getDb();
+  const freshAfter = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+  const placeholders = sources.map(() => "?").join(",");
+  const freshRows = db
+    .prepare(
+      `SELECT base_currency, rate
+       FROM exchange_rates
+       WHERE target_currency = ?
+         AND base_currency IN (${placeholders})
+         AND fetched_at >= ?`,
+    )
+    .all(display, ...sources, freshAfter) as DbRow[];
+  freshRows.forEach((row) => {
+    rates.set(String(row.base_currency), Number(row.rate || 0));
+  });
+
+  let missing = sources.filter((currency) => !rates.has(currency));
+  if (missing.length) {
+    const staleRows = db
+      .prepare(
+        `SELECT base_currency, rate
+         FROM exchange_rates
+         WHERE target_currency = ?
+           AND base_currency IN (${missing.map(() => "?").join(",")})`,
+      )
+      .all(display, ...missing) as DbRow[];
+    staleRows.forEach((row) => {
+      rates.set(String(row.base_currency), Number(row.rate || 0));
+    });
+    missing = missing.filter((currency) => !rates.has(currency));
+  }
+
+  if (missing.length) {
+    const fetched: Array<[string, number]> = [];
+    for (const source of missing) {
+      try {
+        const response = await fetch(`https://api.frankfurter.dev/v2/rates?base=${source}&quotes=${display}`, { cache: "no-store" });
+        const payload = (await response.json().catch(() => null)) as
+          | Array<{ base?: string; quote?: string; rate?: number }>
+          | { rates?: Record<string, number> }
+          | null;
+        if (!response.ok || !payload) continue;
+        let rate = 0;
+        if (Array.isArray(payload)) {
+          const match = payload.find((row) => String(row.base || "").toUpperCase() === source && String(row.quote || "").toUpperCase() === display);
+          rate = Number(match?.rate || 0);
+        } else if (payload.rates) {
+          rate = Number(payload.rates[display] || 0);
+        }
+        if (Number.isFinite(rate) && rate > 0) {
+          fetched.push([source, rate]);
+          rates.set(source, rate);
+        }
+      } catch {
+        // Ignore transient API failures and rely on cached rows.
+      }
+    }
+
+    if (fetched.length) {
+      const upsert = db.prepare(
+        `INSERT INTO exchange_rates (base_currency, target_currency, rate, fetched_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(base_currency, target_currency) DO UPDATE SET rate = excluded.rate, fetched_at = excluded.fetched_at`,
+      );
+      const now = nowIso();
+      const tx = db.transaction((pairs: Array<[string, number]>) => {
+        pairs.forEach(([source, rate]) => upsert.run(source, display, rate, now));
+      });
+      tx(fetched);
+    }
+  }
+
+  const stillMissing = sources.filter((currency) => !rates.has(currency));
+  if (stillMissing.length) {
+    throw new Error(`Currency conversion unavailable for: ${stillMissing.join(", ")} -> ${display}`);
+  }
+  return rates;
+}
+
+function convertForDisplay(amount: number, sourceCurrency: string, displayCurrency: string, rates: Map<string, number>) {
+  const from = normalizeDashboardCurrency(sourceCurrency);
+  const to = normalizeDashboardCurrency(displayCurrency);
+  if (from === to) return amount;
+  const sourceToDisplay = rates.get(from);
+  if (!sourceToDisplay || !Number.isFinite(sourceToDisplay) || sourceToDisplay <= 0) {
+    throw new Error(`Missing exchange rate for ${from} -> ${to}`);
+  }
+  return amount * sourceToDisplay;
+}
+
+export async function dashboardStats(userId?: number, displayCurrency = "USD"): Promise<DashboardStats> {
   const items = typeof userId === "number" ? listItemsForUser(userId) : listItems();
+  const resolvedDisplayCurrency = normalizeDashboardCurrency(displayCurrency);
+  const rates = await getConversionRates(resolvedDisplayCurrency, items.map((item) => item.currency));
   const recurring = items.filter((item) => item.paymentType === "recurring");
   const monthlyItems = recurring.filter((item) => item.period === "1m");
-  const monthlyRecurring = monthlyItems.reduce((sum, item) => sum + item.amount, 0);
-  const approxMonthlySpend = recurring.reduce((sum, item) => sum + normalizeMonthlyAmount(item), 0);
-  const totalExpenses = items.reduce((sum, item) => sum + item.amount, 0);
+  const monthlyRecurring = monthlyItems.reduce((sum, item) => sum + convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates), 0);
+  const approxMonthlySpend = recurring.reduce((sum, item) => sum + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates), 0);
+  const totalExpenses = items.reduce((sum, item) => sum + convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates), 0);
   const since = new Date();
   since.setMonth(since.getMonth() - 1);
   const newMonthly = recurring
     .filter((item) => new Date(item.createdAt) >= since)
-    .reduce((sum, item) => sum + normalizeMonthlyAmount(item), 0);
+    .reduce((sum, item) => sum + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates), 0);
 
   const priceChanges = (getDb()
     .prepare("SELECT item_id, amount, created_at FROM price_events WHERE created_at >= ? ORDER BY created_at ASC")
     .all(since.toISOString()) as DbRow[]).reduce((sum, event) => {
     const item = items.find((candidate) => candidate.id === Number(event.item_id));
     if (!item || item.paymentType !== "recurring") return sum;
-    return sum + normalizeMonthlyAmount({ ...item, amount: Number(event.amount || 0) });
+    return sum + convertForDisplay(normalizeMonthlyAmount({ ...item, amount: Number(event.amount || 0) }), item.currency, resolvedDisplayCurrency, rates);
   }, 0);
 
   const oneMonthChangeAmount = newMonthly + priceChanges;
@@ -2075,7 +2201,7 @@ export function dashboardStats(userId?: number): DashboardStats {
       color: item.categoryColor || "#8b5cf6",
       monthly: 0,
     };
-    current.monthly += normalizeMonthlyAmount(item);
+    current.monthly += convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates);
     categoryMap.set(key, current);
   });
 
@@ -2129,7 +2255,7 @@ export function dashboardStats(userId?: number): DashboardStats {
       end.setHours(23, 59, 59, 999);
       let occurrence = new Date(nextPayment);
       while (occurrence <= end) {
-        current[horizon.key] += item.amount;
+        current[horizon.key] += convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates);
         occurrence = addBillingPeriod(occurrence, item.period, item.customPeriodDays);
         occurrence.setHours(0, 0, 0, 0);
       }
@@ -2138,6 +2264,7 @@ export function dashboardStats(userId?: number): DashboardStats {
   });
 
   return {
+    displayCurrency: resolvedDisplayCurrency,
     totalExpenses,
     monthlyRecurring,
     monthlyRecurringCount: monthlyItems.length,
@@ -2160,19 +2287,21 @@ export function dashboardStats(userId?: number): DashboardStats {
   };
 }
 
-export function dashboardStatsForWorkspace(workspaceId: number, userId: number): DashboardStats {
+export async function dashboardStatsForWorkspace(workspaceId: number, userId: number, displayCurrency = "USD"): Promise<DashboardStats> {
   requireWorkspaceViewer(workspaceId, userId);
   const items = listItemsForWorkspace(workspaceId, userId);
+  const resolvedDisplayCurrency = normalizeDashboardCurrency(displayCurrency);
+  const rates = await getConversionRates(resolvedDisplayCurrency, items.map((item) => item.currency));
   const recurring = items.filter((item) => item.paymentType === "recurring");
   const monthlyItems = recurring.filter((item) => item.period === "1m");
-  const monthlyRecurring = monthlyItems.reduce((sum, item) => sum + item.amount, 0);
-  const approxMonthlySpend = recurring.reduce((sum, item) => sum + normalizeMonthlyAmount(item), 0);
-  const totalExpenses = items.reduce((sum, item) => sum + item.amount, 0);
+  const monthlyRecurring = monthlyItems.reduce((sum, item) => sum + convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates), 0);
+  const approxMonthlySpend = recurring.reduce((sum, item) => sum + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates), 0);
+  const totalExpenses = items.reduce((sum, item) => sum + convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates), 0);
   const since = new Date();
   since.setMonth(since.getMonth() - 1);
   const newMonthly = recurring
     .filter((item) => new Date(item.createdAt) >= since)
-    .reduce((sum, item) => sum + normalizeMonthlyAmount(item), 0);
+    .reduce((sum, item) => sum + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates), 0);
 
   const priceChanges = (getDb()
     .prepare(
@@ -2185,7 +2314,7 @@ export function dashboardStatsForWorkspace(workspaceId: number, userId: number):
     .all(since.toISOString(), workspaceId) as DbRow[]).reduce((sum, event) => {
     const item = items.find((candidate) => candidate.id === Number(event.item_id));
     if (!item || item.paymentType !== "recurring") return sum;
-    return sum + normalizeMonthlyAmount({ ...item, amount: Number(event.amount || 0) });
+    return sum + convertForDisplay(normalizeMonthlyAmount({ ...item, amount: Number(event.amount || 0) }), item.currency, resolvedDisplayCurrency, rates);
   }, 0);
 
   const oneMonthChangeAmount = newMonthly + priceChanges;
@@ -2210,7 +2339,7 @@ export function dashboardStatsForWorkspace(workspaceId: number, userId: number):
       color: item.categoryColor || "#8b5cf6",
       monthly: 0,
     };
-    current.monthly += normalizeMonthlyAmount(item);
+    current.monthly += convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates);
     categoryMap.set(key, current);
   });
 
@@ -2259,7 +2388,7 @@ export function dashboardStatsForWorkspace(workspaceId: number, userId: number):
       end.setHours(23, 59, 59, 999);
       let occurrence = new Date(nextPayment);
       while (occurrence <= end) {
-        current[horizon.key] += item.amount;
+        current[horizon.key] += convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates);
         occurrence = addBillingPeriod(occurrence, item.period, item.customPeriodDays);
         occurrence.setHours(0, 0, 0, 0);
       }
@@ -2268,6 +2397,7 @@ export function dashboardStatsForWorkspace(workspaceId: number, userId: number):
   });
 
   return {
+    displayCurrency: resolvedDisplayCurrency,
     totalExpenses,
     monthlyRecurring,
     monthlyRecurringCount: monthlyItems.length,
@@ -2296,25 +2426,27 @@ function workspaceColor(index: number) {
   return WORKSPACE_DOMINANCE_COLORS[index % WORKSPACE_DOMINANCE_COLORS.length];
 }
 
-export function dashboardStatsGlobalForUser(userId: number): DashboardStats {
+export async function dashboardStatsGlobalForUser(userId: number, displayCurrency = "USD"): Promise<DashboardStats> {
   const workspaces = listWorkspacesForUser(userId);
   const items = workspaces.flatMap((workspace) => listItemsForWorkspace(workspace.id, userId));
+  const resolvedDisplayCurrency = normalizeDashboardCurrency(displayCurrency);
+  const rates = await getConversionRates(resolvedDisplayCurrency, items.map((item) => item.currency));
   const recurring = items.filter((item) => item.paymentType === "recurring");
   const monthlyItems = recurring.filter((item) => item.period === "1m");
-  const monthlyRecurring = monthlyItems.reduce((sum, item) => sum + item.amount, 0);
-  const approxMonthlySpend = recurring.reduce((sum, item) => sum + normalizeMonthlyAmount(item), 0);
-  const totalExpenses = items.reduce((sum, item) => sum + item.amount, 0);
+  const monthlyRecurring = monthlyItems.reduce((sum, item) => sum + convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates), 0);
+  const approxMonthlySpend = recurring.reduce((sum, item) => sum + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates), 0);
+  const totalExpenses = items.reduce((sum, item) => sum + convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates), 0);
   const since = new Date();
   since.setMonth(since.getMonth() - 1);
   const newMonthly = recurring
     .filter((item) => new Date(item.createdAt) >= since)
-    .reduce((sum, item) => sum + normalizeMonthlyAmount(item), 0);
+    .reduce((sum, item) => sum + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates), 0);
   const priceChanges = (getDb()
     .prepare("SELECT item_id, amount, created_at FROM price_events WHERE created_at >= ? ORDER BY created_at ASC")
     .all(since.toISOString()) as DbRow[]).reduce((sum, event) => {
     const item = items.find((candidate) => candidate.id === Number(event.item_id));
     if (!item || item.paymentType !== "recurring") return sum;
-    return sum + normalizeMonthlyAmount({ ...item, amount: Number(event.amount || 0) });
+    return sum + convertForDisplay(normalizeMonthlyAmount({ ...item, amount: Number(event.amount || 0) }), item.currency, resolvedDisplayCurrency, rates);
   }, 0);
   const oneMonthChangeAmount = newMonthly + priceChanges;
 
@@ -2339,7 +2471,7 @@ export function dashboardStatsGlobalForUser(userId: number): DashboardStats {
       color: item.categoryColor || "#8b5cf6",
       monthly: 0,
     };
-    current.monthly += normalizeMonthlyAmount(item);
+    current.monthly += convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates);
     categoryMap.set(key, current);
   });
 
@@ -2388,7 +2520,7 @@ export function dashboardStatsGlobalForUser(userId: number): DashboardStats {
       end.setHours(23, 59, 59, 999);
       let occurrence = new Date(nextPayment);
       while (occurrence <= end) {
-        current[horizon.key] += item.amount;
+        current[horizon.key] += convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates);
         occurrence = addBillingPeriod(occurrence, item.period, item.customPeriodDays);
         occurrence.setHours(0, 0, 0, 0);
       }
@@ -2407,7 +2539,10 @@ export function dashboardStatsGlobalForUser(userId: number): DashboardStats {
     if (!item.workspaceId) return;
     workspaceObjectMap.set(item.workspaceId, (workspaceObjectMap.get(item.workspaceId) || 0) + 1);
     if (item.paymentType === "recurring") {
-      workspaceCostMap.set(item.workspaceId, (workspaceCostMap.get(item.workspaceId) || 0) + normalizeMonthlyAmount(item));
+      workspaceCostMap.set(
+        item.workspaceId,
+        (workspaceCostMap.get(item.workspaceId) || 0) + convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates),
+      );
     }
   });
   const workspaceObjectDominance = [...workspaceObjectMap.entries()]
@@ -2424,6 +2559,7 @@ export function dashboardStatsGlobalForUser(userId: number): DashboardStats {
     .sort((a, b) => b.monthly - a.monthly);
 
   return {
+    displayCurrency: resolvedDisplayCurrency,
     totalExpenses,
     monthlyRecurring,
     monthlyRecurringCount: monthlyItems.length,
@@ -2685,7 +2821,7 @@ export function createInvoice(formData: FormData) {
   const vendorUrl = String(formData.get("vendorUrl") || item?.vendorUrl || "").trim();
   const accountName = String(formData.get("accountName") || item?.accountName || "").trim();
   const amount = Number(formData.get("amount") || item?.amount || 0);
-  const currency = String(formData.get("currency") || item?.currency || "USD").trim().toUpperCase() || "USD";
+  const currency = ensureSupportedCurrency(String(formData.get("currency") || item?.currency || "USD"));
 
   const db = getDb();
   const result = db
@@ -2837,24 +2973,40 @@ export function markAllNotificationsReadForUser(userId: number) {
     .run(nowIso(), userId);
 }
 
+function normalizeHttpProxyUrl(value: string) {
+  const normalized = value.trim();
+  if (!normalized) return "";
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    throw new Error("Proxy URL is invalid.");
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+    throw new Error("Proxy URL must use http or https.");
+  }
+  return parsed.toString();
+}
+
 export function upsertTelegramChannel(formData: FormData) {
   const id = Number(formData.get("id") || 0);
   const title = String(formData.get("title") || "").trim();
   const botToken = String(formData.get("botToken") || "").trim();
   const chatId = String(formData.get("chatId") || "").trim();
   const topicId = String(formData.get("topicId") || "").trim();
+  const proxyUrl = normalizeHttpProxyUrl(String(formData.get("proxyUrl") || ""));
   if (!title || !botToken || !chatId) throw new Error("Title, token, and chat ID are required.");
 
   if (id) {
     getDb()
-      .prepare("UPDATE notification_channels SET title = ?, bot_token = ?, chat_id = ?, topic_id = ? WHERE id = ? AND type = 'telegram'")
-      .run(title, botToken, chatId, topicId, id);
+      .prepare("UPDATE notification_channels SET title = ?, bot_token = ?, chat_id = ?, topic_id = ?, proxy_url = ? WHERE id = ? AND type = 'telegram'")
+      .run(title, botToken, chatId, topicId, proxyUrl, id);
     return id;
   }
 
   const result = getDb()
-    .prepare("INSERT INTO notification_channels (type, title, bot_token, chat_id, topic_id, created_at) VALUES ('telegram', ?, ?, ?, ?, ?)")
-    .run(title, botToken, chatId, topicId, nowIso());
+    .prepare("INSERT INTO notification_channels (type, title, bot_token, chat_id, topic_id, proxy_url, created_at) VALUES ('telegram', ?, ?, ?, ?, ?, ?)")
+    .run(title, botToken, chatId, topicId, proxyUrl, nowIso());
   return Number(result.lastInsertRowid);
 }
 
@@ -3005,11 +3157,16 @@ async function sendTelegramMessage(channel: NotificationChannel, text: string) {
   };
   if (channel.topicId) payload.message_thread_id = Number(channel.topicId);
 
-  const response = await fetch(`https://api.telegram.org/bot${channel.botToken}/sendMessage`, {
+  const request: RequestInit & { dispatcher?: unknown } = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
-  });
+  };
+  if (channel.proxyUrl) {
+    const { ProxyAgent } = await import("undici");
+    request.dispatcher = new ProxyAgent(channel.proxyUrl);
+  }
+  const response = await fetch(`https://api.telegram.org/bot${channel.botToken}/sendMessage`, request);
   const body = (await response.json().catch(() => null)) as { ok?: boolean; description?: string } | null;
   if (!response.ok || !body?.ok) {
     throw new Error(body?.description || "Telegram test message failed.");

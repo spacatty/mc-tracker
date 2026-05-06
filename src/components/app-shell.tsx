@@ -5,14 +5,14 @@ import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams }
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, Check, ChevronsLeft, ChevronsRight, ChevronsUpDown, GripVertical, Languages, LogOut, Menu, Settings, Shield, UserPlus, UserRound, X } from "lucide-react";
+import { Bell, Check, ChevronsLeft, ChevronsRight, ChevronsUpDown, GripVertical, LogOut, Menu, Settings, Shield, UserPlus, UserRound, X } from "lucide-react";
 import { useMemo, useState } from "react";
-import { logoutAction, setLanguageAction } from "@/app/actions";
+import { logoutAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { Category, User, WebsiteNotification, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { AppIcon } from "./icons";
+import { AppIcon, BrandLogo } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
 import { Button } from "./ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
@@ -320,13 +320,14 @@ export function AppShell({
   const workspaceNav: SidebarNavItem[] = [
     { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-200 bg-amber-500/10" },
   ];
-  const aiMagicNav: SidebarNavItem[] = [
+  const extraNav: SidebarNavItem[] = [
+    { href: "/app/telegram", label: t(locale, "telegramRoutes"), icon: "MessageCircle", accent: "text-cyan-200 bg-cyan-500/10" },
     { href: "/app/ai-import", label: t(locale, "aiMagic"), icon: "Sparkles", accent: "text-fuchsia-200 bg-fuchsia-500/10" },
   ];
-  const workspaceItems = [...workspaceNav, ...aiMagicNav];
+  const workspaceItems = [...workspaceNav];
+  const extraItems = [...extraNav];
   const ids = useMemo(() => workspaceCategories.map((item) => item.id), [workspaceCategories]);
   const isActive = (href: string) => (href === "/app" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`));
-  const currentHref = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
 
   function toggleCollapsed() {
     setCollapsed((current) => {
@@ -356,8 +357,8 @@ export function AppShell({
       <div className="fixed left-0 right-0 top-0 z-40 border-b border-white/10 bg-black/70 px-4 py-3 backdrop-blur md:hidden">
         <div className="flex items-center justify-between">
           <Link href="/app" className="flex items-center gap-2 text-white">
-            <span className="grid h-8 w-8 place-items-center rounded-xl bg-violet-500/20 text-violet-200">
-              <AppIcon name="WalletCards" className="h-4 w-4" />
+            <span className="grid h-8 w-8 place-items-center">
+              <BrandLogo className="h-6 w-6 object-contain" />
             </span>
             <span className="font-semibold">MC Tracker</span>
           </Link>
@@ -402,6 +403,11 @@ export function AppShell({
               </SidebarSection>
               <SidebarSection title={t(locale, "management")} collapsed={false}>
                 {workspaceItems.map((item) => (
+                  <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={false} workspaceId={currentWorkspace?.id} onClick={() => setMobileOpen(false)} />
+                ))}
+              </SidebarSection>
+              <SidebarSection title={locale === "ru" ? "Дополнительно" : "Extra"} collapsed={false}>
+                {extraItems.map((item) => (
                   <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={false} workspaceId={currentWorkspace?.id} onClick={() => setMobileOpen(false)} />
                 ))}
               </SidebarSection>
@@ -468,8 +474,8 @@ export function AppShell({
         )}
       >
         <Link href="/app" className={cn("mb-6 flex items-center gap-3", collapsed && "justify-center")}>
-          <span className={cn("grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-violet-500/20 text-violet-200", collapsed && "h-9 w-9 rounded-xl")}>
-            <AppIcon name="WalletCards" className={cn("h-6 w-6", collapsed && "h-5 w-5")} />
+          <span className={cn("grid h-11 w-11 shrink-0 place-items-center", collapsed && "h-9 w-9")}>
+            <BrandLogo className={cn("h-8 w-8 object-contain", collapsed && "h-6 w-6")} />
           </span>
           {!collapsed ? (
             <div className="min-w-0">
@@ -516,6 +522,11 @@ export function AppShell({
                 {!collapsed ? <span className="flex-1 truncate font-medium">{t(locale, "notifications")}</span> : null}
                 {unreadCount ? <Badge variant="destructive" className="px-2 py-0.5">{unreadCount}</Badge> : null}
               </Link>
+            </SidebarSection>
+            <SidebarSection title={locale === "ru" ? "Дополнительно" : "Extra"} collapsed={collapsed}>
+              {extraItems.map((item) => (
+                <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} workspaceId={currentWorkspace?.id} />
+              ))}
             </SidebarSection>
           </nav>
 
@@ -595,39 +606,6 @@ export function AppShell({
                 <ProfileMenuLink href={withWorkspace("/app/admin", currentWorkspace?.id || null)} icon={<Shield className="h-4 w-4" />} label={t(locale, "admin")} accent="bg-red-500/10 text-red-200" />
               ) : null}
               <ProfileMenuLink href={withWorkspace("/app/settings", currentWorkspace?.id || null)} icon={<Settings className="h-4 w-4" />} label={t(locale, "settings")} accent="bg-sky-500/10 text-sky-200" />
-              <ProfileMenuLink href={withWorkspace("/app/notifications", currentWorkspace?.id || null)} icon={<Bell className="h-4 w-4" />} label={t(locale, "notifications")} accent="bg-violet-500/10 text-violet-200">
-                {unreadCount ? <Badge variant="destructive" className="ml-2 px-2 py-0.5">{unreadCount}</Badge> : null}
-              </ProfileMenuLink>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={(event) => event.preventDefault()} className="rounded-xl p-0">
-                <div className="w-full rounded-xl px-3 py-2.5">
-                  <div className="mb-2 flex items-center gap-3 text-sm font-medium text-zinc-200">
-                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-violet-500/10 text-violet-200">
-                      <Languages className="h-4 w-4" />
-                    </span>
-                    {t(locale, "language")}
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    {(["en", "ru"] as const).map((option) => (
-                      <form key={option} action={setLanguageAction}>
-                        <input type="hidden" name="locale" value={option} />
-                        <input type="hidden" name="next" value={currentHref} />
-                        <button
-                          type="submit"
-                          className={cn(
-                            "w-full rounded-lg border px-2 py-1.5 text-xs font-semibold transition",
-                            locale === option
-                              ? "border-violet-300/35 bg-violet-500/[0.18] text-violet-100"
-                              : "border-white/10 bg-white/[0.04] text-zinc-400 hover:bg-white/[0.08] hover:text-zinc-200",
-                          )}
-                        >
-                          {option === "en" ? t(locale, "english") : t(locale, "russian")}
-                        </button>
-                      </form>
-                    ))}
-                  </div>
-                </div>
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={(event) => event.preventDefault()} className="rounded-xl p-0">
                 <form action={logoutAction} className="w-full">

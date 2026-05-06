@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
 import { aiDraftItemSchema, extractPaymentItems, normalizeAiDraft } from "@/lib/ai/payment-extractor";
+import { ensureSupportedCurrency } from "@/lib/currencies";
 import { localeCookieName, normalizeLocale } from "@/lib/i18n";
 import {
   acceptWorkspaceInvite,
@@ -45,6 +46,7 @@ import {
   updateWorkspaceForUser,
   updateWorkspaceMemberRole,
   updateUserPremium,
+  updateUserDisplayCurrency,
   updateUserPassword,
   updateUserRole,
   upsertCategoryForWorkspace,
@@ -370,6 +372,14 @@ export async function saveUserAdminChangesAction(formData: FormData) {
   }
 
   revalidatePath("/app/admin");
+}
+
+export async function updateMyDisplayCurrencyAction(formData: FormData) {
+  const user = await requireUser();
+  const nextCurrency = ensureSupportedCurrency(formData.get("displayCurrency")?.toString(), user.displayCurrency || "USD");
+  updateUserDisplayCurrency(user.id, nextCurrency);
+  revalidatePath("/app/settings");
+  revalidatePath("/app");
 }
 
 export async function resetUserTotpAction(formData: FormData) {

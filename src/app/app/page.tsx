@@ -49,7 +49,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const params = await searchParams;
   const workspace = resolveWorkspaceForUser(user.id, Number(params.workspace || 0) || null);
   const scope = params.scope === "workspace" ? "workspace" : "global";
-  const stats = scope === "workspace" ? dashboardStatsForWorkspace(workspace.id, user.id) : dashboardStatsGlobalForUser(user.id);
+  const stats = scope === "workspace"
+    ? await dashboardStatsForWorkspace(workspace.id, user.id, user.displayCurrency)
+    : await dashboardStatsGlobalForUser(user.id, user.displayCurrency);
   const globalHref = `/app?workspace=${workspace.id}&scope=global`;
   const workspaceHref = `/app?workspace=${workspace.id}&scope=workspace`;
 
@@ -135,36 +137,36 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <StatCard
           label={locale === "ru" ? "Всего" : "Total"}
-          value={formatMoney(stats.totalExpenses)}
+          value={formatMoney(stats.totalExpenses, stats.displayCurrency)}
           hint={locale === "ru" ? "Разовые + регулярные" : "Single + recurring"}
           accent="#8b5cf6"
           icon={<CircleDollarSign className="h-3.5 w-3.5" />}
         />
         <StatCard
           label={locale === "ru" ? "Ежемесячные" : "Monthly recurring"}
-          value={formatMoney(stats.monthlyRecurring)}
+          value={formatMoney(stats.monthlyRecurring, stats.displayCurrency)}
           hint={locale === "ru" ? `Ежемесячных записей: ${stats.monthlyRecurringCount}` : `${stats.monthlyRecurringCount} monthly entries`}
           accent="#38bdf8"
           icon={<Repeat className="h-3.5 w-3.5" />}
         />
         <StatCard
           label={locale === "ru" ? "Примерно в месяц" : "Approx monthly"}
-          value={formatMoney(stats.approxMonthlySpend)}
+          value={formatMoney(stats.approxMonthlySpend, stats.displayCurrency)}
           hint={locale === "ru" ? "Нормализованные регулярные" : "Normalized recurring"}
           accent="#06b6d4"
           icon={<CalendarClock className="h-3.5 w-3.5" />}
         />
         <StatCard
           label={locale === "ru" ? "Примерно в год" : "Approx yearly"}
-          value={formatMoney(stats.approxYearlySpend)}
-          hint={locale === "ru" ? `${formatMoney(stats.approxMonthlySpend)} / мес` : `${formatMoney(stats.approxMonthlySpend)} / month`}
+          value={formatMoney(stats.approxYearlySpend, stats.displayCurrency)}
+          hint={locale === "ru" ? `${formatMoney(stats.approxMonthlySpend, stats.displayCurrency)} / мес` : `${formatMoney(stats.approxMonthlySpend, stats.displayCurrency)} / month`}
           accent="#f43f5e"
           icon={<WalletCards className="h-3.5 w-3.5" />}
         />
         <StatCard
           label={locale === "ru" ? "Тренд за 1 месяц" : "1-month trend"}
           value={`${stats.oneMonthChangePercent.toFixed(1)}%`}
-          hint={locale === "ru" ? `${formatMoney(stats.oneMonthChangeAmount)} влияние` : `${formatMoney(stats.oneMonthChangeAmount)} impact`}
+          hint={locale === "ru" ? `${formatMoney(stats.oneMonthChangeAmount, stats.displayCurrency)} влияние` : `${formatMoney(stats.oneMonthChangeAmount, stats.displayCurrency)} impact`}
           accent="#a3e635"
           icon={<Gauge className="h-3.5 w-3.5" />}
         />
@@ -172,9 +174,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
 
       <section className={`grid gap-5 ${scope === "global" ? "xl:grid-cols-2" : "xl:grid-cols-2"}`}>
         <DashboardCategorySplitChart data={stats.categoryItemSplit} />
-        <DashboardCategoryPressureChart data={stats.categoryBreakdown} />
+        <DashboardCategoryPressureChart data={stats.categoryBreakdown} currency={stats.displayCurrency} />
         {scope === "global" ? <DashboardWorkspaceObjectDominanceChart data={stats.workspaceObjectDominance} /> : null}
-        {scope === "global" ? <DashboardWorkspaceCostDominanceChart data={stats.workspaceCostDominance} /> : null}
+        {scope === "global" ? <DashboardWorkspaceCostDominanceChart data={stats.workspaceCostDominance} currency={stats.displayCurrency} /> : null}
       </section>
     </div>
   );

@@ -5,7 +5,7 @@ import { saveUserAdminChangesAction } from "@/app/actions";
 import type { User, UserRole } from "@/lib/types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { SelectInput } from "./ui/hidden-input";
+import { CheckboxInput, SelectInput } from "./ui/hidden-input";
 import { Input } from "./ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
@@ -129,10 +129,7 @@ export function AdminUsersTable({
                   <TableRow>
                     <TableHead>Recovery / 2FA</TableHead>
                     <TableCell>
-                      <label className="inline-flex items-center gap-2 text-sm text-zinc-300">
-                        <input name="resetTotpNow" type="checkbox" />
-                        Reset 2FA now
-                      </label>
+                      <CheckboxInput name="resetTotpNow">Reset 2FA now</CheckboxInput>
                     </TableCell>
                   </TableRow>
                 </TableBody>

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { Columns3, Rows3 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { saveItemAction } from "@/app/actions";
+import { getCurrencySymbol } from "@/lib/currencies";
 import type { BillingPeriod, Category, PaymentItem, VendorSuggestion } from "@/lib/types";
 import { toDateInputValue } from "@/lib/utils";
 import { AppIcon } from "./icons";
@@ -13,6 +14,7 @@ import { CheckboxInput, SelectInput } from "./ui/hidden-input";
 import { Input, Textarea } from "./ui/input";
 import { RichNotesEditor } from "./rich-notes-editor";
 import { VendorSuggestInputs } from "./vendor-suggest-input";
+import { CurrencySearchSelect } from "./currency-search-select";
 
 function addPeriod(start: string, period: string, customDays: number) {
   if (!start) return "";
@@ -43,6 +45,7 @@ export function ItemForm({
   const [startDate, setStartDate] = useState(toDateInputValue(item?.billingStartAt) || new Date().toISOString().slice(0, 10));
   const [endDate, setEndDate] = useState(toDateInputValue(item?.billingEndAt) || addPeriod(startDate, period, customDays));
   const [displayMode, setDisplayMode] = useState<"comfortable" | "linear">("comfortable");
+  const [currency, setCurrency] = useState(item?.currency || "USD");
 
   const selectedCategory = useMemo(
     () => categories.find((category) => String(category.id) === categoryId) || categories[0],
@@ -124,9 +127,10 @@ export function ItemForm({
               ]}
             />
             <span className="text-sm font-medium text-zinc-400">Amount</span>
-            <div className="grid grid-cols-[minmax(0,1fr)_96px] gap-2">
+            <div className="grid grid-cols-[minmax(0,1fr)_180px] gap-2">
               <Input name="amount" type="number" step="0.01" defaultValue={item?.amount ?? 0} />
-              <Input name="currency" defaultValue={item?.currency || "USD"} />
+              <CurrencySearchSelect name="currency" defaultValue={currency} onValueChange={setCurrency} />
+              <p className="col-span-2 text-xs text-zinc-500">Currency symbol preview: {getCurrencySymbol(currency)}</p>
             </div>
           </div>
           {paymentType === "recurring" ? (
@@ -211,9 +215,10 @@ export function ItemForm({
           </div>
           <div className="space-y-1.5 py-2.5">
             <span className="text-xs font-semibold uppercase tracking-wider text-zinc-500">Amount</span>
-            <div className="grid grid-cols-[minmax(0,1fr)_80px] gap-1.5">
+            <div className="grid grid-cols-[minmax(0,1fr)_180px] gap-1.5">
               <Input name="amount" type="number" step="0.01" defaultValue={item?.amount ?? 0} />
-              <Input name="currency" defaultValue={item?.currency || "USD"} />
+              <CurrencySearchSelect name="currency" defaultValue={currency} onValueChange={setCurrency} />
+              <p className="col-span-2 text-xs text-zinc-500">Currency symbol preview: {getCurrencySymbol(currency)}</p>
             </div>
           </div>
           <div className="space-y-1.5 py-2.5">

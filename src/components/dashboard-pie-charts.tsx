@@ -70,13 +70,13 @@ export function DashboardCategorySplitChart({ data }: { data: Array<{ name: stri
   );
 }
 
-export function DashboardCategoryPressureChart({ data }: { data: Array<{ name: string; color: string; monthly: number }> }) {
+export function DashboardCategoryPressureChart({ data, currency }: { data: Array<{ name: string; color: string; monthly: number }>; currency: string }) {
   return (
     <PieCard
       title="Category pressure"
       subtitle="Recurring pressure by monthly amount"
       data={data.map((entry) => ({ name: entry.name, color: entry.color, value: entry.monthly }))}
-      valueFormatter={(value) => formatMoney(value)}
+      valueFormatter={(value) => formatMoney(value, currency)}
     />
   );
 }
@@ -92,13 +92,13 @@ export function DashboardWorkspaceObjectDominanceChart({ data }: { data: Array<{
   );
 }
 
-export function DashboardWorkspaceCostDominanceChart({ data }: { data: Array<{ name: string; color: string; monthly: number }> }) {
+export function DashboardWorkspaceCostDominanceChart({ data, currency }: { data: Array<{ name: string; color: string; monthly: number }>; currency: string }) {
   return (
     <PieCard
       title="Workspace cost dominance"
       subtitle="Recurring monthly pressure by workspace"
       data={data.map((entry) => ({ name: entry.name, color: entry.color, value: entry.monthly }))}
-      valueFormatter={(value) => formatMoney(value)}
+      valueFormatter={(value) => formatMoney(value, currency)}
     />
   );
 }

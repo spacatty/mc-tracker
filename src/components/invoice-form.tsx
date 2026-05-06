@@ -12,6 +12,7 @@ import { Input } from "./ui/input";
 import { DatePickerInput } from "./ui/date-picker";
 import { EntrySearchSelect } from "./entry-search-select";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { CurrencySearchSelect } from "./currency-search-select";
 
 function addPeriod(start: string, period: BillingPeriod, customDays: number) {
   if (!start) return "";
@@ -105,7 +106,7 @@ export function InvoiceForm({
           <span className="text-sm font-medium text-zinc-400">{t(locale, "amount")}</span>
           <Input key={`${itemId}-amount`} name="amount" type="number" step="0.01" defaultValue={selectedEntry?.amount || 0} />
           <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Валюта" : "Currency"}</span>
-          <Input key={`${itemId}-currency`} name="currency" defaultValue={selectedEntry?.currency || "USD"} />
+          <CurrencySearchSelect key={`${itemId}-currency`} name="currency" defaultValue={selectedEntry?.currency || "USD"} />
         </div>
         <div className="grid gap-4 p-4 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
           <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Период счета" : "Invoice period"}</span>

@@ -31,6 +31,7 @@ export type User = {
   role: UserRole;
   totpEnabled: boolean;
   premium: boolean;
+  displayCurrency: string;
   createdAt: string;
 };
 
@@ -85,6 +86,7 @@ export type Folder = {
 };
 
 export type DashboardStats = {
+  displayCurrency: string;
   totalExpenses: number;
   monthlyRecurring: number;
   monthlyRecurringCount: number;
@@ -120,6 +122,7 @@ export type NotificationChannel = {
   botToken: string;
   chatId: string;
   topicId: string;
+  proxyUrl: string;
   createdAt: string;
 };
 

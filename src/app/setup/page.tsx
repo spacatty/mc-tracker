@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { setupAction } from "@/app/actions";
-import { AppIcon } from "@/components/icons";
+import { BrandLogo } from "@/components/icons";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { isSetupComplete } from "@/lib/db";
@@ -25,7 +25,7 @@ export default async function SetupPage() {
           <div className="relative mb-7 flex items-center justify-between gap-4">
             <div className="flex items-center gap-3">
               <div className="grid h-12 w-12 place-items-center rounded-2xl border border-white/10 bg-violet-500/10 text-violet-200 shadow-lg shadow-violet-950/20">
-                <AppIcon name="WalletCards" className="h-6 w-6" />
+                <BrandLogo className="h-7 w-7 object-contain" />
               </div>
               <h1 className="text-sm font-semibold uppercase tracking-[0.28em] text-violet-300">{locale === "ru" ? "Создать superadmin" : "Create superadmin"}</h1>
             </div>

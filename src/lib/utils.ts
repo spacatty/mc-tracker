@@ -17,17 +17,23 @@ export function slugify(value: string) {
 export function formatMoney(amount: number, currency = "USD") {
   const safeCurrency = String(currency || "USD").trim().toUpperCase();
   try {
-    return new Intl.NumberFormat("en-US", {
+    const formatter = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: /^[A-Z]{3}$/.test(safeCurrency) ? safeCurrency : "USD",
+      currencyDisplay: "narrowSymbol",
       maximumFractionDigits: 2,
-    }).format(Number.isFinite(amount) ? amount : 0);
+    });
+    const parts = formatter.formatToParts(Number.isFinite(amount) ? amount : 0);
+    return parts.map((part) => (part.type === "currency" ? `${part.value} ` : part.value)).join("").trim();
   } catch {
-    return new Intl.NumberFormat("en-US", {
+    const formatter = new Intl.NumberFormat("en-US", {
       style: "currency",
       currency: "USD",
+      currencyDisplay: "narrowSymbol",
       maximumFractionDigits: 2,
-    }).format(Number.isFinite(amount) ? amount : 0);
+    });
+    const parts = formatter.formatToParts(Number.isFinite(amount) ? amount : 0);
+    return parts.map((part) => (part.type === "currency" ? `${part.value} ` : part.value)).join("").trim();
   }
 }
 
