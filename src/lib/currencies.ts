@@ -15,7 +15,6 @@ export const SUPPORTED_CURRENCIES = [
   { code: "PLN", name: "Polish Zloty" },
   { code: "CZK", name: "Czech Koruna" },
   { code: "TRY", name: "Turkish Lira" },
-  { code: "UAH", name: "Ukrainian Hryvnia" },
   { code: "KZT", name: "Kazakhstani Tenge" },
   { code: "AED", name: "UAE Dirham" },
   { code: "INR", name: "Indian Rupee" },
