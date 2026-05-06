@@ -23,6 +23,12 @@ Fill `AUTH_SECRET` and `CRON_SECRET` in `.env.local`, then start the development
 npm run dev
 ```
 
+To use a different port, pass Next.js the `-p` flag:
+
+```bash
+npm run dev -- -p 3001
+```
+
 Open [http://localhost:3000](http://localhost:3000). On the first visit, the app redirects to `/setup` so you can create the initial superadmin account.
 
 ## Environment Variables
@@ -46,6 +52,12 @@ Build and run the app:
 ```bash
 npm run build
 npm run start
+```
+
+To run production on another port:
+
+```bash
+npm run start -- -p 3001
 ```
 
 Use a Node.js host or container with persistent storage mounted at `SQLITE_PATH` or the default `data/` directory. SQLite is the runtime database; PostgreSQL/MySQL support in the settings UI is only a connection test for future expansion.
