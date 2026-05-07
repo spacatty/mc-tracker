@@ -3156,19 +3156,27 @@ async function sendTelegramMessage(channel: NotificationChannel, text: string) {
     parse_mode: "HTML",
   };
   if (channel.topicId) payload.message_thread_id = Number(channel.topicId);
-
-  const request: RequestInit & { dispatcher?: unknown } = {
+  const { request, ProxyAgent } = await import("undici");
+  const options: {
+    method: "POST";
+    headers: { "Content-Type": string };
+    body: string;
+    dispatcher?: InstanceType<typeof ProxyAgent>;
+  } = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   };
   if (channel.proxyUrl) {
-    const { ProxyAgent } = await import("undici");
-    request.dispatcher = new ProxyAgent(channel.proxyUrl);
+    options.dispatcher = new ProxyAgent(channel.proxyUrl);
   }
-  const response = await fetch(`https://api.telegram.org/bot${channel.botToken}/sendMessage`, request);
-  const body = (await response.json().catch(() => null)) as { ok?: boolean; description?: string } | null;
-  if (!response.ok || !body?.ok) {
+  const response = await request(`https://api.telegram.org/bot${channel.botToken}/sendMessage`, options);
+  const statusCode = response.statusCode;
+  const body = (await response.body.json().catch(async () => {
+    const textBody = await response.body.text().catch(() => "");
+    return textBody ? { description: textBody } : null;
+  })) as { ok?: boolean; description?: string } | null;
+  if (statusCode < 200 || statusCode >= 300 || !body?.ok) {
     throw new Error(body?.description || "Telegram test message failed.");
   }
 }
