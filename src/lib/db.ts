@@ -1923,10 +1923,23 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
         const entry = portableEntrySchema.parse(candidate);
         const signature = buildEntrySignature(entry);
         if (itemSignatures.has(signature)) {
+          const matchedFields = [
+            `name="${entry.name.trim()}"`,
+            `category="${entry.categoryName || "Uncategorized"}"`,
+            `vendor="${entry.vendorName || "—"}"`,
+            `url="${entry.vendorUrl || "—"}"`,
+            `account="${entry.accountName || "—"}"`,
+            `amount=${entry.amount} ${(entry.currency || "USD").trim().toUpperCase()}`,
+            `type=${entry.paymentType}`,
+            `start=${entry.billingStartAt || "—"}`,
+            `end=${entry.billingEndAt || "—"}`,
+            `period=${entry.period || "—"}`,
+            `customDays=${entry.customPeriodDays === null ? "—" : String(entry.customPeriodDays)}`,
+          ];
           result.skippedEntries += 1;
           result.skippedEntryDetails.push({
             name: entry.name.trim() || "Unnamed entry",
-            reason: "Duplicate signature: this entry already exists in the target workspace.",
+            reason: `Duplicate signature: matched existing entry by fields ${matchedFields.join(", ")}.`,
           });
           return;
         }
