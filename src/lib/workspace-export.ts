@@ -141,6 +141,21 @@ export function categoryKey(name: string) {
 }
 
 export function buildEntrySignature(entry: PortableEntry) {
+  function canonicalize(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map(canonicalize);
+    if (value && typeof value === "object") {
+      const obj = value as Record<string, unknown>;
+      return Object.keys(obj)
+        .sort()
+        .reduce<Record<string, unknown>>((acc, key) => {
+          acc[key] = canonicalize(obj[key]);
+          return acc;
+        }, {});
+    }
+    return value ?? null;
+  }
+
+  const normalizedCustomFields = JSON.stringify(canonicalize(entry.customFields || {}));
   return [
     entry.name.trim().toLowerCase(),
     categoryKey(entry.categoryName || ""),
@@ -154,6 +169,8 @@ export function buildEntrySignature(entry: PortableEntry) {
     entry.billingEndAt || "",
     entry.period || "",
     entry.customPeriodDays === null ? "" : String(entry.customPeriodDays),
+    entry.notes.trim(),
+    normalizedCustomFields,
   ].join("\u001f");
 }
 
