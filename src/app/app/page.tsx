@@ -43,6 +43,13 @@ function relativeDays(days: number) {
   return `~${days} days`;
 }
 
+function vendorHref(url: string) {
+  const normalized = url.trim();
+  if (!normalized) return "";
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return `https://${normalized}`;
+}
+
 export default async function DashboardPage({ searchParams }: { searchParams: Promise<{ workspace?: string; scope?: string }> }) {
   const user = await requireUser();
   const locale = await getLocale();
@@ -95,9 +102,11 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>{locale === "ru" ? "Запись" : "Entry"}</TableHead>
-              <TableHead>{t(locale, "category")}</TableHead>
+              <TableHead>{locale === "ru" ? "Название" : "Name"}</TableHead>
               <TableHead>{locale === "ru" ? "Дата оплаты" : "Payment date"}</TableHead>
+              <TableHead>{t(locale, "category")}</TableHead>
+              <TableHead>{locale === "ru" ? "Вендор" : "Vendor"}</TableHead>
+              <TableHead>{locale === "ru" ? "Аккаунт" : "Account"}</TableHead>
               <TableHead className="text-right">{t(locale, "amount")}</TableHead>
               <TableHead className="text-right">{t(locale, "actions")}</TableHead>
             </TableRow>
@@ -106,12 +115,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             {stats.upcoming.map((item) => (
               <TableRow key={item.id} className="group bg-[#0b0b0f] hover:bg-[#111115]">
                 <TableCell className="font-medium text-white">{item.name}</TableCell>
-                <TableCell>
-                  <Badge className="gap-2" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}25`, color: item.categoryColor || "#c4b5fd" }}>
-                    <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
-                    {item.categoryName || t(locale, "uncategorized")}
-                  </Badge>
-                </TableCell>
                 <TableCell className="text-zinc-300">
                   {locale === "ru"
                     ? (item.daysUntilPayment < 0
@@ -121,14 +124,39 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
                         : `~${item.daysUntilPayment} дн.`)
                     : relativeDays(item.daysUntilPayment)} <span className="text-zinc-500">({displayDate(item.nextPaymentAt)})</span>
                 </TableCell>
+                <TableCell>
+                  <Badge className="gap-2" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}25`, color: item.categoryColor || "#c4b5fd" }}>
+                    <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
+                    {item.categoryName || t(locale, "uncategorized")}
+                  </Badge>
+                </TableCell>
+                <TableCell className="font-medium text-white">
+                  {item.vendorName ? (
+                    vendorHref(item.vendorUrl) ? (
+                      <a href={vendorHref(item.vendorUrl)} target="_blank" rel="noreferrer" className="underline decoration-zinc-600 hover:decoration-violet-300">
+                        {item.vendorName}
+                      </a>
+                    ) : (
+                      item.vendorName
+                    )
+                  ) : (
+                    <span className="text-zinc-500">—</span>
+                  )}
+                </TableCell>
+                <TableCell className="text-zinc-300">{item.accountName || "—"}</TableCell>
                 <TableCell className="text-right font-semibold text-white">{formatMoney(item.amount, item.currency)}</TableCell>
                 <TableCell>
-                  <DashboardUpcomingActions workspaceId={workspace.id} itemId={item.id} itemName={item.name} amountLabel={formatMoney(item.amount, item.currency)} />
+                  <DashboardUpcomingActions
+                    workspaceId={item.workspaceId || workspace.id}
+                    itemId={item.id}
+                    itemName={item.name}
+                    amountLabel={formatMoney(item.amount, item.currency)}
+                  />
                 </TableCell>
               </TableRow>
             ))}
             {!stats.upcoming.length ? (
-              <TableRow><TableCell colSpan={5} className="py-10 text-center text-zinc-500">{locale === "ru" ? "Платежей в ближайшие 2 недели нет." : "No payments due in the next 2 weeks."}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={7} className="py-10 text-center text-zinc-500">{locale === "ru" ? "Платежей в ближайшие 2 недели нет." : "No payments due in the next 2 weeks."}</TableCell></TableRow>
             ) : null}
           </TableBody>
         </Table>

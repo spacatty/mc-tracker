@@ -1,6 +1,8 @@
 "use client";
 
+import * as Dialog from "@radix-ui/react-dialog";
 import { useMemo, useState, useTransition } from "react";
+import { X } from "lucide-react";
 import { exportWorkspaceAction, importWorkspaceAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
@@ -28,6 +30,10 @@ type ImportSummary = {
   skippedInvoices: number;
   insertedWebsiteNotifications: number;
   skippedWebsiteNotifications: number;
+  skippedEntryDetails: Array<{
+    name: string;
+    reason: string;
+  }>;
   warnings: string[];
 };
 
@@ -66,6 +72,7 @@ export function WorkspaceImportExport({
   const [importPayload, setImportPayload] = useState("");
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
+  const [selectedSkippedEntry, setSelectedSkippedEntry] = useState<{ name: string; reason: string } | null>(null);
   const [isExportPending, startExportTransition] = useTransition();
   const [isImportPending, startImportTransition] = useTransition();
   const canImport = workspaceRole !== "viewer";
@@ -235,6 +242,26 @@ export function WorkspaceImportExport({
             <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-xs text-emerald-100">
               <p>{t(locale, "categories")}: +{importResult.insertedCategories} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedCategories}</p>
               <p>{t(locale, "entries")}: +{importResult.insertedEntries} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedEntries}</p>
+              {importResult.skippedEntryDetails?.length ? (
+                <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-zinc-100">
+                  <p className="mb-1 text-[11px] uppercase tracking-[0.12em] text-zinc-400">
+                    {locale === "ru" ? "Пропущенные записи" : "Skipped entries"}
+                  </p>
+                  <ul className="space-y-1">
+                    {importResult.skippedEntryDetails.map((entry, index) => (
+                      <li key={`${entry.name}-${index}`}>
+                        <button
+                          type="button"
+                          className="rounded px-1 py-0.5 text-left text-emerald-100 underline decoration-emerald-300/40 underline-offset-2 hover:text-white"
+                          onClick={() => setSelectedSkippedEntry(entry)}
+                        >
+                          • {entry.name}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
               <p>{locale === "ru" ? "Папки" : "Folders"}: +{importResult.insertedFolders} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedFolders}</p>
               <p>{t(locale, "invoices")}: +{importResult.insertedInvoices} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedInvoices}</p>
               <p>{locale === "ru" ? "Website-уведомления" : "Website notifications"}: +{importResult.insertedWebsiteNotifications} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedWebsiteNotifications}</p>
@@ -250,6 +277,37 @@ export function WorkspaceImportExport({
           ) : null}
         </div>
       </div>
+
+      <Dialog.Root open={Boolean(selectedSkippedEntry)} onOpenChange={(open) => { if (!open) setSelectedSkippedEntry(null); }}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[#0b0b10] p-6 shadow-2xl shadow-black/50">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <Dialog.Title className="text-base font-semibold text-white">
+                  {locale === "ru" ? "Причина пропуска записи" : "Skipped entry details"}
+                </Dialog.Title>
+                <Dialog.Description className="mt-1 text-xs text-zinc-500">
+                  {locale === "ru" ? "Почему эта запись не была импортирована." : "Why this entry was not imported."}
+                </Dialog.Description>
+              </div>
+              <Dialog.Close asChild>
+                <button type="button" className="rounded-xl p-2 text-zinc-500 transition hover:bg-white/10 hover:text-white" aria-label="Close skipped entry dialog">
+                  <X className="h-4 w-4" />
+                </button>
+              </Dialog.Close>
+            </div>
+            {selectedSkippedEntry ? (
+              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
+                <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">{locale === "ru" ? "Запись" : "Entry"}</p>
+                <p className="mt-1 text-sm font-semibold text-white">{selectedSkippedEntry.name}</p>
+                <p className="mt-3 text-xs uppercase tracking-[0.12em] text-zinc-500">{locale === "ru" ? "Причина" : "Reason"}</p>
+                <p className="mt-1 text-sm text-zinc-300">{selectedSkippedEntry.reason}</p>
+              </div>
+            ) : null}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </section>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { Toaster, toast } from "sonner";
 import type { WebsiteNotification } from "@/lib/types";
 import { Button } from "./ui/button";
@@ -28,9 +28,17 @@ function shouldToast(notification: WebsiteNotification) {
 }
 
 export function NotificationToasts({ notifications }: { notifications: WebsiteNotification[] }) {
+  const seenToastIdsRef = useRef<Set<number>>(new Set());
+
   useEffect(() => {
     const toastCandidates = notifications.filter(shouldToast);
-    toastCandidates.forEach((notification) => {
+    const newlySeen = toastCandidates.filter((notification) => {
+      if (seenToastIdsRef.current.has(notification.id)) return false;
+      seenToastIdsRef.current.add(notification.id);
+      return true;
+    });
+
+    newlySeen.forEach((notification) => {
       toast(notification.title, {
         id: `notification-${notification.id}`,
         description: notification.body,
@@ -43,7 +51,7 @@ export function NotificationToasts({ notifications }: { notifications: WebsiteNo
         ),
       });
     });
-    if (toastCandidates.length) {
+    if (newlySeen.length) {
       try {
         playNotificationSound();
       } catch {

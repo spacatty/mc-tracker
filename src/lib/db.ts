@@ -1550,6 +1550,10 @@ export type WorkspaceImportResult = {
   skippedInvoices: number;
   insertedWebsiteNotifications: number;
   skippedWebsiteNotifications: number;
+  skippedEntryDetails: Array<{
+    name: string;
+    reason: string;
+  }>;
   warnings: string[];
 };
 
@@ -1773,6 +1777,7 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
     skippedInvoices: 0,
     insertedWebsiteNotifications: 0,
     skippedWebsiteNotifications: 0,
+    skippedEntryDetails: [],
     warnings: [],
   };
 
@@ -1919,6 +1924,10 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
         const signature = buildEntrySignature(entry);
         if (itemSignatures.has(signature)) {
           result.skippedEntries += 1;
+          result.skippedEntryDetails.push({
+            name: entry.name.trim() || "Unnamed entry",
+            reason: "Duplicate signature: this entry already exists in the target workspace.",
+          });
           return;
         }
         const categoryId = ensureCategoryId(entry.categoryName);
