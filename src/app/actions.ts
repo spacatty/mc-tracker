@@ -52,6 +52,10 @@ import {
   upsertCategoryForWorkspace,
   upsertTelegramChannelForWorkspace,
   upsertItem,
+  archiveItemForWorkspace,
+  restoreItemForWorkspace,
+  deleteArchivedItemForWorkspace,
+  deleteArchivedItemsForWorkspace,
 } from "@/lib/db";
 import { canManageUsers, canSetRole, clearSession, createTotpSetup, requireUser, setSession, signIn, verifyTotp } from "@/lib/auth";
 import type { Category, CategoryField, UserRole, WorkspaceRole } from "@/lib/types";
@@ -596,4 +600,41 @@ export async function deleteAllNotificationsAction(formData: FormData) {
   deleteAllNotificationsForWorkspace(workspaceId, user.id);
   revalidatePath("/app/notifications");
   revalidatePath("/app");
+}
+
+export async function archiveItemAction(formData: FormData) {
+  const user = await requireUser();
+  const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
+  archiveItemForWorkspace(Number(formData.get("id")), workspaceId, user.id);
+  revalidatePath("/app");
+  revalidatePath("/app/items");
+  revalidatePath("/app/archive");
+}
+
+export async function restoreItemAction(formData: FormData) {
+  const user = await requireUser();
+  const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
+  restoreItemForWorkspace(Number(formData.get("id")), workspaceId, user.id);
+  revalidatePath("/app");
+  revalidatePath("/app/items");
+  revalidatePath("/app/archive");
+}
+
+export async function deleteArchivedItemAction(formData: FormData) {
+  const user = await requireUser();
+  const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
+  deleteArchivedItemForWorkspace(Number(formData.get("id")), workspaceId, user.id);
+  revalidatePath("/app");
+  revalidatePath("/app/items");
+  revalidatePath("/app/archive");
+}
+
+export async function deleteArchivedItemsAction(formData: FormData) {
+  const user = await requireUser();
+  const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
+  const ids = formData.getAll("ids").map((id) => Number(id));
+  deleteArchivedItemsForWorkspace(ids, workspaceId, user.id);
+  revalidatePath("/app");
+  revalidatePath("/app/items");
+  revalidatePath("/app/archive");
 }

@@ -152,6 +152,7 @@ function mapItem(row: DbRow): PaymentItem {
     notes: String(row.notes || ""),
     customFields: parseJson<Record<string, unknown>>(row.custom_fields_json, {}),
     ownerId: row.owner_id === null ? null : Number(row.owner_id),
+    archivedAt: row.archived_at ? String(row.archived_at) : null,
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -579,6 +580,8 @@ function migrate(db: Database.Database) {
       created_at TEXT NOT NULL,
       UNIQUE(item_id, channel_id, reminder_days, target_date)
     );
+    CREATE INDEX IF NOT EXISTS idx_notification_deliveries_item_channel_target
+      ON notification_deliveries(item_id, channel_id, target_date);
 
     CREATE TABLE IF NOT EXISTS invoices (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -632,6 +635,12 @@ function migrate(db: Database.Database) {
   }
   if (!columnExists(db, "invoices", "workspace_id")) {
     db.prepare("ALTER TABLE invoices ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE").run();
+  }
+  if (!columnExists(db, "items", "archived_at")) {
+    db.prepare("ALTER TABLE items ADD COLUMN archived_at TEXT").run();
+  }
+  if (!columnExists(db, "items", "archived_at")) {
+    db.prepare("ALTER TABLE items ADD COLUMN archived_at TEXT").run();
   }
 
   const categoryCount = Number((db.prepare("SELECT COUNT(*) as count FROM categories").get() as DbRow).count || 0);
@@ -1112,6 +1121,7 @@ export function listItems() {
         `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
+         WHERE (items.archived_at IS NULL)
          ORDER BY items.created_at DESC, items.id DESC`,
       )
       .all() as DbRow[]
@@ -1125,7 +1135,7 @@ export function listItemsForUser(userId: number) {
         `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
-         WHERE items.owner_id = ?
+         WHERE items.owner_id = ? AND (items.archived_at IS NULL)
          ORDER BY items.created_at DESC, items.id DESC`,
       )
       .all(userId) as DbRow[]
@@ -1140,8 +1150,23 @@ export function listItemsForWorkspace(workspaceId: number, userId: number) {
         `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
-         WHERE items.workspace_id = ?
+         WHERE items.workspace_id = ? AND (items.archived_at IS NULL)
          ORDER BY items.created_at DESC, items.id DESC`,
+      )
+      .all(workspaceId) as DbRow[]
+  ).map(mapItem);
+}
+
+export function listArchivedItemsForWorkspace(workspaceId: number, userId: number) {
+  requireWorkspaceViewer(workspaceId, userId);
+  return (
+    getDb()
+      .prepare(
+        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+         FROM items
+         LEFT JOIN categories ON categories.id = items.category_id
+         WHERE items.workspace_id = ? AND items.archived_at IS NOT NULL
+         ORDER BY items.archived_at DESC, items.id DESC`,
       )
       .all(workspaceId) as DbRow[]
   ).map(mapItem);
@@ -1153,7 +1178,8 @@ export function listVendorSuggestions(): VendorSuggestion[] {
     .prepare(
       `SELECT vendor_name, vendor_url, account_name
        FROM items
-       WHERE COALESCE(vendor_name, '') <> '' OR COALESCE(vendor_url, '') <> '' OR COALESCE(account_name, '') <> ''
+       WHERE (COALESCE(vendor_name, '') <> '' OR COALESCE(vendor_url, '') <> '' OR COALESCE(account_name, '') <> '')
+         AND (archived_at IS NULL)
        ORDER BY updated_at DESC`,
     )
     .all() as DbRow[])
@@ -1177,6 +1203,7 @@ export function listVendorSuggestionsForUser(userId: number): VendorSuggestion[]
       `SELECT vendor_name, vendor_url, account_name
        FROM items
        WHERE owner_id = ? AND (COALESCE(vendor_name, '') <> '' OR COALESCE(vendor_url, '') <> '' OR COALESCE(account_name, '') <> '')
+         AND (archived_at IS NULL)
        ORDER BY updated_at DESC`,
     )
     .all(userId) as DbRow[])
@@ -1201,6 +1228,7 @@ export function listVendorSuggestionsForWorkspace(workspaceId: number, userId: n
       `SELECT vendor_name, vendor_url, account_name
        FROM items
        WHERE workspace_id = ? AND (COALESCE(vendor_name, '') <> '' OR COALESCE(vendor_url, '') <> '' OR COALESCE(account_name, '') <> '')
+         AND (archived_at IS NULL)
        ORDER BY updated_at DESC`,
     )
     .all(workspaceId) as DbRow[])
@@ -1404,6 +1432,33 @@ export function deleteItemsForWorkspace(ids: number[], workspaceId: number, user
   if (!uniqueIds.length) return;
   const db = getDb();
   const deleteItem = db.prepare("DELETE FROM items WHERE id = ? AND workspace_id = ?");
+  const deleteMany = db.transaction((itemIds: number[]) => {
+    itemIds.forEach((id) => deleteItem.run(id, workspaceId));
+  });
+  deleteMany(uniqueIds);
+}
+
+export function archiveItemForWorkspace(id: number, workspaceId: number, userId: number) {
+  requireWorkspaceEditor(workspaceId, userId);
+  getDb().prepare("UPDATE items SET archived_at = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").run(nowIso(), nowIso(), id, workspaceId);
+}
+
+export function restoreItemForWorkspace(id: number, workspaceId: number, userId: number) {
+  requireWorkspaceEditor(workspaceId, userId);
+  getDb().prepare("UPDATE items SET archived_at = NULL, updated_at = ? WHERE id = ? AND workspace_id = ?").run(nowIso(), id, workspaceId);
+}
+
+export function deleteArchivedItemForWorkspace(id: number, workspaceId: number, userId: number) {
+  requireWorkspaceEditor(workspaceId, userId);
+  getDb().prepare("DELETE FROM items WHERE id = ? AND workspace_id = ? AND archived_at IS NOT NULL").run(id, workspaceId);
+}
+
+export function deleteArchivedItemsForWorkspace(ids: number[], workspaceId: number, userId: number) {
+  requireWorkspaceEditor(workspaceId, userId);
+  const uniqueIds = [...new Set(ids.filter((id) => Number.isInteger(id) && id > 0))];
+  if (!uniqueIds.length) return;
+  const db = getDb();
+  const deleteItem = db.prepare("DELETE FROM items WHERE id = ? AND workspace_id = ? AND archived_at IS NOT NULL");
   const deleteMany = db.transaction((itemIds: number[]) => {
     itemIds.forEach((id) => deleteItem.run(id, workspaceId));
   });
@@ -3227,22 +3282,37 @@ function telegramVendorLink(url: string) {
   return telegramValue(normalized);
 }
 
+function resolveReminderDays(diffDays: number) {
+  if (diffDays <= 0) return 0;
+  if (diffDays <= 1) return 1;
+  if (diffDays <= 3) return 3;
+  if (diffDays <= 7) return 7;
+  if (diffDays <= 14) return 14;
+  return null;
+}
+
 export async function runNotificationCron() {
   const db = getDb();
-  const reminderDays = [1, 3, 7, 14];
   const today = dayStart(new Date());
   const items = listItems().filter((item) => item.paymentType === "recurring" && item.billingEndAt && item.categoryId && item.workspaceId);
   let sent = 0;
   let skipped = 0;
+  type NotificationCandidate = {
+    item: PaymentItem;
+    channel: NotificationChannel;
+    target: Date;
+    targetKey: string;
+    diffDays: number;
+    reminderDays: number;
+  };
+  const candidates = new Map<string, NotificationCandidate>();
 
   for (const item of items) {
     const target = currentDueDate(item);
     if (!target) continue;
     const diffDays = daysBetween(today, target);
-    const isDueToday = diffDays === 0;
-    const isOverdue = diffDays < 0;
-    const reminderBucket = reminderDays.find((days) => diffDays > 0 && diffDays <= days);
-    if ((!reminderBucket && !isDueToday && !isOverdue) || !item.categoryId || !item.workspaceId) continue;
+    const reminderDays = resolveReminderDays(diffDays);
+    if (reminderDays === null || !item.categoryId || !item.workspaceId) continue;
 
     const channels = (db
       .prepare(
@@ -3253,56 +3323,88 @@ export async function runNotificationCron() {
            AND (notification_channels.type = 'website' OR category_notification_channels.category_id = ?)`,
       )
       .all(item.workspaceId, item.categoryId) as DbRow[]).map(mapNotificationChannel);
+    const dueKey = target.toISOString().slice(0, 10);
+    const targetKey = diffDays < 0 ? `${dueKey}:overdue:${today.toISOString().slice(0, 10)}` : dueKey;
 
     for (const channel of channels) {
-      try {
-        const dueKey = target.toISOString().slice(0, 10);
-        const targetKey = isOverdue ? `${dueKey}:overdue:${today.toISOString().slice(0, 10)}` : dueKey;
-        db.prepare(
-          "INSERT INTO notification_deliveries (item_id, category_id, channel_id, reminder_days, target_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-        ).run(item.id, item.categoryId, channel.id, isDueToday || isOverdue ? 0 : reminderBucket, targetKey, nowIso());
-      } catch {
-        skipped += 1;
-        continue;
+      const candidateKey = `${item.id}:${channel.id}:${targetKey}`;
+      const previous = candidates.get(candidateKey);
+      const candidate: NotificationCandidate = {
+        item,
+        channel,
+        target,
+        targetKey,
+        diffDays,
+        reminderDays,
+      };
+      if (!previous || candidate.reminderDays < previous.reminderDays) {
+        candidates.set(candidateKey, candidate);
       }
+    }
+  }
 
-      const title = isOverdue
+  for (const candidate of candidates.values()) {
+    const { item, channel, target, targetKey, diffDays, reminderDays } = candidate;
+    const isDueToday = diffDays === 0;
+    const isOverdue = diffDays < 0;
+    const alreadyDelivered = db
+      .prepare(
+        `SELECT MIN(reminder_days) as reminder_days
+         FROM notification_deliveries
+         WHERE item_id = ? AND channel_id = ? AND target_date = ?`,
+      )
+      .get(item.id, channel.id, targetKey) as DbRow | undefined;
+    const deliveredReminderDays = Number(alreadyDelivered?.reminder_days ?? NaN);
+    if (Number.isFinite(deliveredReminderDays) && deliveredReminderDays <= reminderDays) {
+      skipped += 1;
+      continue;
+    }
+
+    try {
+      db.prepare(
+        "INSERT INTO notification_deliveries (item_id, category_id, channel_id, reminder_days, target_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+      ).run(item.id, item.categoryId, channel.id, reminderDays, targetKey, nowIso());
+    } catch {
+      skipped += 1;
+      continue;
+    }
+
+    const title = isOverdue
         ? `Hey dude, ${item.name} is missing payment`
         : isDueToday
           ? `${item.name} payment is due today`
           : `${item.name} payment is due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
-      const body = `${item.name} (${item.categoryName || "category"}) is due on ${target.toLocaleDateString("en-GB")}. Amount: ${item.amount} ${item.currency}.`;
+    const body = `${item.name} (${item.categoryName || "category"}) is due on ${target.toLocaleDateString("en-GB")}. Amount: ${item.amount} ${item.currency}.`;
 
-      if (channel.type === "website") {
-        db.prepare("INSERT INTO notifications (workspace_id, title, body, item_id, category_id, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-          item.workspaceId,
-          title,
-          body,
-          item.id,
-          item.categoryId,
-          nowIso(),
-        );
-      } else {
-        const dueLabel = isOverdue
-          ? `Overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`
-          : isDueToday
-            ? "Due today"
-            : `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
-        const telegramMessage = [
-          "🔔 <b>Payment reminder</b>",
-          `<b>${telegramValue(item.name)}</b> <i>(${telegramValue(item.categoryName || "category")})</i>`,
-          "",
-          `📅 <b>Status:</b> ${escapeHtml(dueLabel)}`,
-          `🗓 <b>Due date:</b> ${escapeHtml(target.toLocaleDateString("en-GB"))}`,
-          `💰 <b>Amount:</b> ${telegramValue(item.amount)} ${telegramValue(item.currency)}`,
-          `👤 <b>Account:</b> ${telegramValue(item.accountName)}`,
-          `🏷 <b>Vendor:</b> ${telegramValue(item.vendorName)}`,
-          `🔗 <b>URL:</b> ${telegramVendorLink(item.vendorUrl)}`,
-        ].join("\n");
-        await sendTelegramMessage(channel, telegramMessage);
-      }
-      sent += 1;
+    if (channel.type === "website") {
+      db.prepare("INSERT INTO notifications (workspace_id, title, body, item_id, category_id, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
+        item.workspaceId,
+        title,
+        body,
+        item.id,
+        item.categoryId,
+        nowIso(),
+      );
+    } else {
+      const dueLabel = isOverdue
+        ? `Overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`
+        : isDueToday
+          ? "Due today"
+          : `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+      const telegramMessage = [
+        "🔔 <b>Payment reminder</b>",
+        `<b>${telegramValue(item.name)}</b> <i>(${telegramValue(item.categoryName || "category")})</i>`,
+        "",
+        `📅 <b>Status:</b> ${escapeHtml(dueLabel)}`,
+        `🗓 <b>Due date:</b> ${escapeHtml(target.toLocaleDateString("en-GB"))}`,
+        `💰 <b>Amount:</b> ${telegramValue(item.amount)} ${telegramValue(item.currency)}`,
+        `👤 <b>Account:</b> ${telegramValue(item.accountName)}`,
+        `🏷 <b>Vendor:</b> ${telegramValue(item.vendorName)}`,
+        `🔗 <b>URL:</b> ${telegramVendorLink(item.vendorUrl)}`,
+      ].join("\n");
+      await sendTelegramMessage(channel, telegramMessage);
     }
+    sent += 1;
   }
 
   return { sent, skipped };

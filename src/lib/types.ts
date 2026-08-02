@@ -68,6 +68,7 @@ export type PaymentItem = {
   notes: string;
   customFields: Record<string, unknown>;
   ownerId: number | null;
+  archivedAt: string | null;
   createdAt: string;
   updatedAt: string;
 };

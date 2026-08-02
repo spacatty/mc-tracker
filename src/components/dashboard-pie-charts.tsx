@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
 import { formatMoney } from "@/lib/utils";
 
@@ -8,6 +9,21 @@ type PieDatum = {
   color: string;
   value: number;
 };
+
+const CHART_HEIGHT = 256;
+
+function ChartSlot({ children }: { children: React.ReactNode }) {
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  return (
+    <div className="h-64 w-full min-h-[256px] min-w-0">
+      {mounted ? children : null}
+    </div>
+  );
+}
 
 function PieCard({
   title,
@@ -26,9 +42,9 @@ function PieCard({
         <h2 className="text-lg font-semibold text-white">{title}</h2>
         <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[1fr_180px]">
-        <div className="h-64 min-w-0">
-          <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={220}>
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_180px]">
+        <ChartSlot>
+          <ResponsiveContainer width="100%" height={CHART_HEIGHT} minWidth={0} minHeight={CHART_HEIGHT}>
             <PieChart>
               <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2} stroke="none">
                 {data.map((entry) => (
@@ -41,7 +57,7 @@ function PieCard({
               />
             </PieChart>
           </ResponsiveContainer>
-        </div>
+        </ChartSlot>
         <div className="space-y-2">
           {data.slice(0, 7).map((entry) => (
             <div key={entry.name} className="flex items-center justify-between rounded-xl bg-black/25 px-3 py-2">

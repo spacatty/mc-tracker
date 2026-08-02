@@ -4,8 +4,8 @@ import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import type { CSSProperties, ReactNode } from "react";
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, ArrowUpDown, Check, ChevronLeft, ChevronRight, Copy, Download, Edit3, ExternalLink, Filter, MoreHorizontal, Search, Trash2, X } from "lucide-react";
-import { deleteItemAction, deleteItemsAction, exportSelectedEntriesAction } from "@/app/actions";
+import { AlertTriangle, Archive, ArrowUpDown, Check, ChevronLeft, ChevronRight, Copy, Download, Edit3, ExternalLink, Filter, MoreHorizontal, Search, Trash2, X } from "lucide-react";
+import { archiveItemAction, deleteItemAction, deleteItemsAction, exportSelectedEntriesAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { CategoryField, PaymentItem } from "@/lib/types";
@@ -242,6 +242,15 @@ export function EntriesTable({
     });
   }
 
+  function runItemAction(action: (formData: FormData) => Promise<void>, id: number) {
+    const formData = new FormData();
+    formData.set("id", String(id));
+    formData.set("workspaceId", String(workspaceId));
+    startTransition(async () => {
+      await action(formData);
+    });
+  }
+
   function handleBulkDelete() {
     const formData = new FormData();
     formData.set("workspaceId", String(workspaceId));
@@ -452,16 +461,24 @@ export function EntriesTable({
                       ) : null}
                       {item.vendorUrl ? <CopyUrlMenuItem url={item.vendorUrl} /> : null}
                       {!readOnlyWorkspace ? (
-                        <form action={deleteItemAction}>
-                          <input type="hidden" name="id" value={item.id} />
-                          <input type="hidden" name="workspaceId" value={workspaceId} />
-                          <DropdownMenuItem asChild className="gap-3 rounded-xl px-3 py-2.5">
-                            <button type="submit" className="flex w-full items-center gap-3 text-red-200">
-                              <ActionIcon tone="red"><Trash2 className="h-4 w-4" /></ActionIcon>
-                              <span className="font-medium">{t(locale, "delete")}</span>
-                            </button>
-                          </DropdownMenuItem>
-                        </form>
+                        <DropdownMenuItem
+                          className="gap-3 rounded-xl px-3 py-2.5 text-violet-200"
+                          disabled={isPending}
+                          onSelect={() => runItemAction(archiveItemAction, item.id)}
+                        >
+                          <ActionIcon tone="violet"><Archive className="h-4 w-4" /></ActionIcon>
+                          <span className="font-medium">{t(locale, "archive")}</span>
+                        </DropdownMenuItem>
+                      ) : null}
+                      {!readOnlyWorkspace ? (
+                        <DropdownMenuItem
+                          className="gap-3 rounded-xl px-3 py-2.5 text-red-200"
+                          disabled={isPending}
+                          onSelect={() => runItemAction(deleteItemAction, item.id)}
+                        >
+                          <ActionIcon tone="red"><Trash2 className="h-4 w-4" /></ActionIcon>
+                          <span className="font-medium">{t(locale, "delete")}</span>
+                        </DropdownMenuItem>
                       ) : null}
                     </DropdownMenuContent>
                   </DropdownMenu>

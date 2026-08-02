@@ -1,8 +1,8 @@
 "use client";
 
-import { Search, Trash2 } from "lucide-react";
+import { Archive, Search, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
-import { deleteItemAction } from "@/app/actions";
+import { archiveItemAction, deleteItemAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
@@ -90,14 +90,24 @@ export function WorkspaceEntriesAccordionTable({
                       <td className="px-3 py-2 text-zinc-400">{entry.accountName || entry.vendorName || "-"}</td>
                       <td className="px-3 py-2 text-right">
                         {canDelete ? (
-                          <form action={deleteItemAction}>
-                            <input type="hidden" name="id" value={entry.id} />
-                            <input type="hidden" name="workspaceId" value={workspaceId} />
-                            <Button type="submit" variant="ghost" size="sm" className="text-red-200 hover:text-red-100">
-                              <Trash2 className="h-3.5 w-3.5" />
-                              {t(locale, "delete")}
-                            </Button>
-                          </form>
+                          <div className="flex justify-end gap-2">
+                            <form action={archiveItemAction}>
+                              <input type="hidden" name="id" value={entry.id} />
+                              <input type="hidden" name="workspaceId" value={workspaceId} />
+                              <Button type="submit" variant="ghost" size="sm" className="text-violet-200 hover:text-violet-100">
+                                <Archive className="h-3.5 w-3.5" />
+                                {t(locale, "archive")}
+                              </Button>
+                            </form>
+                            <form action={deleteItemAction}>
+                              <input type="hidden" name="id" value={entry.id} />
+                              <input type="hidden" name="workspaceId" value={workspaceId} />
+                              <Button type="submit" variant="ghost" size="sm" className="text-red-200 hover:text-red-100">
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {t(locale, "delete")}
+                              </Button>
+                            </form>
+                          </div>
                         ) : (
                           <span className="text-xs text-zinc-600">{locale === "ru" ? "Только просмотр" : "View only"}</span>
                         )}

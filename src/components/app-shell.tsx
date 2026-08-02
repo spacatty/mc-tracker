@@ -10,7 +10,7 @@ import { useMemo, useState } from "react";
 import { logoutAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
-import type { Category, User, WebsiteNotification, Workspace } from "@/lib/types";
+import type { Category, User, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AppIcon, BrandLogo } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
@@ -26,8 +26,6 @@ import {
 } from "./ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { Badge } from "./ui/badge";
-import { NotificationToasts } from "./notification-toasts";
-
 type SidebarNavItem = {
   href: string;
   label: string;
@@ -292,14 +290,12 @@ export function AppShell({
   categories,
   children,
   unreadCount,
-  unreadNotifications,
   locale,
 }: {
   user: User;
   workspaces: Workspace[];
   categories: Category[];
   unreadCount: number;
-  unreadNotifications: WebsiteNotification[];
   locale: Locale;
   children: React.ReactNode;
 }) {
@@ -316,6 +312,7 @@ export function AppShell({
     { href: "/app", label: t(locale, "dashboard"), icon: "LayoutDashboard", accent: "text-violet-200 bg-violet-500/10" },
     { href: "/app/items", label: t(locale, "entries"), icon: "WalletCards", accent: "text-emerald-200 bg-emerald-500/10" },
     { href: "/app/invoices", label: t(locale, "invoices"), icon: "FileText", accent: "text-sky-200 bg-sky-500/10" },
+    { href: "/app/archive", label: t(locale, "archived"), icon: "Archive", accent: "text-zinc-300 bg-zinc-500/10" },
   ];
   const workspaceNav: SidebarNavItem[] = [
     { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-200 bg-amber-500/10" },
@@ -622,7 +619,6 @@ export function AppShell({
         </div>
       </aside>
       <main className="min-w-0 flex-1 px-4 py-20 md:px-8 md:py-8">{children}</main>
-      <NotificationToasts notifications={unreadNotifications} />
     </div>
   );
 }
