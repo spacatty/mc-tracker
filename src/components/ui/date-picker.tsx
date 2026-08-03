@@ -5,6 +5,7 @@ import { CalendarIcon } from "lucide-react";
 import { useState } from "react";
 import { DayPicker } from "react-day-picker";
 import { cn } from "@/lib/utils";
+import type { Locale } from "@/lib/i18n";
 import { Button } from "./button";
 import { Popover, PopoverContent, PopoverTrigger } from "./popover";
 
@@ -13,17 +14,33 @@ export function DatePickerInput({
   value,
   placeholder = "Pick date",
   onChange,
+  triggerId,
+  ariaLabel,
+  locale = "en",
+  triggerClassName,
+  invalid = false,
 }: {
   name: string;
   value?: string;
   placeholder?: string;
   onChange?: (value: string) => void;
+  triggerId?: string;
+  ariaLabel?: string;
+  locale?: Locale;
+  triggerClassName?: string;
+  invalid?: boolean;
 }) {
-  const [selected, setSelected] = useState<Date | undefined>(value ? new Date(`${value}T00:00:00`) : undefined);
+  const [uncontrolledSelected, setUncontrolledSelected] = useState<Date | undefined>(
+    value ? new Date(`${value}T00:00:00`) : undefined,
+  );
+  const controlled = onChange !== undefined;
+  const selected = controlled
+    ? (value ? new Date(`${value}T00:00:00`) : undefined)
+    : uncontrolledSelected;
   const formatted = selected ? format(selected, "yyyy-MM-dd") : "";
 
   function select(date?: Date) {
-    setSelected(date);
+    if (!controlled) setUncontrolledSelected(date);
     onChange?.(date ? format(date, "yyyy-MM-dd") : "");
   }
 
@@ -34,11 +51,16 @@ export function DatePickerInput({
         <PopoverTrigger asChild>
           <Button
             type="button"
+            id={triggerId}
             variant="outline"
+            aria-label={ariaLabel}
+            aria-invalid={invalid || undefined}
             className={cn(
               "w-full justify-start overflow-hidden border-white/10 bg-black/30 text-left font-normal",
               "hover:border-violet-400/30 hover:bg-violet-500/10",
               selected ? "text-zinc-100" : "text-zinc-600",
+              invalid && "border-red-400/70 focus-visible:ring-red-400/30",
+              triggerClassName,
             )}
           >
             <span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-violet-500/10 text-violet-200">
@@ -52,8 +74,8 @@ export function DatePickerInput({
           className="w-auto overflow-hidden rounded-3xl border-violet-400/20 bg-[#09090f]/95 p-0 shadow-2xl shadow-violet-950/30 backdrop-blur-xl"
         >
           <div className="border-b border-white/10 bg-gradient-to-r from-violet-500/15 via-sky-500/10 to-fuchsia-500/15 px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200">Pick date</p>
-            <p className="mt-1 text-sm text-zinc-400">{selected ? format(selected, "EEEE, dd MMMM yyyy") : "Choose billing or expiry date"}</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200">{locale === "ru" ? "Выберите дату" : "Pick date"}</p>
+            <p className="mt-1 text-sm text-zinc-400">{selected ? format(selected, "EEEE, dd MMMM yyyy") : locale === "ru" ? "Выберите дату оплаты или окончания" : "Choose billing or expiry date"}</p>
           </div>
           <DayPicker
             mode="single"
@@ -97,14 +119,14 @@ export function DatePickerInput({
                   onClick={() => select(new Date())}
                   className="rounded-lg px-3 py-1.5 text-xs font-semibold text-sky-200 transition hover:bg-sky-500/10"
                 >
-                  Today
+                  {locale === "ru" ? "Сегодня" : "Today"}
                 </button>
                 <button
                   type="button"
                   onClick={() => select(undefined)}
                   className="rounded-lg px-3 py-1.5 text-xs font-semibold text-zinc-400 transition hover:bg-white/10 hover:text-white"
                 >
-                  Clear
+                  {locale === "ru" ? "Очистить" : "Clear"}
                 </button>
               </div>
             }

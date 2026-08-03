@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from "recharts";
+import { t, type Locale } from "@/lib/i18n";
 import { formatMoney } from "@/lib/utils";
 
 type PieDatum = {
@@ -10,16 +11,17 @@ type PieDatum = {
   value: number;
 };
 
-const CHART_HEIGHT = 256;
+const CHART_HEIGHT = 224;
 
 function ChartSlot({ children }: { children: React.ReactNode }) {
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const mounted = useSyncExternalStore(
+    () => () => undefined,
+    () => true,
+    () => false,
+  );
 
   return (
-    <div className="h-64 w-full min-h-[256px] min-w-0">
+    <div className="h-56 w-full min-h-[224px] min-w-0">
       {mounted ? children : null}
     </div>
   );
@@ -30,14 +32,16 @@ function PieCard({
   subtitle,
   data,
   valueFormatter,
+  emptyLabel,
 }: {
   title: string;
   subtitle: string;
   data: PieDatum[];
   valueFormatter: (value: number) => string;
+  emptyLabel: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="rounded-lg border border-border bg-surface p-5 shadow-surface">
       <div className="mb-4">
         <h2 className="text-lg font-semibold text-white">{title}</h2>
         <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
@@ -46,13 +50,13 @@ function PieCard({
         <ChartSlot>
           <ResponsiveContainer width="100%" height={CHART_HEIGHT} minWidth={0} minHeight={CHART_HEIGHT}>
             <PieChart>
-              <Pie data={data} dataKey="value" nameKey="name" innerRadius={55} outerRadius={90} paddingAngle={2} stroke="none">
+              <Pie data={data} dataKey="value" nameKey="name" innerRadius={58} outerRadius={84} paddingAngle={1} stroke="#111113" strokeWidth={2}>
                 {data.map((entry) => (
                   <Cell key={entry.name} fill={entry.color} />
                 ))}
               </Pie>
               <Tooltip
-                contentStyle={{ background: "#09090b", border: "1px solid #27272a", borderRadius: 12 }}
+                contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
                 formatter={(value) => valueFormatter(Number(Array.isArray(value) ? value[0] : value || 0))}
               />
             </PieChart>
@@ -60,7 +64,7 @@ function PieCard({
         </ChartSlot>
         <div className="space-y-2">
           {data.slice(0, 7).map((entry) => (
-            <div key={entry.name} className="flex items-center justify-between rounded-xl bg-black/25 px-3 py-2">
+            <div key={entry.name} className="flex items-center justify-between rounded-md bg-surface-muted px-3 py-2">
               <span className="inline-flex items-center gap-2 text-sm text-zinc-300">
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: entry.color }} />
                 {entry.name}
@@ -68,53 +72,57 @@ function PieCard({
               <span className="text-sm font-semibold text-white">{valueFormatter(entry.value)}</span>
             </div>
           ))}
-          {!data.length ? <p className="text-sm text-zinc-500">No data yet.</p> : null}
+          {!data.length ? <p className="text-sm text-zinc-500">{emptyLabel}</p> : null}
         </div>
       </div>
     </div>
   );
 }
 
-export function DashboardCategorySplitChart({ data }: { data: Array<{ name: string; color: string; count: number }> }) {
+export function DashboardCategorySplitChart({ data, locale }: { data: Array<{ name: string; color: string; count: number }>; locale: Locale }) {
   return (
     <PieCard
-      title="Category split"
-      subtitle="Item count dominance by category"
+      title={t(locale, "categorySplit")}
+      subtitle={t(locale, "categorySplitDescription")}
       data={data.map((entry) => ({ name: entry.name, color: entry.color, value: entry.count }))}
       valueFormatter={(value) => String(value)}
+      emptyLabel={t(locale, "noDataYet")}
     />
   );
 }
 
-export function DashboardCategoryPressureChart({ data, currency }: { data: Array<{ name: string; color: string; monthly: number }>; currency: string }) {
+export function DashboardCategoryPressureChart({ data, currency, locale }: { data: Array<{ name: string; color: string; monthly: number }>; currency: string; locale: Locale }) {
   return (
     <PieCard
-      title="Category pressure"
-      subtitle="Recurring pressure by monthly amount"
+      title={t(locale, "categorySpend")}
+      subtitle={t(locale, "categorySpendDescription")}
       data={data.map((entry) => ({ name: entry.name, color: entry.color, value: entry.monthly }))}
       valueFormatter={(value) => formatMoney(value, currency)}
+      emptyLabel={t(locale, "noDataYet")}
     />
   );
 }
 
-export function DashboardWorkspaceObjectDominanceChart({ data }: { data: Array<{ name: string; color: string; count: number }> }) {
+export function DashboardWorkspaceObjectDominanceChart({ data, locale }: { data: Array<{ name: string; color: string; count: number }>; locale: Locale }) {
   return (
     <PieCard
-      title="Workspace dominance"
-      subtitle="Total objects by workspace"
+      title={t(locale, "entriesByWorkspace")}
+      subtitle={t(locale, "entriesByWorkspaceDescription")}
       data={data.map((entry) => ({ name: entry.name, color: entry.color, value: entry.count }))}
       valueFormatter={(value) => String(value)}
+      emptyLabel={t(locale, "noDataYet")}
     />
   );
 }
 
-export function DashboardWorkspaceCostDominanceChart({ data, currency }: { data: Array<{ name: string; color: string; monthly: number }>; currency: string }) {
+export function DashboardWorkspaceCostDominanceChart({ data, currency, locale }: { data: Array<{ name: string; color: string; monthly: number }>; currency: string; locale: Locale }) {
   return (
     <PieCard
-      title="Workspace cost dominance"
-      subtitle="Recurring monthly pressure by workspace"
+      title={t(locale, "spendByWorkspace")}
+      subtitle={t(locale, "spendByWorkspaceDescription")}
       data={data.map((entry) => ({ name: entry.name, color: entry.color, value: entry.monthly }))}
       valueFormatter={(value) => formatMoney(value, currency)}
+      emptyLabel={t(locale, "noDataYet")}
     />
   );
 }

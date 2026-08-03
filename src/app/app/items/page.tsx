@@ -3,11 +3,11 @@ import { Plus } from "lucide-react";
 import { EntriesTable } from "@/components/entries-table";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
-import { listCategoriesForWorkspace, listItemsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
+import { listCategoriesForWorkspace, listItemsForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
 
-export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ category?: string; workspace?: string }> }) {
+export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ add?: string; category?: string; workspace?: string }> }) {
   const user = await requireUser();
   const locale = await getLocale();
   const params = await searchParams;
@@ -16,6 +16,13 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   const categoryId = Number(params.category || 0);
   const selectedCategory = categoryId ? categories.find((category) => category.id === categoryId) : undefined;
   const items = listItemsForWorkspace(workspace.id, user.id).filter((item) => !categoryId || item.categoryId === categoryId);
+  const addHref = `/app/items?workspace=${workspace.id}${selectedCategory ? `&category=${selectedCategory.id}` : ""}&add=1`;
+  const entriesStateKey = [
+    workspace.id,
+    selectedCategory?.id || "all",
+    params.add === "1" ? "add" : "list",
+    items.map((item) => `${item.id}:${item.updatedAt}`).join(","),
+  ].join("|");
 
   return (
     <div className="space-y-6">
@@ -23,20 +30,25 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
         <div>
           <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-sky-300">{selectedCategory ? `${selectedCategory.name} ${locale === "ru" ? "записи" : "entries"}` : locale === "ru" ? "Все ресурсы" : "All tracked resources"}</h1>
         </div>
-        <Button asChild variant="secondary" className="gap-2 border-violet-400/20 bg-violet-500/[0.14] text-violet-100 hover:border-violet-300/35 hover:bg-violet-500/[0.24] hover:text-white">
-          <Link href={`/app/items/new?workspace=${workspace.id}`}>
-            <Plus className="h-4 w-4" />
-            {t(locale, "createEntry")}
-          </Link>
-        </Button>
+        {workspace.accessRole !== "viewer" ? (
+          <Button asChild variant="secondary" className="gap-2 border-violet-400/20 bg-violet-500/[0.14] text-violet-100 hover:border-violet-300/35 hover:bg-violet-500/[0.24] hover:text-white">
+            <Link href={addHref}>
+              <Plus className="h-4 w-4" />
+              {t(locale, "createEntry")}
+            </Link>
+          </Button>
+        ) : null}
       </header>
 
       <EntriesTable
+        key={entriesStateKey}
         items={items}
+        categories={categories}
+        vendorSuggestions={listVendorSuggestionsForWorkspace(workspace.id, user.id)}
         workspaceId={workspace.id}
         workspaceRole={workspace.accessRole}
-        visibleFields={selectedCategory?.fields.filter((field) => field.showInTable) || []}
-        showCategory={!selectedCategory}
+        selectedCategoryId={selectedCategory?.id}
+        initialAdd={params.add === "1"}
         locale={locale}
       />
     </div>

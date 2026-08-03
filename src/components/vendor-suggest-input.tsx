@@ -3,6 +3,7 @@
 import { Check, ChevronsUpDown } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { VendorSuggestion } from "@/lib/types";
+import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import { Button } from "./ui/button";
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
@@ -19,6 +20,7 @@ function SuggestCombobox({
   options,
   placeholder,
   name,
+  locale,
 }: {
   label: string;
   value: string;
@@ -26,23 +28,25 @@ function SuggestCombobox({
   options: string[];
   placeholder: string;
   name: string;
+  locale: Locale;
 }) {
   const [open, setOpen] = useState(false);
   const uniqueOptions = [...new Set(options.filter(Boolean))].slice(0, 40);
 
   return (
     <div className="space-y-2">
+      <label htmlFor={`${name}-trigger`} className="text-sm font-medium text-foreground">{label}</label>
       <input type="hidden" name={name} value={value} />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="w-full justify-between font-normal">
+          <Button id={`${name}-trigger`} type="button" variant="outline" aria-label={label} className="w-full justify-between gap-3 pr-4 font-normal">
             <span className={cn("truncate", !value && "text-zinc-600")}>{value || placeholder}</span>
-            <ChevronsUpDown className="h-4 w-4 text-zinc-500" />
+            <ChevronsUpDown className="h-4 w-4 shrink-0 text-zinc-500" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
           <Command>
-            <CommandInput placeholder={`Search ${label.toLowerCase()}...`} value={value} onValueChange={onChange} />
+            <CommandInput placeholder={locale === "ru" ? `Поиск: ${label.toLowerCase()}...` : `Search ${label.toLowerCase()}...`} value={value} onValueChange={onChange} />
             <CommandList>
               <CommandEmpty>
                 <button
@@ -50,7 +54,7 @@ function SuggestCombobox({
                   onClick={() => setOpen(false)}
                   className="rounded-lg px-3 py-2 text-sm text-zinc-300 hover:bg-white/10"
                 >
-                  Use &quot;{value || placeholder}&quot;
+                  {locale === "ru" ? "Использовать" : "Use"} &quot;{value || placeholder}&quot;
                 </button>
               </CommandEmpty>
               <CommandGroup heading={label}>
@@ -82,12 +86,14 @@ export function VendorSuggestInputs({
   defaultUrl = "",
   defaultAccount = "",
   className = "grid gap-3 lg:grid-cols-3",
+  locale = "en",
 }: {
   suggestions: VendorSuggestion[];
   defaultVendor?: string;
   defaultUrl?: string;
   defaultAccount?: string;
   className?: string;
+  locale?: Locale;
 }) {
   const [vendor, setVendor] = useState(defaultVendor);
   const [url, setUrl] = useState(defaultUrl);
@@ -98,9 +104,9 @@ export function VendorSuggestInputs({
 
   return (
     <div className={className}>
-      <SuggestCombobox name="vendorName" label="Vendor" value={vendor} onChange={setVendor} options={vendorOptions} placeholder="Provider/resource name" />
-      <SuggestCombobox name="vendorUrl" label="URL" value={url} onChange={setUrl} options={urlOptions} placeholder="https://..." />
-      <SuggestCombobox name="accountName" label="Account" value={account} onChange={setAccount} options={accountOptions} placeholder="Account/login" />
+      <SuggestCombobox name="vendorName" label={locale === "ru" ? "Поставщик" : "Vendor"} value={vendor} onChange={setVendor} options={vendorOptions} placeholder={locale === "ru" ? "Поставщик или ресурс" : "Provider/resource name"} locale={locale} />
+      <SuggestCombobox name="vendorUrl" label="URL" value={url} onChange={setUrl} options={urlOptions} placeholder="https://..." locale={locale} />
+      <SuggestCombobox name="accountName" label={locale === "ru" ? "Аккаунт" : "Account"} value={account} onChange={setAccount} options={accountOptions} placeholder={locale === "ru" ? "Аккаунт или логин" : "Account/login"} locale={locale} />
     </div>
   );
 }

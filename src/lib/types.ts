@@ -73,6 +73,54 @@ export type PaymentItem = {
   updatedAt: string;
 };
 
+export type EntryDraft = {
+  rowKey: string;
+  id?: number;
+  name: string;
+  categoryId?: number | null;
+  paymentType: PaymentType;
+  amount: number;
+  currency: string;
+  billingStartAt?: string | null;
+  billingEndAt?: string | null;
+  period?: BillingPeriod | null;
+  customPeriodDays?: number | null;
+  vendorName?: string;
+  vendorUrl?: string;
+  accountName?: string;
+  notes?: string;
+  customFields?: Record<string, unknown>;
+};
+
+export type EntryBatchInput = {
+  workspaceId: number;
+  rows: EntryDraft[];
+};
+
+export type EntryBatchRowError = {
+  rowKey: string;
+  field: keyof EntryDraft | `customFields.${string}` | "_row";
+  message: string;
+};
+
+export type EntryBatchSavedRow = {
+  rowKey: string;
+  itemId: number;
+};
+
+export type EntryBatchResult =
+  | {
+      success: true;
+      saved: EntryBatchSavedRow[];
+      rowErrors: [];
+    }
+  | {
+      success: false;
+      saved: [];
+      rowErrors: EntryBatchRowError[];
+      message?: string;
+    };
+
 export type Folder = {
   id: number;
   workspaceId?: number | null;

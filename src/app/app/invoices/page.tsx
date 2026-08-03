@@ -1,5 +1,7 @@
 import { InvoiceForm } from "@/components/invoice-form";
 import { Badge } from "@/components/ui/badge";
+import { PageHeader } from "@/components/ui/page-header";
+import { Surface } from "@/components/ui/surface";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { requireUser } from "@/lib/auth";
 import { listCategoriesForWorkspace, listInvoicesForWorkspace, listItemsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
@@ -17,16 +19,54 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-violet-300">{t(locale, "experimentalInvoiceShifts")}</h1>
-      </header>
+      <PageHeader
+        eyebrow={t(locale, "billing")}
+        title={t(locale, "invoices")}
+        description={t(locale, "recordPaymentDescription")}
+      />
 
       <InvoiceForm workspaceId={workspace.id} entries={entries} categories={listCategoriesForWorkspace(workspace.id, user.id)} locale={locale} />
 
-      <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-        <div className="border-b border-white/10 p-5">
-          <h2 className="text-lg font-semibold text-white">{t(locale, "invoiceLog")}</h2>
+      <Surface className="overflow-hidden" role="region" aria-labelledby="invoice-history-title">
+        <div className="border-b border-border p-5">
+          <h2 id="invoice-history-title" className="text-lg font-semibold text-white">{t(locale, "invoiceLog")}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{t(locale, "invoiceHistoryDescription")}</p>
         </div>
+        <div className="space-y-3 p-3 md:hidden">
+          {invoices.map((invoice) => (
+            <article key={invoice.id} className="rounded-lg border border-border bg-surface-muted p-4">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <h3 className="truncate font-semibold text-foreground">{invoice.itemName || t(locale, "manualInvoice")}</h3>
+                  <p className="mt-1 text-xs text-muted-foreground">{invoice.categoryName || t(locale, "uncategorized")}</p>
+                </div>
+                <p className="shrink-0 font-semibold text-foreground">{formatMoney(invoice.amount, invoice.currency)}</p>
+              </div>
+              <dl className="mt-4 grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <dt className="text-subtle-foreground">{t(locale, "vendor")}</dt>
+                  <dd className="mt-1 text-muted-foreground">{invoice.vendorName || "—"}</dd>
+                </div>
+                <div>
+                  <dt className="text-subtle-foreground">{t(locale, "period")}</dt>
+                  <dd className="mt-1 text-muted-foreground">{periodLabel(invoice.period, invoice.customPeriodDays)}</dd>
+                </div>
+                <div className="col-span-2">
+                  <dt className="text-subtle-foreground">{t(locale, "paymentDue")}</dt>
+                  <dd className="mt-1 text-muted-foreground">{displayDate(invoice.paymentDate)} → {displayDate(invoice.dueDate)}</dd>
+                </div>
+              </dl>
+              {(invoice.shiftDates || invoice.shiftPaymentPeriod) ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {invoice.shiftDates ? <Badge variant="success">{t(locale, "dates").toLowerCase()}</Badge> : null}
+                  {invoice.shiftPaymentPeriod ? <Badge variant="secondary">{t(locale, "period").toLowerCase()}</Badge> : null}
+                </div>
+              ) : null}
+            </article>
+          ))}
+          {!invoices.length ? <p className="py-8 text-center text-sm text-muted-foreground">{t(locale, "noInvoicesYet")}</p> : null}
+        </div>
+        <div className="hidden md:block">
         <Table>
           <TableHeader>
             <TableRow>
@@ -63,7 +103,8 @@ export default async function InvoicesPage({ searchParams }: { searchParams: Pro
             {!invoices.length ? <TableRow><TableCell colSpan={7} className="py-10 text-center text-zinc-500">{t(locale, "noInvoicesYet")}</TableCell></TableRow> : null}
           </TableBody>
         </Table>
-      </section>
+        </div>
+      </Surface>
     </div>
   );
 }

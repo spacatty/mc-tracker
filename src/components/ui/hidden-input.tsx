@@ -10,16 +10,18 @@ export function CheckboxInput({
   value = "on",
   defaultChecked = false,
   children,
+  id,
 }: {
   name: string;
   value?: string | number;
   defaultChecked?: boolean;
   children?: ReactNode;
+  id?: string;
 }) {
   const [checked, setChecked] = useState(defaultChecked);
   return (
     <label className="flex items-center gap-2 text-sm text-zinc-300">
-      <Checkbox checked={checked} onCheckedChange={(next) => setChecked(next === true)} />
+      <Checkbox id={id} checked={checked} onCheckedChange={(next) => setChecked(next === true)} />
       {checked ? <input type="hidden" name={name} value={String(value)} /> : null}
       {children}
     </label>
@@ -33,6 +35,8 @@ export function SelectInput({
   placeholder = "Select",
   onValueChange,
   triggerClassName,
+  triggerId,
+  ariaLabel,
 }: {
   name: string;
   defaultValue?: string;
@@ -40,6 +44,8 @@ export function SelectInput({
   placeholder?: string;
   onValueChange?: (value: string) => void;
   triggerClassName?: string;
+  triggerId?: string;
+  ariaLabel?: string;
 }) {
   const [value, setValue] = useState(defaultValue || options[0]?.value || "");
 
@@ -52,7 +58,7 @@ export function SelectInput({
     <>
       <input type="hidden" name={name} value={value} />
       <Select value={value} onValueChange={handleValueChange}>
-        <SelectTrigger className={triggerClassName}>
+        <SelectTrigger id={triggerId} aria-label={ariaLabel} className={triggerClassName}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>

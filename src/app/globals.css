@@ -1,15 +1,71 @@
 @import "tailwindcss";
 
 :root {
-  --background: #07070b;
+  color-scheme: dark;
+
+  --background: #09090b;
   --foreground: #f4f4f5;
+  --surface: #111113;
+  --surface-raised: #18181b;
+  --surface-muted: #0d0d0f;
+  --border: #27272a;
+  --border-strong: #3f3f46;
+  --muted-foreground: #a1a1aa;
+  --subtle-foreground: #71717a;
+
+  --accent: #7c3aed;
+  --accent-hover: #8b5cf6;
+  --accent-foreground: #ffffff;
+  --destructive: #dc2626;
+  --destructive-hover: #ef4444;
+  --destructive-foreground: #ffffff;
+  --success: #059669;
+  --success-foreground: #d1fae5;
+
+  --focus-ring: #a78bfa;
+  --overlay: rgb(0 0 0 / 0.72);
+
+  --radius-ui-sm: 0.5rem;
+  --radius-ui-md: 0.75rem;
+  --radius-ui-lg: 1rem;
+  --radius-ui-xl: 1.5rem;
+
+  --shadow-ui-surface: 0 1px 2px rgb(0 0 0 / 0.32), 0 12px 36px rgb(0 0 0 / 0.16);
+  --shadow-ui-overlay: 0 24px 72px rgb(0 0 0 / 0.56);
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-surface-raised: var(--surface-raised);
+  --color-surface-muted: var(--surface-muted);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-subtle-foreground: var(--subtle-foreground);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-focus-ring: var(--focus-ring);
+  --color-overlay: var(--overlay);
+  --radius-sm: var(--radius-ui-sm);
+  --radius-md: var(--radius-ui-md);
+  --radius-lg: var(--radius-ui-lg);
+  --radius-xl: var(--radius-ui-xl);
+  --shadow-surface: var(--shadow-ui-surface);
+  --shadow-overlay: var(--shadow-ui-overlay);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+}
+
+html {
+  background: var(--background);
 }
 
 body {
@@ -18,7 +74,13 @@ body {
 }
 
 * {
-  scrollbar-color: #3f3f46 #09090b;
+  border-color: var(--border);
+  scrollbar-color: var(--border-strong) var(--background);
+}
+
+::selection {
+  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  color: var(--foreground);
 }
 
 input[type="date"]::-webkit-calendar-picker-indicator {
@@ -36,14 +98,14 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 .ProseMirror blockquote {
-  border-left: 2px solid rgb(167 139 250);
+  border-left: 2px solid var(--focus-ring);
   margin: 0.75rem 0;
   padding-left: 0.75rem;
-  color: rgb(212 212 216);
+  color: var(--muted-foreground);
 }
 
 .ProseMirror p.is-editor-empty:first-child::before {
-  color: rgb(82 82 91);
+  color: var(--subtle-foreground);
   content: attr(data-placeholder);
   float: left;
   height: 0;

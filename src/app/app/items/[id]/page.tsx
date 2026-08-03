@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { ItemForm } from "@/components/item-form";
 import { requireUser } from "@/lib/auth";
 import { getItemForWorkspace, listCategoriesForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
+import { getLocale } from "@/lib/i18n-server";
 
 export default async function EditItemPage({
   params,
@@ -11,6 +12,7 @@ export default async function EditItemPage({
   searchParams: Promise<{ workspace?: string }>;
 }) {
   const user = await requireUser();
+  const locale = await getLocale();
   const { id } = await params;
   const qs = await searchParams;
   const workspace = resolveWorkspaceForUser(user.id, Number(qs.workspace || 0) || null);
@@ -18,16 +20,12 @@ export default async function EditItemPage({
   if (!item) notFound();
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-sky-300">{item.name}</h1>
-      </div>
-      <ItemForm
-        workspaceId={workspace.id}
-        item={item}
-        categories={listCategoriesForWorkspace(workspace.id, user.id)}
-        vendorSuggestions={listVendorSuggestionsForWorkspace(workspace.id, user.id)}
-      />
-    </div>
+    <ItemForm
+      workspaceId={workspace.id}
+      item={item}
+      categories={listCategoriesForWorkspace(workspace.id, user.id)}
+      vendorSuggestions={listVendorSuggestionsForWorkspace(workspace.id, user.id)}
+      locale={locale}
+    />
   );
 }

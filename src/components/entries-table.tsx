@@ -1,27 +1,68 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import Link from "next/link";
-import type { CSSProperties, ReactNode } from "react";
-import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, Archive, ArrowUpDown, Check, ChevronLeft, ChevronRight, Copy, Download, Edit3, ExternalLink, Filter, MoreHorizontal, Search, Trash2, X } from "lucide-react";
-import { archiveItemAction, deleteItemAction, deleteItemsAction, exportSelectedEntriesAction } from "@/app/actions";
+import { useRouter } from "next/navigation";
+import { Fragment, type ReactNode, useMemo, useRef, useState, useTransition } from "react";
+import {
+  AlertTriangle,
+  Archive,
+  ArrowUpDown,
+  ChevronDown,
+  ChevronLeft,
+  ChevronRight,
+  ChevronUp,
+  CircleDot,
+  Copy,
+  Download,
+  Edit3,
+  ExternalLink,
+  Filter,
+  Plus,
+  RotateCcw,
+  Save,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import {
+  archiveItemAction,
+  deleteItemAction,
+  deleteItemsAction,
+  exportSelectedEntriesAction,
+  saveEntryBatchAction,
+} from "@/app/actions";
+import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import type { Locale } from "@/lib/i18n";
-import { t } from "@/lib/i18n";
-import type { CategoryField, PaymentItem } from "@/lib/types";
-import { cn } from "@/lib/utils";
-import { displayDate, formatMoney, periodLabel } from "@/lib/utils";
-import { CopyUrlMenuItem } from "./copy-url-menu-item";
+import type {
+  BillingPeriod,
+  Category,
+  CategoryField,
+  EntryBatchRowError,
+  EntryDraft,
+  PaymentItem,
+  VendorSuggestion,
+} from "@/lib/types";
+import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
 import { AppIcon } from "./icons";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { DatePickerInput } from "./ui/date-picker";
+import { Input, Textarea } from "./ui/input";
 
 type SortKey = "name" | "category" | "vendor" | "created" | "date" | "amount" | "billing";
+type Density = "compact" | "comfortable";
+type DraftRow = EntryDraft & {
+  amountInput: string;
+  customPeriodDaysInput: string;
+};
+type FieldErrors = Record<string, string>;
+
+const PERIODS: BillingPeriod[] = ["7d", "1m", "3m", "1y", "custom"];
+
+function tx(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
 
 function fuzzyMatch(value: string, query: string) {
   const normalized = query.trim().toLowerCase();
@@ -36,103 +77,334 @@ function fuzzyMatch(value: string, query: string) {
   return true;
 }
 
-function valueFor(item: PaymentItem, key: SortKey) {
-  if (key === "name") return item.name;
-  if (key === "category") return item.categoryName || "";
-  if (key === "vendor") return `${item.vendorName} ${item.vendorUrl} ${item.accountName}`;
-  if (key === "created") return item.createdAt;
-  if (key === "date") return item.billingEndAt || item.billingStartAt || "";
-  if (key === "amount") return item.amount;
-  return item.period || item.paymentType;
+function dateInput(value?: string | null) {
+  return value ? value.slice(0, 10) : "";
 }
 
-function SortButton({ label, sortKey, active, direction, onClick }: { label: string; sortKey: SortKey; active: SortKey; direction: "asc" | "desc"; onClick: (key: SortKey) => void }) {
+function draftFromItem(item: PaymentItem): DraftRow {
+  return {
+    rowKey: `item-${item.id}`,
+    id: item.id,
+    name: item.name,
+    categoryId: item.categoryId,
+    paymentType: item.paymentType,
+    amount: item.amount,
+    amountInput: String(item.amount),
+    currency: item.currency,
+    billingStartAt: dateInput(item.billingStartAt),
+    billingEndAt: dateInput(item.billingEndAt),
+    period: item.period,
+    customPeriodDays: item.customPeriodDays,
+    customPeriodDaysInput: item.customPeriodDays ? String(item.customPeriodDays) : "30",
+    vendorName: item.vendorName,
+    vendorUrl: item.vendorUrl,
+    accountName: item.accountName,
+    notes: item.notes,
+    customFields: { ...item.customFields },
+  };
+}
+
+function blankDraft(rowKey: string, categoryId?: number): DraftRow {
+  return {
+    rowKey,
+    name: "",
+    categoryId: categoryId || null,
+    paymentType: "recurring",
+    amount: 0,
+    amountInput: "",
+    currency: "USD",
+    billingStartAt: "",
+    billingEndAt: "",
+    period: "1m",
+    customPeriodDays: null,
+    customPeriodDaysInput: "30",
+    vendorName: "",
+    vendorUrl: "",
+    accountName: "",
+    notes: "",
+    customFields: {},
+  };
+}
+
+function savableDraft(row: DraftRow): EntryDraft {
+  const {
+    amountInput,
+    customPeriodDaysInput,
+    ...draft
+  } = row;
+  return {
+    ...draft,
+    amount: Number(amountInput),
+    customPeriodDays:
+      draft.paymentType === "recurring" && draft.period === "custom"
+        ? Number(customPeriodDaysInput)
+        : null,
+    period: draft.paymentType === "recurring" ? draft.period || "1m" : null,
+  };
+}
+
+function comparable(row: DraftRow) {
+  const draft = savableDraft(row);
+  return JSON.stringify({
+    ...draft,
+    customFields: Object.fromEntries(
+      Object.entries(draft.customFields || {}).sort(([a], [b]) => a.localeCompare(b)),
+    ),
+  });
+}
+
+function rowsFromItems(items: PaymentItem[], initialAdd: boolean, categoryId?: number) {
+  const rows = items.map(draftFromItem);
+  return initialAdd ? [blankDraft("new-initial", categoryId), ...rows] : rows;
+}
+
+function validUrl(value: string) {
+  if (!value.trim()) return true;
+  try {
+    const url = new URL(value);
+    return url.protocol === "http:" || url.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+function validateRow(row: DraftRow, categories: Category[], locale: Locale): FieldErrors {
+  const errors: FieldErrors = {};
+  const category = categories.find((candidate) => candidate.id === row.categoryId);
+  const amount = Number(row.amountInput);
+  const customDays = Number(row.customPeriodDaysInput);
+
+  if (!row.name.trim()) errors.name = tx(locale, "Name is required.", "Укажите название.");
+  if (!row.amountInput.trim() || !Number.isFinite(amount) || amount < 0) {
+    errors.amount = tx(locale, "Enter a valid non-negative amount.", "Введите корректную сумму не меньше нуля.");
+  }
+  if (!SUPPORTED_CURRENCIES.some((currency) => currency.code === row.currency)) {
+    errors.currency = tx(locale, "Choose a supported currency.", "Выберите поддерживаемую валюту.");
+  }
+  if (row.categoryId && !category) {
+    errors.categoryId = tx(locale, "Choose a valid category.", "Выберите корректную категорию.");
+  }
+  if (row.paymentType === "recurring" && !row.period) {
+    errors.period = tx(locale, "Choose a billing period.", "Выберите период оплаты.");
+  }
+  if (
+    row.paymentType === "recurring" &&
+    row.period === "custom" &&
+    (!Number.isInteger(customDays) || customDays < 1)
+  ) {
+    errors.customPeriodDays = tx(locale, "Enter a positive whole number.", "Введите целое число больше нуля.");
+  }
+  if (row.billingStartAt && row.billingEndAt && row.billingEndAt < row.billingStartAt) {
+    errors.billingEndAt = tx(locale, "End date cannot precede start date.", "Дата окончания не может быть раньше начала.");
+  }
+  if (!validUrl(row.vendorUrl || "")) {
+    errors.vendorUrl = tx(locale, "Enter a valid http(s) URL.", "Введите корректный http(s) URL.");
+  }
+
+  category?.fields.forEach((field) => {
+    const value = row.customFields?.[field.id];
+    const key = `customFields.${field.id}`;
+    if (field.required && (field.type === "checkbox" ? value !== true : String(value ?? "").trim() === "")) {
+      errors[key] = tx(locale, `${field.label} is required.`, `Поле «${field.label}» обязательно.`);
+    }
+    if (field.type === "number" && String(value ?? "").trim() && !Number.isFinite(Number(value))) {
+      errors[key] = tx(locale, "Enter a valid number.", "Введите корректное число.");
+    }
+    if (field.type === "url" && !validUrl(String(value ?? ""))) {
+      errors[key] = tx(locale, "Enter a valid http(s) URL.", "Введите корректный http(s) URL.");
+    }
+  });
+  return errors;
+}
+
+function valueFor(row: DraftRow, item: PaymentItem | undefined, key: SortKey, categories: Category[]) {
+  if (key === "name") return row.name;
+  if (key === "category") return categories.find((category) => category.id === row.categoryId)?.name || "";
+  if (key === "vendor") return `${row.vendorName || ""} ${row.vendorUrl || ""} ${row.accountName || ""}`;
+  if (key === "created") return item?.createdAt || "";
+  if (key === "date") return row.billingEndAt || row.billingStartAt || "";
+  if (key === "amount") return Number(row.amountInput) || 0;
+  return row.period || row.paymentType;
+}
+
+function localizedPeriodLabel(period: BillingPeriod | null, customDays: number, locale: Locale) {
+  if (locale === "ru") {
+    if (period === "7d") return "7 дней";
+    if (period === "1m") return "1 месяц";
+    if (period === "3m") return "3 месяца";
+    if (period === "1y") return "1 год";
+    if (period === "custom") return `${customDays} дней`;
+  }
+  return periodLabel(period, customDays);
+}
+
+function shortBillingLabel(row: DraftRow, locale: Locale) {
+  if (row.paymentType !== "recurring") return tx(locale, "Single", "Разовый");
+  return localizedPeriodLabel(row.period || null, Number(row.customPeriodDaysInput) || 30, locale);
+}
+
+function entryDateLabel(value: string | null | undefined, locale: Locale) {
+  return value ? displayDate(value) : tx(locale, "No date", "Нет даты");
+}
+
+function NativeSelect({
+  value,
+  onChange,
+  children,
+  ariaLabel,
+  invalid,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  children: ReactNode;
+  ariaLabel: string;
+  invalid?: boolean;
+  className?: string;
+}) {
   return (
-    <button type="button" onClick={() => onClick(sortKey)} className="inline-flex items-center gap-1 hover:text-white">
-      {label}
-      <ArrowUpDown className={active === sortKey ? "h-3.5 w-3.5 text-violet-300" : "h-3.5 w-3.5 text-zinc-600"} />
-      {active === sortKey ? <span className="sr-only">{direction}</span> : null}
-    </button>
+    <span className={cn("relative block h-9 w-full", className)}>
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        aria-label={ariaLabel}
+        aria-invalid={invalid || undefined}
+        className={cn(
+          "h-full w-full appearance-none rounded-md border border-border bg-surface-muted py-1.5 pl-2.5 pr-8 text-sm text-foreground outline-none focus:border-border-strong focus:ring-2 focus:ring-focus-ring/50",
+          invalid && "border-red-400/70 focus:ring-red-400/30",
+        )}
+      >
+        {children}
+      </select>
+      <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" aria-hidden="true" />
+    </span>
   );
 }
 
-function customFieldValue(item: PaymentItem, field: CategoryField) {
-  const value = item.customFields[field.id];
-  if (field.type === "checkbox") return value ? "Yes" : "No";
-  if (value === null || value === undefined || value === "") return "-";
-  return String(value);
+function CellError({ message }: { message?: string }) {
+  return message ? <p className="mt-1 text-[11px] leading-tight text-red-300">{message}</p> : null;
 }
 
-function shortBillingLabel(item: PaymentItem) {
-  if (item.paymentType !== "recurring") return "S";
-  if (item.period === "1m") return "1 M";
-  if (item.period === "3m") return "3 M";
-  if (item.period === "1y") return "1 Y";
-  if (item.period === "7d") return "7 D";
-  if (item.period === "custom") return `${item.customPeriodDays || 30} D`;
-  return periodLabel(item.period, item.customPeriodDays);
+function FieldLabel({ children }: { children: ReactNode }) {
+  return <span className="text-xs font-medium text-muted-foreground">{children}</span>;
 }
 
-function ActionIcon({ children, tone = "violet" }: { children: ReactNode; tone?: "violet" | "sky" | "red" }) {
-  const toneClass = {
-    violet: "bg-violet-500/10 text-violet-200",
-    sky: "bg-sky-500/10 text-sky-200",
-    red: "bg-red-500/10 text-red-200",
-  }[tone];
-
-  return <span className={`grid h-8 w-8 place-items-center rounded-xl ${toneClass}`}>{children}</span>;
-}
-
-function CopyableValue({
+function CustomFieldEditor({
+  field,
   value,
-  children,
-  className,
-  style,
+  onChange,
+  error,
+  locale,
 }: {
-  value: string;
-  children: ReactNode;
-  className?: string;
-  style?: CSSProperties;
+  field: CategoryField;
+  value: unknown;
+  onChange: (value: unknown) => void;
+  error?: string;
+  locale: Locale;
 }) {
-  const [copied, setCopied] = useState(false);
-
-  if (!value || value === "-") {
-    return <span className={className} style={style}>{children}</span>;
-  }
-
+  const label = `${field.label}${field.required ? " *" : ""}`;
   return (
-    <button
-      type="button"
-      className={`inline-flex max-w-full items-center gap-1.5 rounded-lg text-left transition hover:bg-white/[0.06] ${className || ""}`}
-      style={style}
-      title="Copy value"
-      onClick={async () => {
-        await navigator.clipboard?.writeText(value);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 1200);
-      }}
-    >
-      <span className="truncate">{children}</span>
-      {copied ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-300" /> : <Copy className="h-3.5 w-3.5 shrink-0 text-zinc-500" />}
+    <label className="space-y-1.5">
+      <FieldLabel>{label}</FieldLabel>
+      {field.type === "checkbox" ? (
+        <span className="flex h-9 items-center gap-2 rounded-md border border-border bg-surface-muted px-3">
+          <input
+            type="checkbox"
+            checked={Boolean(value)}
+            onChange={(event) => onChange(event.target.checked)}
+            className="h-4 w-4 accent-violet-500"
+          />
+          <span className="text-sm text-foreground">{tx(locale, "Enabled", "Включено")}</span>
+        </span>
+      ) : field.type === "select" ? (
+        <NativeSelect
+          value={String(value ?? "")}
+          onChange={onChange}
+          ariaLabel={label}
+          invalid={Boolean(error)}
+        >
+          <option value="">{tx(locale, "Select…", "Выберите…")}</option>
+          {(field.options || []).map((option) => <option key={option} value={option}>{option}</option>)}
+        </NativeSelect>
+      ) : field.type === "textarea" ? (
+        <Textarea
+          value={String(value ?? "")}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={Boolean(error)}
+          className={cn("min-h-20", error && "border-red-400/70")}
+        />
+      ) : (
+        <Input
+          type={field.type === "number" ? "number" : field.type === "date" ? "date" : field.type === "url" ? "url" : "text"}
+          value={String(value ?? "")}
+          onChange={(event) => onChange(event.target.value)}
+          aria-invalid={Boolean(error)}
+          className={cn("h-9", error && "border-red-400/70")}
+        />
+      )}
+      <CellError message={error} />
+    </label>
+  );
+}
+
+function SortButton({
+  label,
+  sortKey,
+  active,
+  direction,
+  onClick,
+}: {
+  label: string;
+  sortKey: SortKey;
+  active: SortKey;
+  direction: "asc" | "desc";
+  onClick: (key: SortKey) => void;
+}) {
+  return (
+    <button type="button" onClick={() => onClick(sortKey)} className="inline-flex items-center gap-1 hover:text-foreground">
+      {label}
+      <ArrowUpDown className={cn("h-3.5 w-3.5", active === sortKey ? "text-violet-300" : "text-subtle-foreground")} />
+      {active === sortKey ? <span className="sr-only">{direction}</span> : null}
     </button>
   );
 }
 
 export function EntriesTable({
   items,
+  categories,
+  vendorSuggestions,
   workspaceId,
   workspaceRole,
-  visibleFields = [],
-  showCategory = true,
+  selectedCategoryId,
+  initialAdd = false,
   locale = "en",
 }: {
   items: PaymentItem[];
+  categories: Category[];
+  vendorSuggestions: VendorSuggestion[];
   workspaceId: number;
   workspaceRole: "owner" | "editor" | "viewer";
-  visibleFields?: CategoryField[];
-  showCategory?: boolean;
+  selectedCategoryId?: number;
+  initialAdd?: boolean;
   locale?: Locale;
 }) {
+  const router = useRouter();
+  const readOnly = workspaceRole === "viewer";
+  const safeInitialAdd = initialAdd && !readOnly;
+  const initialRows = useMemo(
+    () => rowsFromItems(items, safeInitialAdd, selectedCategoryId),
+    [items, safeInitialAdd, selectedCategoryId],
+  );
+  const [rows, setRows] = useState<DraftRow[]>(initialRows);
+  const [baseline, setBaseline] = useState<Record<string, string>>(() =>
+    Object.fromEntries(items.map((item) => {
+      const row = draftFromItem(item);
+      return [row.rowKey, comparable(row)];
+    })),
+  );
+  const [editMode, setEditMode] = useState(safeInitialAdd);
+  const [density, setDensity] = useState<Density>("compact");
+  const [expanded, setExpanded] = useState<Set<string>>(() => safeInitialAdd ? new Set(["new-initial"]) : new Set());
   const [query, setQuery] = useState("");
   const [nameFilter, setNameFilter] = useState("");
   const [accountFilter, setAccountFilter] = useState("");
@@ -142,85 +414,258 @@ export function EntriesTable({
   const [pageSize, setPageSize] = useState(20);
   const [sortKey, setSortKey] = useState<SortKey>("created");
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
-  const [selectedIds, setSelectedIds] = useState(() => new Set<number>());
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [clientErrors, setClientErrors] = useState<Record<string, FieldErrors>>({});
+  const [serverErrors, setServerErrors] = useState<EntryBatchRowError[]>([]);
+  const [saveMessage, setSaveMessage] = useState("");
   const [isPending, startTransition] = useTransition();
   const [isExportPending, startExportTransition] = useTransition();
-  const [exportError, setExportError] = useState("");
-  const readOnlyWorkspace = workspaceRole === "viewer";
+  const rowCounter = useRef(items.length + 1);
+  const saveLockedRef = useRef(false);
+  const focusRowRef = useRef<string | null>(safeInitialAdd ? "new-initial" : null);
+  const listHref = `/app/items?workspace=${workspaceId}${selectedCategoryId ? `&category=${selectedCategoryId}` : ""}`;
 
-  function changeSort(key: SortKey) {
-    if (sortKey === key) {
-      setDirection((current) => (current === "asc" ? "desc" : "asc"));
-      return;
-    }
-    setSortKey(key);
-    setDirection(key === "amount" || key === "created" ? "desc" : "asc");
-  }
+  const sourceById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
+  const baselineFromItems = useMemo(
+    () => Object.fromEntries(items.map((item) => {
+      const row = draftFromItem(item);
+      return [row.rowKey, comparable(row)];
+    })),
+    [items],
+  );
 
+  const visibleFields = useMemo(
+    () => categories.find((category) => category.id === selectedCategoryId)?.fields.filter((field) => field.showInTable) || [],
+    [categories, selectedCategoryId],
+  );
+  const showCategory = !selectedCategoryId;
+  const dirtyRows = useMemo(
+    () => rows.filter((row) => !row.id || baseline[row.rowKey] !== comparable(row)),
+    [baseline, rows],
+  );
+  const dirtyKeys = useMemo(() => new Set(dirtyRows.map((row) => row.rowKey)), [dirtyRows]);
+  const serverErrorMap = useMemo(
+    () => Object.fromEntries(serverErrors.map((error) => [`${error.rowKey}:${error.field}`, error.message])),
+    [serverErrors],
+  );
+  const rowHasError = (rowKey: string) =>
+    Boolean(Object.keys(clientErrors[rowKey] || {}).length || serverErrors.some((error) => error.rowKey === rowKey));
+
+  const filtered = useMemo(
+    () => rows
+      .filter((row) => {
+        const category = categories.find((candidate) => candidate.id === row.categoryId);
+        const searchable = `${row.name} ${row.vendorName || ""} ${row.vendorUrl || ""} ${row.accountName || ""} ${category?.name || ""} ${Object.values(row.customFields || {}).join(" ")}`;
+        return fuzzyMatch(searchable, query);
+      })
+      .filter((row) => fuzzyMatch(row.name, nameFilter))
+      .filter((row) => fuzzyMatch(row.accountName || "", accountFilter))
+      .filter((row) => fuzzyMatch(`${row.vendorName || ""} ${row.vendorUrl || ""}`, vendorFilter))
+      .sort((a, b) => {
+        if (!a.id && b.id) return -1;
+        if (a.id && !b.id) return 1;
+        if (!a.id && !b.id) return 0;
+        const aValue = valueFor(a, a.id ? sourceById.get(a.id) : undefined, sortKey, categories);
+        const bValue = valueFor(b, b.id ? sourceById.get(b.id) : undefined, sortKey, categories);
+        const result = typeof aValue === "number" && typeof bValue === "number"
+          ? aValue - bValue
+          : String(aValue).localeCompare(String(bValue));
+        return direction === "asc" ? result : -result;
+      }),
+    [accountFilter, categories, direction, nameFilter, query, rows, sortKey, sourceById, vendorFilter],
+  );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const paged = filtered.slice((safePage - 1) * pageSize, safePage * pageSize);
+  const pagedIds = paged.flatMap((row) => row.id ? [row.id] : []);
+  const selectedOnPage = pagedIds.filter((id) => selectedIds.has(id)).length;
+  const pageSelectState = pagedIds.length && selectedOnPage === pagedIds.length
+    ? true
+    : selectedOnPage > 0
+      ? "indeterminate"
+      : false;
   const activeFilterCount = [nameFilter, accountFilter, vendorFilter].filter((value) => value.trim()).length;
 
-  function clearFilters() {
+  function fieldError(rowKey: string, field: string) {
+    return clientErrors[rowKey]?.[field] || serverErrorMap[`${rowKey}:${field}`];
+  }
+
+  function updateRow(rowKey: string, patch: Partial<DraftRow>) {
+    if (saveLockedRef.current) return;
+    setRows((current) => current.map((row) => row.rowKey === rowKey ? { ...row, ...patch } : row));
+    setClientErrors((current) => {
+      if (!current[rowKey]) return current;
+      const next = { ...current };
+      delete next[rowKey];
+      return next;
+    });
+    setServerErrors((current) => current.filter((error) => error.rowKey !== rowKey));
+    setSaveMessage("");
+  }
+
+  function updateCustomField(row: DraftRow, fieldId: string, value: unknown) {
+    updateRow(row.rowKey, { customFields: { ...(row.customFields || {}), [fieldId]: value } });
+  }
+
+  function changeSort(key: SortKey) {
+    if (sortKey === key) setDirection((current) => current === "asc" ? "desc" : "asc");
+    else {
+      setSortKey(key);
+      setDirection(key === "amount" || key === "created" ? "desc" : "asc");
+    }
+  }
+
+  function toggleExpanded(rowKey: string) {
+    if (saveLockedRef.current) return;
+    setExpanded((current) => {
+      const next = new Set(current);
+      if (next.has(rowKey)) next.delete(rowKey);
+      else next.add(rowKey);
+      return next;
+    });
+  }
+
+  function focusRequestedRow(node: HTMLInputElement | null, rowKey: string) {
+    if (!node || focusRowRef.current !== rowKey) return;
+    requestAnimationFrame(() => {
+      if (focusRowRef.current !== rowKey || node.offsetParent === null) return;
+      node.focus({ preventScroll: true });
+      node.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "nearest" });
+      focusRowRef.current = null;
+    });
+  }
+
+  function addRow() {
+    if (saveLockedRef.current) return;
+    const rowKey = `new-${rowCounter.current++}`;
+    focusRowRef.current = rowKey;
+    setEditMode(true);
+    setRows((current) => [blankDraft(rowKey, selectedCategoryId), ...current]);
+    setExpanded((current) => new Set(current).add(rowKey));
+    setQuery("");
     setNameFilter("");
     setAccountFilter("");
     setVendorFilter("");
     setPage(1);
   }
 
-  const filtered = useMemo(
-    () =>
-      items
-        .filter((item) =>
-          fuzzyMatch(`${item.name} ${item.vendorName} ${item.vendorUrl} ${item.accountName} ${item.categoryName} ${visibleFields.map((field) => customFieldValue(item, field)).join(" ")}`, query),
-        )
-        .filter((item) => fuzzyMatch(item.name, nameFilter))
-        .filter((item) => fuzzyMatch(item.accountName, accountFilter))
-        .filter((item) => fuzzyMatch(`${item.vendorName} ${item.vendorUrl}`, vendorFilter))
-        .sort((a, b) => {
-          const aValue = valueFor(a, sortKey);
-          const bValue = valueFor(b, sortKey);
-          const result = typeof aValue === "number" && typeof bValue === "number"
-            ? aValue - bValue
-            : String(aValue).localeCompare(String(bValue));
-          return direction === "asc" ? result : -result;
-        }),
-    [accountFilter, direction, items, nameFilter, query, sortKey, vendorFilter, visibleFields],
-  );
-  const nameSuggestions = useMemo(
-    () =>
-      [...new Set(items.map((item) => item.name).filter((value) => fuzzyMatch(value, nameFilter) && value.trim()))]
-        .slice(0, 12),
-    [items, nameFilter],
-  );
-  const accountSuggestions = useMemo(
-    () =>
-      [...new Set(items.map((item) => item.accountName).filter((value) => fuzzyMatch(value, accountFilter) && value.trim()))]
-        .slice(0, 12),
-    [accountFilter, items],
-  );
-  const vendorSuggestions = useMemo(
-    () =>
-      [
-        ...new Set(
-          items
-            .flatMap((item) => [item.vendorName, item.vendorUrl].filter(Boolean))
-            .filter((value) => fuzzyMatch(String(value), vendorFilter)),
-        ),
-      ]
-        .map(String)
-        .filter((value) => value.trim())
-        .slice(0, 12),
-    [items, vendorFilter],
-  );
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const safePage = Math.min(page, totalPages);
-  const pageStart = (safePage - 1) * pageSize;
-  const paged = filtered.slice(pageStart, pageStart + pageSize);
-  const pagedIds = paged.map((item) => item.id);
-  const selectedOnPageCount = pagedIds.filter((id) => selectedIds.has(id)).length;
-  const allPageSelected = pagedIds.length > 0 && selectedOnPageCount === pagedIds.length;
-  const pageSelectState = allPageSelected ? true : selectedOnPageCount > 0 ? "indeterminate" : false;
-  const selectedCount = selectedIds.size;
+  function duplicateRow(row: DraftRow) {
+    if (saveLockedRef.current) return;
+    const rowKey = `new-${rowCounter.current++}`;
+    focusRowRef.current = rowKey;
+    const duplicate: DraftRow = {
+      ...row,
+      rowKey,
+      id: undefined,
+      name: row.name ? `${row.name} ${tx(locale, "copy", "копия")}` : "",
+      customFields: { ...(row.customFields || {}) },
+    };
+    setEditMode(true);
+    setRows((current) => [duplicate, ...current]);
+    setExpanded((current) => new Set(current).add(rowKey));
+    setQuery("");
+    setNameFilter("");
+    setAccountFilter("");
+    setVendorFilter("");
+    setPage(1);
+  }
+
+  function resetRow(row: DraftRow) {
+    if (saveLockedRef.current) return;
+    if (!row.id) {
+      setRows((current) => current.filter((candidate) => candidate.rowKey !== row.rowKey));
+      setExpanded((current) => {
+        const next = new Set(current);
+        next.delete(row.rowKey);
+        return next;
+      });
+      if (safeInitialAdd && row.rowKey === "new-initial") router.replace(listHref);
+      return;
+    }
+    const item = sourceById.get(row.id);
+    if (item) updateRow(row.rowKey, draftFromItem(item));
+  }
+
+  function discardAll() {
+    if (saveLockedRef.current) return;
+    setRows(items.map(draftFromItem));
+    setBaseline(baselineFromItems);
+    setClientErrors({});
+    setServerErrors([]);
+    setSaveMessage("");
+    setExpanded(new Set());
+    setEditMode(false);
+    if (safeInitialAdd) router.replace(listHref);
+  }
+
+  function saveChanges() {
+    if (!dirtyRows.length || readOnly || saveLockedRef.current) return;
+    const errors = Object.fromEntries(
+      dirtyRows
+        .map((row) => [row.rowKey, validateRow(row, categories, locale)] as const)
+        .filter(([, rowErrors]) => Object.keys(rowErrors).length),
+    );
+    setClientErrors(errors);
+    setServerErrors([]);
+    if (Object.keys(errors).length) {
+      setSaveMessage(tx(locale, "Fix the highlighted fields before saving.", "Исправьте выделенные поля перед сохранением."));
+      const firstError = dirtyRows.find((row) => errors[row.rowKey]);
+      if (firstError) setExpanded((current) => new Set(current).add(firstError.rowKey));
+      return;
+    }
+
+    setSaveMessage("");
+    saveLockedRef.current = true;
+    startTransition(async () => {
+      try {
+        const result = await saveEntryBatchAction({
+          workspaceId,
+          rows: dirtyRows.map(savableDraft),
+        });
+        if (!result.success) {
+          setServerErrors(result.rowErrors);
+          setSaveMessage(result.message || tx(locale, "Some rows could not be saved.", "Некоторые строки не удалось сохранить."));
+          const firstError = result.rowErrors[0];
+          if (firstError) setExpanded((current) => new Set(current).add(firstError.rowKey));
+          return;
+        }
+        const savedIds = new Map(result.saved.map((saved) => [saved.rowKey, saved.itemId]));
+        const nextRows = rows.map((row) => savedIds.has(row.rowKey) ? { ...row, id: savedIds.get(row.rowKey) } : row);
+        const nextBaseline = Object.fromEntries(nextRows.map((row) => [row.rowKey, comparable(row)]));
+        setRows(nextRows);
+        setBaseline(nextBaseline);
+        setClientErrors({});
+        setServerErrors([]);
+        setExpanded(new Set());
+        setEditMode(false);
+        setSaveMessage(tx(locale, "Changes saved.", "Изменения сохранены."));
+        if (safeInitialAdd) router.replace(listHref);
+        else router.refresh();
+      } catch (error) {
+        setSaveMessage(error instanceof Error ? error.message : tx(locale, "Unable to save changes.", "Не удалось сохранить изменения."));
+      } finally {
+        saveLockedRef.current = false;
+      }
+    });
+  }
+
+  function runItemAction(action: (formData: FormData) => Promise<void>, id: number) {
+    if (readOnly) return;
+    const formData = new FormData();
+    formData.set("id", String(id));
+    formData.set("workspaceId", String(workspaceId));
+    startTransition(async () => {
+      await action(formData);
+      setRows((current) => current.filter((row) => row.id !== id));
+      setSelectedIds((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      router.refresh();
+    });
+  }
 
   function toggleItem(id: number, checked: boolean | "indeterminate") {
     setSelectedIds((current) => {
@@ -231,353 +676,626 @@ export function EntriesTable({
     });
   }
 
-  function toggleAllOnPage(checked: boolean | "indeterminate") {
+  function togglePage(checked: boolean | "indeterminate") {
     setSelectedIds((current) => {
       const next = new Set(current);
-      pagedIds.forEach((id) => {
-        if (checked) next.add(id);
-        else next.delete(id);
-      });
+      pagedIds.forEach((id) => checked ? next.add(id) : next.delete(id));
       return next;
     });
   }
 
-  function runItemAction(action: (formData: FormData) => Promise<void>, id: number) {
-    const formData = new FormData();
-    formData.set("id", String(id));
-    formData.set("workspaceId", String(workspaceId));
-    startTransition(async () => {
-      await action(formData);
-    });
-  }
-
-  function handleBulkDelete() {
+  function bulkDelete() {
+    if (readOnly) return;
     const formData = new FormData();
     formData.set("workspaceId", String(workspaceId));
     selectedIds.forEach((id) => formData.append("ids", String(id)));
     startTransition(async () => {
       await deleteItemsAction(formData);
+      setRows((current) => current.filter((row) => !row.id || !selectedIds.has(row.id)));
       setSelectedIds(new Set());
       setConfirmOpen(false);
+      router.refresh();
     });
   }
 
-  function handleBulkExport() {
+  function bulkExport() {
     if (!selectedIds.size) return;
-    setExportError("");
-    const ids = [...selectedIds];
     startExportTransition(async () => {
       try {
-        const json = await exportSelectedEntriesAction(workspaceId, ids);
-        const fileName = `entries-export-w${workspaceId}-${new Date().toISOString().slice(0, 10)}.json`;
+        const json = await exportSelectedEntriesAction(workspaceId, [...selectedIds]);
         const blob = new Blob([json], { type: "application/json;charset=utf-8" });
         const url = URL.createObjectURL(blob);
         const anchor = document.createElement("a");
         anchor.href = url;
-        anchor.download = fileName;
-        document.body.appendChild(anchor);
+        anchor.download = `entries-export-w${workspaceId}-${new Date().toISOString().slice(0, 10)}.json`;
         anchor.click();
-        anchor.remove();
         URL.revokeObjectURL(url);
       } catch (error) {
-        setExportError(error instanceof Error ? error.message : "Export failed.");
+        setSaveMessage(error instanceof Error ? error.message : tx(locale, "Export failed.", "Ошибка экспорта."));
       }
     });
   }
 
+  function renderInspector(row: DraftRow) {
+    const category = categories.find((candidate) => candidate.id === row.categoryId);
+    const errors = clientErrors[row.rowKey] || {};
+    if (!editMode) {
+      return (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div>
+            <FieldLabel>URL</FieldLabel>
+            {row.vendorUrl ? (
+              <a href={row.vendorUrl} target="_blank" rel="noreferrer" className="mt-1 flex items-center gap-1 break-all text-sm text-sky-300 hover:text-sky-200">
+                {row.vendorUrl}<ExternalLink className="h-3.5 w-3.5 shrink-0" />
+              </a>
+            ) : <p className="mt-1 text-sm text-subtle-foreground">—</p>}
+          </div>
+          <div className="md:col-span-2">
+            <FieldLabel>{tx(locale, "Notes", "Заметки")}</FieldLabel>
+            <p className="mt-1 whitespace-pre-wrap text-sm text-muted-foreground">{row.notes?.replace(/<[^>]+>/g, "") || "—"}</p>
+          </div>
+          {category?.fields.map((field) => (
+            <div key={field.id}>
+              <FieldLabel>{field.label}</FieldLabel>
+              <p className="mt-1 text-sm text-foreground">
+                {field.type === "checkbox"
+                  ? (row.customFields?.[field.id] ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет"))
+                  : String(row.customFields?.[field.id] ?? "—")}
+              </p>
+            </div>
+          ))}
+        </div>
+      );
+    }
+    return (
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+        <label className="space-y-1.5">
+          <FieldLabel>URL</FieldLabel>
+          <Input
+            type="url"
+            value={row.vendorUrl || ""}
+            onChange={(event) => updateRow(row.rowKey, { vendorUrl: event.target.value })}
+            placeholder="https://…"
+            className={cn("h-9", fieldError(row.rowKey, "vendorUrl") && "border-red-400/70")}
+          />
+          <CellError message={fieldError(row.rowKey, "vendorUrl")} />
+        </label>
+        <label className="space-y-1.5 md:col-span-2">
+          <FieldLabel>{tx(locale, "Notes", "Заметки")}</FieldLabel>
+          <Textarea
+            value={row.notes || ""}
+            onChange={(event) => updateRow(row.rowKey, { notes: event.target.value })}
+            placeholder={tx(locale, "Private notes and context…", "Заметки и контекст…")}
+            className="min-h-20"
+          />
+        </label>
+        {category?.fields.map((field) => (
+          <CustomFieldEditor
+            key={field.id}
+            field={field}
+            value={row.customFields?.[field.id]}
+            onChange={(value) => updateCustomField(row, field.id, value)}
+            error={errors[`customFields.${field.id}`] || fieldError(row.rowKey, `customFields.${field.id}`)}
+            locale={locale}
+          />
+        ))}
+        {!category?.fields.length ? (
+          <p className="text-sm text-subtle-foreground">{tx(locale, "This category has no custom fields.", "У этой категории нет дополнительных полей.")}</p>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderEditFields(row: DraftRow, mobile = false) {
+    const cellClass = mobile ? "space-y-1.5" : "";
+    return [
+        <label key="name" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Name", "Название")}</FieldLabel> : null}
+          <Input
+            ref={(node) => focusRequestedRow(node, row.rowKey)}
+            value={row.name}
+            onChange={(event) => updateRow(row.rowKey, { name: event.target.value })}
+            placeholder={tx(locale, "Entry name", "Название записи")}
+            aria-label={tx(locale, "Name", "Название")}
+            className={cn("h-9 min-w-44", fieldError(row.rowKey, "name") && "border-red-400/70")}
+          />
+          <CellError message={fieldError(row.rowKey, "name")} />
+        </label>,
+        <label key="category" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Category", "Категория")}</FieldLabel> : null}
+          <NativeSelect
+            value={String(row.categoryId || "")}
+            onChange={(value) => updateRow(row.rowKey, { categoryId: Number(value) || null, customFields: {} })}
+            ariaLabel={tx(locale, "Category", "Категория")}
+            invalid={Boolean(fieldError(row.rowKey, "categoryId"))}
+            className="min-w-40"
+          >
+            <option value="">{tx(locale, "Uncategorized", "Без категории")}</option>
+            {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
+          </NativeSelect>
+          <CellError message={fieldError(row.rowKey, "categoryId")} />
+        </label>,
+        <label key="type" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Payment type", "Тип платежа")}</FieldLabel> : null}
+          <NativeSelect
+            value={row.paymentType}
+            onChange={(value) => updateRow(row.rowKey, { paymentType: value as DraftRow["paymentType"] })}
+            ariaLabel={tx(locale, "Payment type", "Тип платежа")}
+            className="min-w-32"
+          >
+            <option value="single">{tx(locale, "Single", "Разовый")}</option>
+            <option value="recurring">{tx(locale, "Recurring", "Регулярный")}</option>
+          </NativeSelect>
+        </label>,
+        <label key="amount" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Amount", "Сумма")}</FieldLabel> : null}
+          <Input
+            type="number"
+            min="0"
+            step="0.01"
+            value={row.amountInput}
+            onChange={(event) => updateRow(row.rowKey, { amountInput: event.target.value })}
+            aria-label={tx(locale, "Amount", "Сумма")}
+            className={cn("h-9 min-w-28", fieldError(row.rowKey, "amount") && "border-red-400/70")}
+          />
+          <CellError message={fieldError(row.rowKey, "amount")} />
+        </label>,
+        <label key="currency" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Currency", "Валюта")}</FieldLabel> : null}
+          <NativeSelect
+            value={row.currency}
+            onChange={(value) => updateRow(row.rowKey, { currency: value })}
+            ariaLabel={tx(locale, "Currency", "Валюта")}
+            invalid={Boolean(fieldError(row.rowKey, "currency"))}
+            className="min-w-24"
+          >
+            {SUPPORTED_CURRENCIES.map((currency) => <option key={currency.code} value={currency.code}>{currency.code}</option>)}
+          </NativeSelect>
+          <CellError message={fieldError(row.rowKey, "currency")} />
+        </label>,
+        <label key="period" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Period", "Период")}</FieldLabel> : null}
+          {row.paymentType === "recurring" ? (
+            <div className="flex min-w-36 gap-1">
+              <NativeSelect
+                value={row.period || "1m"}
+                onChange={(value) => updateRow(row.rowKey, { period: value as BillingPeriod })}
+                ariaLabel={tx(locale, "Period", "Период")}
+                invalid={Boolean(fieldError(row.rowKey, "period"))}
+              >
+                {PERIODS.map((period) => (
+                  <option key={period} value={period}>
+                    {localizedPeriodLabel(period, Number(row.customPeriodDaysInput) || 30, locale)}
+                  </option>
+                ))}
+              </NativeSelect>
+              {row.period === "custom" ? (
+                <Input
+                  type="number"
+                  min="1"
+                  step="1"
+                  value={row.customPeriodDaysInput}
+                  onChange={(event) => updateRow(row.rowKey, { customPeriodDaysInput: event.target.value })}
+                  aria-label={tx(locale, "Custom period days", "Дней в периоде")}
+                  className={cn("h-9 w-20", fieldError(row.rowKey, "customPeriodDays") && "border-red-400/70")}
+                />
+              ) : null}
+            </div>
+          ) : <span className="block py-2 text-sm text-subtle-foreground">—</span>}
+          <CellError message={fieldError(row.rowKey, "period") || fieldError(row.rowKey, "customPeriodDays")} />
+        </label>,
+        <div key="start" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Start date", "Дата начала")}</FieldLabel> : null}
+          <DatePickerInput
+            name={`entry_${row.rowKey}_billingStartAt`}
+            value={dateInput(row.billingStartAt)}
+            onChange={(value) => updateRow(row.rowKey, { billingStartAt: value })}
+            ariaLabel={tx(locale, "Start date", "Дата начала")}
+            placeholder={tx(locale, "Start date", "Дата начала")}
+            locale={locale}
+            triggerClassName="h-9 min-w-36 px-2"
+          />
+          <CellError message={fieldError(row.rowKey, "billingStartAt")} />
+        </div>,
+        <div key="end" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "End date", "Дата окончания")}</FieldLabel> : null}
+          <DatePickerInput
+            name={`entry_${row.rowKey}_billingEndAt`}
+            value={dateInput(row.billingEndAt)}
+            onChange={(value) => updateRow(row.rowKey, { billingEndAt: value })}
+            ariaLabel={tx(locale, "End date", "Дата окончания")}
+            placeholder={tx(locale, "End date", "Дата окончания")}
+            locale={locale}
+            invalid={Boolean(fieldError(row.rowKey, "billingEndAt"))}
+            triggerClassName="h-9 min-w-36 px-2"
+          />
+          <CellError message={fieldError(row.rowKey, "billingEndAt")} />
+        </div>,
+        <label key="vendor" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Vendor", "Поставщик")}</FieldLabel> : null}
+          <Input
+            value={row.vendorName || ""}
+            onChange={(event) => updateRow(row.rowKey, { vendorName: event.target.value })}
+            list="entry-vendor-suggestions"
+            aria-label={tx(locale, "Vendor", "Поставщик")}
+            className="h-9 min-w-36"
+          />
+        </label>,
+        <label key="account" className={cellClass}>
+          {mobile ? <FieldLabel>{tx(locale, "Account", "Аккаунт")}</FieldLabel> : null}
+          <Input
+            value={row.accountName || ""}
+            onChange={(event) => updateRow(row.rowKey, { accountName: event.target.value })}
+            list="entry-account-suggestions"
+            aria-label={tx(locale, "Account", "Аккаунт")}
+            className="h-9 min-w-36"
+          />
+        </label>,
+    ];
+  }
+
   return (
-    <div className="flex h-[calc(100vh-180px)] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-      <div className="border-b border-white/10 p-4">
-        <div className="w-full space-y-3">
-          {workspaceRole !== "owner" ? (
-            <div className="inline-flex items-center gap-2 rounded-full border border-violet-400/35 bg-violet-500/10 px-3 py-1 text-xs font-semibold text-violet-200">
-              {locale === "ru" ? "Общее пространство" : "Shared workspace"}
+    <fieldset
+      disabled={isPending}
+      aria-busy={isPending}
+      className="min-w-0 overflow-hidden rounded-xl border border-border bg-surface"
+    >
+      <datalist id="entry-vendor-suggestions">
+        {[...new Set(vendorSuggestions.map((suggestion) => suggestion.vendorName).filter(Boolean))].map((value) => <option key={value} value={value} />)}
+      </datalist>
+      <datalist id="entry-account-suggestions">
+        {[...new Set(vendorSuggestions.map((suggestion) => suggestion.accountName).filter(Boolean))].map((value) => <option key={value} value={value} />)}
+      </datalist>
+
+      <div className="space-y-3 border-b border-border p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-subtle-foreground" />
+            <Input
+              value={query}
+              onChange={(event) => { setQuery(event.target.value); setPage(1); }}
+              placeholder={tx(locale, "Search entries…", "Поиск записей…")}
+              className="pl-9"
+            />
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setFiltersOpen((current) => !current)}>
+              <Filter className="h-4 w-4" />
+              {tx(locale, "Filters", "Фильтры")}{activeFilterCount ? ` (${activeFilterCount})` : ""}
+            </Button>
+            <div className="flex rounded-md border border-border bg-surface-muted p-0.5" aria-label={tx(locale, "Table density", "Плотность таблицы")}>
+              {(["compact", "comfortable"] as const).map((value) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setDensity(value)}
+                  className={cn("rounded-sm px-2 py-1 text-xs", density === value ? "bg-surface-raised text-foreground" : "text-muted-foreground")}
+                >
+                  {value === "compact" ? tx(locale, "Compact", "Компактно") : tx(locale, "Comfortable", "Удобно")}
+                </button>
+              ))}
             </div>
-          ) : null}
-          <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-            <div className="relative flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-              <Input
-                value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
-                  setPage(1);
-                }}
-                placeholder={locale === "ru" ? "Глобальный поиск..." : "Global fuzzy search..."}
-                className="pl-9"
-              />
-            </div>
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="secondary" size="sm" onClick={() => setFiltersOpen((current) => !current)}>
-                <Filter className="h-4 w-4" />
-                {t(locale, "filters")}{activeFilterCount ? ` (${activeFilterCount})` : ""}
-              </Button>
+            {!readOnly ? (
+              <>
+                {!editMode ? (
+                  <Button type="button" variant="secondary" size="sm" onClick={() => setEditMode(true)}>
+                    <Edit3 className="h-4 w-4" />{tx(locale, "Edit", "Изменить")}
+                  </Button>
+                ) : null}
+                <Button type="button" variant="secondary" size="sm" onClick={addRow}>
+                  <Plus className="h-4 w-4" />{tx(locale, "Add row", "Добавить строку")}
+                </Button>
+                {editMode ? (
+                  <>
+                    <Button type="button" variant="ghost" size="sm" onClick={discardAll} disabled={isPending}>
+                      <RotateCcw className="h-4 w-4" />{tx(locale, "Discard all", "Отменить всё")}
+                    </Button>
+                    <Button type="button" size="sm" onClick={saveChanges} disabled={isPending || !dirtyRows.length}>
+                      <Save className="h-4 w-4" />
+                      {isPending ? tx(locale, "Saving…", "Сохранение…") : tx(locale, `Save changes${dirtyRows.length ? ` (${dirtyRows.length})` : ""}`, `Сохранить${dirtyRows.length ? ` (${dirtyRows.length})` : ""}`)}
+                    </Button>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <Badge variant="secondary">{tx(locale, "View only", "Только просмотр")}</Badge>
+            )}
+          </div>
+        </div>
+        {filtersOpen ? (
+          <div className="grid gap-2 rounded-lg border border-border bg-surface-muted p-3 md:grid-cols-3">
+            <Input value={nameFilter} onChange={(event) => { setNameFilter(event.target.value); setPage(1); }} placeholder={tx(locale, "Filter by name…", "Фильтр по названию…")} />
+            <Input value={accountFilter} onChange={(event) => { setAccountFilter(event.target.value); setPage(1); }} placeholder={tx(locale, "Filter by account…", "Фильтр по аккаунту…")} />
+            <div className="flex gap-2">
+              <Input value={vendorFilter} onChange={(event) => { setVendorFilter(event.target.value); setPage(1); }} placeholder={tx(locale, "Filter by vendor or URL…", "Фильтр по поставщику или URL…")} />
               {activeFilterCount ? (
-                <Button type="button" variant="ghost" size="sm" onClick={clearFilters}>
+                <Button type="button" variant="ghost" size="icon" onClick={() => { setNameFilter(""); setAccountFilter(""); setVendorFilter(""); setPage(1); }} aria-label={tx(locale, "Clear filters", "Очистить фильтры")}>
                   <X className="h-4 w-4" />
-                  {t(locale, "clearFilters")}
                 </Button>
               ) : null}
             </div>
           </div>
-          {filtersOpen ? (
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-zinc-500">{locale === "ru" ? "Фильтры (И)" : "Chained filters (AND)"}</p>
-                <p className="text-xs text-zinc-600">{locale === "ru" ? "Название + Аккаунт + Вендор/URL" : "Name + Account + Vendor/URL"}</p>
-              </div>
-              <div className="grid gap-2 md:grid-cols-3">
-                <Input value={nameFilter} onChange={(event) => { setNameFilter(event.target.value); setPage(1); }} placeholder={locale === "ru" ? "Фильтр по названию..." : "Filter by name..."} list="entry-name-filter-suggestions" />
-                <datalist id="entry-name-filter-suggestions">
-                  {nameSuggestions.map((value) => (
-                    <option key={value} value={value} />
-                  ))}
-                </datalist>
-                <Input value={accountFilter} onChange={(event) => { setAccountFilter(event.target.value); setPage(1); }} placeholder={locale === "ru" ? "Фильтр по аккаунту..." : "Filter by account..."} list="entry-account-filter-suggestions" />
-                <datalist id="entry-account-filter-suggestions">
-                  {accountSuggestions.map((value) => (
-                    <option key={value} value={value} />
-                  ))}
-                </datalist>
-                <Input value={vendorFilter} onChange={(event) => { setVendorFilter(event.target.value); setPage(1); }} placeholder={locale === "ru" ? "Фильтр по вендору или URL..." : "Filter vendor or URL..."} list="entry-vendor-filter-suggestions" />
-                <datalist id="entry-vendor-filter-suggestions">
-                  {vendorSuggestions.map((value) => (
-                    <option key={value} value={value} />
-                  ))}
-                </datalist>
-              </div>
-            </div>
-          ) : null}
-        </div>
+        ) : null}
+        {saveMessage ? (
+          <p className={cn("text-sm", Object.keys(clientErrors).length || serverErrors.length ? "text-red-300" : "text-muted-foreground")}>
+            {saveMessage}
+          </p>
+        ) : null}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <Table className={visibleFields.length ? "min-w-[1340px]" : "min-w-[1120px]"}>
-          <TableHeader className="sticky top-0 z-20 bg-[#0b0b10]/95 backdrop-blur-md">
-            <TableRow className="border-b border-white/10 bg-white/[0.02]">
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={pageSelectState}
-                  onCheckedChange={toggleAllOnPage}
-                  disabled={!paged.length || readOnlyWorkspace}
-                  aria-label={locale === "ru" ? "Выбрать все записи" : "Select all entries"}
-                />
-              </TableHead>
-              <TableHead className="text-zinc-300"><SortButton label={t(locale, "name")} sortKey="name" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              {visibleFields.map((field) => (
-                <TableHead key={field.id} className="text-zinc-300">{field.label}</TableHead>
-              ))}
-              {showCategory ? <TableHead className="text-zinc-300"><SortButton label={t(locale, "category")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></TableHead> : null}
-              <TableHead className="text-zinc-300"><SortButton label={t(locale, "account")} sortKey="vendor" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="text-center text-zinc-300"><SortButton label={t(locale, "created")} sortKey="created" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="text-center text-zinc-300"><SortButton label={t(locale, "dates")} sortKey="date" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="w-[1%] whitespace-nowrap text-center text-zinc-300"><SortButton label={t(locale, "amount")} sortKey="amount" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="w-[76px] text-center text-zinc-300"><SortButton label={t(locale, "billing")} sortKey="billing" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="w-32 text-center text-zinc-300">{t(locale, "actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paged.map((item) => {
-              const selected = selectedIds.has(item.id);
-              return (
-              <TableRow
-                key={item.id}
-                className={cn(
-                  "group border-white/5 bg-[#0b0b10] transition-colors duration-150 even:bg-[#0d0d12] hover:bg-[#15151d]",
-                  selected && "bg-[#171329] shadow-[inset_0_0_0_1px_rgba(167,139,250,0.38)] even:bg-[#171329]",
-                )}
-              >
-                <TableCell>
+
+      <div className="relative isolate hidden max-h-[calc(100vh-285px)] min-h-[420px] overflow-auto md:block">
+        <table className={cn("w-full border-collapse text-sm", editMode ? "min-w-[1780px]" : "min-w-[1120px]")}>
+          <thead className="sticky top-0 z-30 bg-surface-muted text-xs uppercase tracking-wider text-muted-foreground">
+            <tr className="border-b border-border">
+              <th className="sticky left-0 z-40 w-14 min-w-14 bg-surface-muted px-2 py-3 text-left">
+                <div className="flex h-7 items-center gap-1.5">
                   <Checkbox
-                    checked={selectedIds.has(item.id)}
-                    onCheckedChange={(checked) => toggleItem(item.id, checked)}
-                    disabled={readOnlyWorkspace}
-                    aria-label={`Select ${item.name}`}
+                    checked={pageSelectState}
+                    onCheckedChange={togglePage}
+                    disabled={!pagedIds.length || readOnly || editMode}
+                    aria-label={tx(locale, "Select page", "Выбрать страницу")}
+                    className="h-3.5 w-3.5 rounded-[4px] [&_svg]:h-2.5 [&_svg]:w-2.5"
                   />
-                </TableCell>
-                <TableCell>
-                  <Link href={`/app/items/${item.id}?workspace=${workspaceId}`} className="font-semibold text-white hover:text-sky-200">{item.name}</Link>
-                  {item.notes ? <p className="mt-1 line-clamp-1 max-w-xs text-xs text-zinc-500">{item.notes.replace(/<[^>]+>/g, "")}</p> : null}
-                </TableCell>
-                {visibleFields.map((field) => (
-                  <TableCell key={field.id} className={field.bold ? "font-semibold text-white" : undefined} style={{ color: field.color || undefined }}>
-                    {field.copyable ? (
-                      <CopyableValue value={customFieldValue(item, field)} className={field.bold ? "font-semibold text-white" : undefined} style={{ color: field.color || undefined }}>
-                        {customFieldValue(item, field)}
-                      </CopyableValue>
+                </div>
+              </th>
+              <th className="sticky left-14 z-40 min-w-56 bg-surface-muted px-3 py-3 text-left"><SortButton label={tx(locale, "Name", "Название")} sortKey="name" active={sortKey} direction={direction} onClick={changeSort} /></th>
+              {editMode ? (
+                <>
+                  <th className="min-w-44 px-3 py-3 text-left"><SortButton label={tx(locale, "Category", "Категория")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="min-w-36 px-3 py-3 text-left">{tx(locale, "Type", "Тип")}</th>
+                  <th className="min-w-28 px-3 py-3 text-left"><SortButton label={tx(locale, "Amount", "Сумма")} sortKey="amount" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="min-w-24 px-3 py-3 text-left">{tx(locale, "Currency", "Валюта")}</th>
+                  <th className="min-w-40 px-3 py-3 text-left"><SortButton label={tx(locale, "Period", "Период")} sortKey="billing" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="min-w-40 px-3 py-3 text-left">{tx(locale, "Start", "Начало")}</th>
+                  <th className="min-w-40 px-3 py-3 text-left">{tx(locale, "End", "Окончание")}</th>
+                  <th className="min-w-40 px-3 py-3 text-left">{tx(locale, "Vendor", "Поставщик")}</th>
+                  <th className="min-w-40 px-3 py-3 text-left">{tx(locale, "Account", "Аккаунт")}</th>
+                </>
+              ) : (
+                <>
+                  {visibleFields.map((field) => <th key={field.id} className="px-3 py-3 text-left">{field.label}</th>)}
+                  {showCategory ? <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Category", "Категория")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></th> : null}
+                  <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Vendor / account", "Поставщик / аккаунт")} sortKey="vendor" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Dates", "Даты")} sortKey="date" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="px-3 py-3 text-right"><SortButton label={tx(locale, "Amount", "Сумма")} sortKey="amount" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Billing", "Оплата")} sortKey="billing" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                </>
+              )}
+              <th className="sticky right-0 z-40 w-px whitespace-nowrap bg-surface-muted px-2 py-3 text-right">{tx(locale, "Actions", "Действия")}</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-border">
+            {paged.map((row) => {
+              const category = categories.find((candidate) => candidate.id === row.categoryId);
+              const isExpanded = expanded.has(row.rowKey);
+              const status = !row.id ? "new" : dirtyKeys.has(row.rowKey) ? "dirty" : rowHasError(row.rowKey) ? "error" : "";
+              const columnCount = editMode ? 12 : 8 + visibleFields.length + (showCategory ? 1 : 0);
+              return (
+                <Fragment key={row.rowKey}>
+                  <tr className={cn("group bg-surface hover:bg-surface-raised", rowHasError(row.rowKey) && "ring-1 ring-inset ring-red-500/25", density === "compact" ? "[&>td]:py-1.5" : "[&>td]:py-3")}>
+                    <td className="sticky left-0 z-20 w-14 min-w-14 bg-surface px-2 group-hover:bg-surface-raised">
+                      <div className="flex h-7 items-center gap-1.5">
+                        {row.id ? (
+                          <Checkbox
+                            checked={selectedIds.has(row.id)}
+                            onCheckedChange={(checked) => toggleItem(row.id!, checked)}
+                            disabled={readOnly || editMode}
+                            aria-label={`${tx(locale, "Select", "Выбрать")} ${row.name}`}
+                            className="h-3.5 w-3.5 rounded-[4px] [&_svg]:h-2.5 [&_svg]:w-2.5"
+                          />
+                        ) : (
+                          <CircleDot className="h-3.5 w-3.5 shrink-0 text-violet-300" />
+                        )}
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-5 w-5 shrink-0 text-muted-foreground"
+                          onClick={() => toggleExpanded(row.rowKey)}
+                          title={isExpanded ? tx(locale, "Hide details", "Скрыть детали") : tx(locale, "Show details", "Показать детали")}
+                          aria-label={isExpanded ? tx(locale, "Hide details", "Скрыть детали") : tx(locale, "Show details", "Показать детали")}
+                        >
+                          {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                        </Button>
+                      </div>
+                    </td>
+                    {editMode ? (
+                      <>
+                        <td className="sticky left-14 z-20 min-w-56 bg-surface px-3 group-hover:bg-surface-raised">
+                          <div className="flex items-start gap-2">
+                            <div className="min-w-0 flex-1">{renderEditFields(row)[0]}</div>
+                            {status ? <Badge variant={status === "error" ? "destructive" : "default"} className="mt-1 px-1.5 py-0.5">{status === "new" ? tx(locale, "New", "Новая") : status === "dirty" ? tx(locale, "Changed", "Изменена") : tx(locale, "Error", "Ошибка")}</Badge> : null}
+                          </div>
+                        </td>
+                        {renderEditFields(row).slice(1).map((field, index) => <td key={index} className="px-3 align-top">{field}</td>)}
+                      </>
                     ) : (
-                      customFieldValue(item, field)
+                      <>
+                        <td className="sticky left-14 z-20 min-w-56 bg-surface px-3 group-hover:bg-surface-raised">
+                          <p className="font-semibold text-foreground">{row.name}</p>
+                          {row.notes ? <p className="mt-1 max-w-64 truncate text-xs text-subtle-foreground">{row.notes.replace(/<[^>]+>/g, "")}</p> : null}
+                        </td>
+                        {visibleFields.map((field) => <td key={field.id} className={cn("px-3 text-muted-foreground", field.bold && "font-semibold text-foreground")} style={{ color: field.color || undefined }}>{field.type === "checkbox" ? (row.customFields?.[field.id] ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет")) : String(row.customFields?.[field.id] ?? "—")}</td>)}
+                        {showCategory ? <td className="px-3"><Badge variant="secondary" style={{ color: category?.color || undefined }}><AppIcon name={category?.icon} className="mr-1.5 h-3.5 w-3.5" />{category?.name || tx(locale, "Uncategorized", "Без категории")}</Badge></td> : null}
+                        <td className="px-3 text-muted-foreground"><p className="font-medium text-foreground">{row.accountName || "—"}</p><p className="max-w-48 truncate text-xs">{row.vendorName || row.vendorUrl || ""}</p></td>
+                        <td className="whitespace-nowrap px-3 text-muted-foreground"><span>{entryDateLabel(row.billingStartAt, locale)}</span><span className="mx-1 text-subtle-foreground">→</span><span>{entryDateLabel(row.billingEndAt, locale)}</span></td>
+                        <td className="whitespace-nowrap px-3 text-right font-semibold text-foreground">{formatMoney(Number(row.amountInput), row.currency)}</td>
+                        <td className="px-3"><Badge variant={row.paymentType === "recurring" ? "success" : "secondary"}>{shortBillingLabel(row, locale)}</Badge></td>
+                      </>
                     )}
-                  </TableCell>
-                ))}
-                {showCategory ? (
-                  <TableCell>
-                    <Badge className="gap-2 border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}20`, color: item.categoryColor || "#c4b5fd" }}>
-                      <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
-                      {item.categoryName || (locale === "ru" ? "Без категории" : "Uncategorized")}
-                    </Badge>
-                  </TableCell>
-                ) : null}
-                <TableCell>
-                  <div>
-                    <p className="font-medium text-zinc-100">{item.accountName || "-"}</p>
-                    {item.vendorName ? <p className="max-w-52 truncate text-xs text-zinc-400">{item.vendorName}</p> : null}
-                    {item.vendorUrl ? (
-                      <a href={item.vendorUrl} target="_blank" rel="noreferrer" className="mt-0.5 inline-flex max-w-52 items-center gap-1 truncate text-xs text-zinc-500 hover:text-zinc-300">
-                        <span className="truncate">{item.vendorUrl}</span>
-                        <ExternalLink className="h-3 w-3 shrink-0" />
-                      </a>
-                    ) : null}
-                  </div>
-                </TableCell>
-                <TableCell className="whitespace-nowrap text-center text-xs text-zinc-400">{displayDate(item.createdAt)}</TableCell>
-                <TableCell className="text-xs text-zinc-400">
-                  <div className="flex flex-col items-center text-center leading-tight">
-                    <span>{displayDate(item.billingStartAt)}</span>
-                    <span className="py-0.5 text-zinc-600">-&gt;</span>
-                    <span>{displayDate(item.billingEndAt)}</span>
-                  </div>
-                </TableCell>
-                <TableCell className="w-[1%] whitespace-nowrap text-center font-semibold text-white">{formatMoney(item.amount, item.currency)}</TableCell>
-                <TableCell className="w-[76px] text-center">
-                  <Badge variant={item.paymentType === "recurring" ? "success" : "secondary"}>
-                    {shortBillingLabel(item)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-center">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="secondary" size="icon" className="h-9 w-9 border border-white/10 bg-white/[0.04] hover:bg-white/[0.1]">
-                        <MoreHorizontal className="h-4 w-4" />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56 p-2">
-                      {!readOnlyWorkspace ? (
-                        <DropdownMenuItem asChild className="gap-3 rounded-xl px-3 py-2.5">
-                          <Link href={`/app/items/${item.id}?workspace=${workspaceId}`}>
-                            <ActionIcon tone="sky"><Edit3 className="h-4 w-4" /></ActionIcon>
-                            <span className="font-medium">{t(locale, "edit")}</span>
-                          </Link>
-                        </DropdownMenuItem>
-                      ) : null}
-                      {item.vendorUrl ? <CopyUrlMenuItem url={item.vendorUrl} /> : null}
-                      {!readOnlyWorkspace ? (
-                        <DropdownMenuItem
-                          className="gap-3 rounded-xl px-3 py-2.5 text-violet-200"
-                          disabled={isPending}
-                          onSelect={() => runItemAction(archiveItemAction, item.id)}
-                        >
-                          <ActionIcon tone="violet"><Archive className="h-4 w-4" /></ActionIcon>
-                          <span className="font-medium">{t(locale, "archive")}</span>
-                        </DropdownMenuItem>
-                      ) : null}
-                      {!readOnlyWorkspace ? (
-                        <DropdownMenuItem
-                          className="gap-3 rounded-xl px-3 py-2.5 text-red-200"
-                          disabled={isPending}
-                          onSelect={() => runItemAction(deleteItemAction, item.id)}
-                        >
-                          <ActionIcon tone="red"><Trash2 className="h-4 w-4" /></ActionIcon>
-                          <span className="font-medium">{t(locale, "delete")}</span>
-                        </DropdownMenuItem>
-                      ) : null}
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            );
+                    <td className="sticky right-0 z-20 w-px whitespace-nowrap bg-surface px-2 text-right group-hover:bg-surface-raised">
+                      <div className="flex justify-end gap-0.5">
+                        {!readOnly ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => duplicateRow(row)}
+                            title={tx(locale, "Duplicate row", "Дублировать строку")}
+                            aria-label={tx(locale, "Duplicate row", "Дублировать строку")}
+                          >
+                            <Copy className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {editMode && dirtyKeys.has(row.rowKey) ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => resetRow(row)}
+                            title={row.id ? tx(locale, "Reset row", "Сбросить строку") : tx(locale, "Remove new row", "Удалить новую строку")}
+                            aria-label={row.id ? tx(locale, "Reset row", "Сбросить строку") : tx(locale, "Remove new row", "Удалить новую строку")}
+                          >
+                            <RotateCcw className="h-4 w-4" />
+                          </Button>
+                        ) : null}
+                        {!editMode && !readOnly && row.id ? (
+                          <>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              disabled={isPending}
+                              onClick={() => runItemAction(archiveItemAction, row.id!)}
+                              title={tx(locale, "Archive", "Архивировать")}
+                              aria-label={tx(locale, "Archive", "Архивировать")}
+                            >
+                              <Archive className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 text-red-300"
+                              disabled={isPending}
+                              onClick={() => runItemAction(deleteItemAction, row.id!)}
+                              title={tx(locale, "Delete", "Удалить")}
+                              aria-label={tx(locale, "Delete", "Удалить")}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                  {isExpanded ? <tr><td colSpan={columnCount} className="bg-surface-muted px-5 py-4">{renderInspector(row)}</td></tr> : null}
+                </Fragment>
+              );
             })}
-            {!filtered.length ? (
-              <TableRow><TableCell colSpan={(showCategory ? 9 : 8) + visibleFields.length} className="px-5 py-12 text-center text-zinc-500">{t(locale, "noEntriesMatch")}</TableCell></TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
+          </tbody>
+        </table>
       </div>
-      <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
-        <div className="space-y-1">
-          {selectedCount > 0 && !readOnlyWorkspace ? (
-            <div className="flex min-h-9 items-center gap-2">
-              <Button
-                type="button"
-                variant="secondary"
-                className="border border-sky-400/25 bg-sky-500/[0.08] px-2.5 text-sky-100 hover:border-sky-300/35 hover:bg-sky-500/15 hover:text-white"
-                title={locale === "ru" ? `Экспортировать выбранные: ${selectedCount}` : `Export ${selectedCount} selected`}
-                onClick={handleBulkExport}
-                disabled={isExportPending}
-              >
-                <Download className="h-4 w-4" />
-                <span className="text-sm font-semibold">{isExportPending ? (locale === "ru" ? "Экспорт..." : "Exporting...") : locale === "ru" ? "Экспорт" : "Export"}</span>
-              </Button>
-              <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <Dialog.Trigger asChild>
+
+      <div className="max-h-[calc(100vh-260px)] min-h-[420px] space-y-3 overflow-y-auto p-3 md:hidden">
+        {paged.map((row) => {
+          const category = categories.find((candidate) => candidate.id === row.categoryId);
+          const isExpanded = expanded.has(row.rowKey);
+          return (
+            <article key={row.rowKey} className={cn("rounded-lg border border-border bg-surface-raised", rowHasError(row.rowKey) && "border-red-400/50")}>
+              <div className="flex items-start justify-between gap-3 border-b border-border p-3">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="truncate font-semibold text-foreground">{row.name || tx(locale, "Untitled row", "Строка без названия")}</h3>
+                    {!row.id ? <Badge>{tx(locale, "New", "Новая")}</Badge> : dirtyKeys.has(row.rowKey) ? <Badge>{tx(locale, "Changed", "Изменена")}</Badge> : null}
+                    {rowHasError(row.rowKey) ? <Badge variant="destructive">{tx(locale, "Error", "Ошибка")}</Badge> : null}
+                  </div>
+                  {!editMode ? <p className="mt-1 text-xs text-muted-foreground">{category?.name || tx(locale, "Uncategorized", "Без категории")} · {formatMoney(Number(row.amountInput), row.currency)}</p> : null}
+                </div>
+                <div className="flex shrink-0 gap-1">
+                  {!readOnly ? (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => duplicateRow(row)}
+                      title={tx(locale, "Duplicate row", "Дублировать строку")}
+                      aria-label={tx(locale, "Duplicate row", "Дублировать строку")}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  ) : null}
                   <Button
                     type="button"
-                    variant="secondary"
-                    className="border border-red-400/20 bg-red-500/[0.06] px-2.5 text-red-100 hover:border-red-300/30 hover:bg-red-500/10 hover:text-white"
-                    title={locale === "ru" ? `Удалить выбранные: ${selectedCount}` : `Delete ${selectedCount} selected`}
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    onClick={() => toggleExpanded(row.rowKey)}
+                    title={isExpanded ? tx(locale, "Hide details", "Скрыть детали") : tx(locale, "Show details", "Показать детали")}
+                    aria-label={isExpanded ? tx(locale, "Hide details", "Скрыть детали") : tx(locale, "Show details", "Показать детали")}
                   >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="min-w-5 text-center text-sm font-semibold">{selectedCount}</span>
+                    {isExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                   </Button>
-                </Dialog.Trigger>
-                <Dialog.Portal>
-                  <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[#0b0b10] p-6 shadow-2xl shadow-black/50">
-                    <div className="flex gap-4">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-red-500/10 text-red-200">
-                        <AlertTriangle className="h-5 w-5" />
-                      </span>
-                      <div className="min-w-0">
-                        <Dialog.Title className="text-lg font-semibold text-white">{locale === "ru" ? "Удалить выбранные записи?" : "Delete selected entries?"}</Dialog.Title>
-                        <Dialog.Description className="mt-2 text-sm leading-6 text-zinc-400">
-                          {locale === "ru"
-                            ? `Будет удалено выбранных записей: ${selectedCount}. Это действие нельзя отменить.`
-                            : `This will permanently delete ${selectedCount} selected ${selectedCount === 1 ? "entry" : "entries"}. This action cannot be undone.`}
-                        </Dialog.Description>
+                </div>
+              </div>
+              {editMode ? (
+                <div className="grid gap-3 p-3 sm:grid-cols-2">
+                  {renderEditFields(row, true)}
+                  {dirtyKeys.has(row.rowKey) ? <Button type="button" variant="ghost" size="sm" className="sm:col-span-2" onClick={() => resetRow(row)}><RotateCcw className="h-4 w-4" />{row.id ? tx(locale, "Reset row", "Сбросить строку") : tx(locale, "Remove row", "Удалить строку")}</Button> : null}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 p-3 text-sm">
+                  <div><FieldLabel>{tx(locale, "Type", "Тип")}</FieldLabel><p className="mt-1 text-foreground">{shortBillingLabel(row, locale)}</p></div>
+                  <div><FieldLabel>{tx(locale, "Account", "Аккаунт")}</FieldLabel><p className="mt-1 text-foreground">{row.accountName || "—"}</p></div>
+                  <div><FieldLabel>{tx(locale, "Vendor", "Поставщик")}</FieldLabel><p className="mt-1 text-foreground">{row.vendorName || "—"}</p></div>
+                  <div><FieldLabel>{tx(locale, "Dates", "Даты")}</FieldLabel><p className="mt-1 text-foreground">{entryDateLabel(row.billingStartAt, locale)} → {entryDateLabel(row.billingEndAt, locale)}</p></div>
+                </div>
+              )}
+              {isExpanded ? <div className="border-t border-border bg-surface-muted p-3">{renderInspector(row)}</div> : null}
+              {!editMode && !readOnly && row.id ? (
+                <div className="flex gap-2 border-t border-border p-2">
+                  <Button type="button" variant="ghost" size="sm" onClick={() => runItemAction(archiveItemAction, row.id!)}><Archive className="h-4 w-4" />{tx(locale, "Archive", "Архив")}</Button>
+                  <Button type="button" variant="ghost" size="sm" className="text-red-300" onClick={() => runItemAction(deleteItemAction, row.id!)}><Trash2 className="h-4 w-4" />{tx(locale, "Delete", "Удалить")}</Button>
+                </div>
+              ) : null}
+            </article>
+          );
+        })}
+        {!paged.length ? <p className="py-16 text-center text-sm text-subtle-foreground">{tx(locale, "No entries match.", "Подходящих записей нет.")}</p> : null}
+      </div>
+
+      <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex min-h-9 flex-wrap items-center gap-2">
+          {selectedIds.size ? (
+            <>
+              <Badge variant="secondary">{tx(locale, `${selectedIds.size} selected`, `Выбрано: ${selectedIds.size}`)}</Badge>
+              <Button type="button" variant="secondary" size="sm" onClick={bulkExport} disabled={isExportPending}>
+                <Download className="h-4 w-4" />{isExportPending ? tx(locale, "Exporting…", "Экспорт…") : tx(locale, "Export", "Экспорт")}
+              </Button>
+              {!readOnly ? (
+                <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
+                  <Dialog.Trigger asChild><Button type="button" variant="secondary" size="sm" className="text-red-300"><Trash2 className="h-4 w-4" />{tx(locale, "Delete", "Удалить")}</Button></Dialog.Trigger>
+                  <Dialog.Portal>
+                    <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
+                    <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-surface p-6 shadow-2xl">
+                      <div className="flex gap-4">
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-lg bg-red-500/10 text-red-300"><AlertTriangle className="h-5 w-5" /></span>
+                        <div><Dialog.Title className="font-semibold text-foreground">{tx(locale, "Delete selected entries?", "Удалить выбранные записи?")}</Dialog.Title><Dialog.Description className="mt-2 text-sm text-muted-foreground">{tx(locale, `This permanently deletes ${selectedIds.size} entries.`, `Будет безвозвратно удалено записей: ${selectedIds.size}.`)}</Dialog.Description></div>
                       </div>
-                    </div>
-                    <div className="mt-6 flex justify-end gap-3">
-                      <Dialog.Close asChild>
-                        <Button type="button" variant="secondary" disabled={isPending}>Cancel</Button>
-                      </Dialog.Close>
-                      <Button type="button" variant="destructive" onClick={handleBulkDelete} disabled={isPending || selectedCount === 0}>
-                        {isPending ? (locale === "ru" ? "Удаление..." : "Deleting...") : locale === "ru" ? "Удалить все" : "Delete All"}
-                      </Button>
-                    </div>
-                  </Dialog.Content>
-                </Dialog.Portal>
-              </Dialog.Root>
-            </div>
-          ) : null}
-          {exportError ? <p className="text-xs text-red-300">{exportError}</p> : null}
+                      <div className="mt-6 flex justify-end gap-2">
+                        <Dialog.Close asChild><Button type="button" variant="secondary">{tx(locale, "Cancel", "Отмена")}</Button></Dialog.Close>
+                        <Button type="button" variant="destructive" onClick={bulkDelete} disabled={isPending}>{tx(locale, "Delete", "Удалить")}</Button>
+                      </div>
+                    </Dialog.Content>
+                  </Dialog.Portal>
+                </Dialog.Root>
+              ) : null}
+            </>
+          ) : <span className="text-xs text-subtle-foreground">{tx(locale, `${filtered.length} entries`, `Записей: ${filtered.length}`)}</span>}
         </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={String(pageSize)}
-            onValueChange={(value) => {
-              setPageSize(Number(value));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[78px] border-white/10 bg-black/30 text-zinc-200">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[10, 20, 50, 100].map((size) => (
-                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="button" variant="secondary" size="icon" className="h-9 w-9" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Badge variant="secondary" className="px-2.5 py-1 text-xs text-zinc-300">
-            {safePage}/{totalPages}
-          </Badge>
-          <Button type="button" variant="secondary" size="icon" className="h-9 w-9" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-2 self-end">
+          <NativeSelect value={String(pageSize)} onChange={(value) => { setPageSize(Number(value)); setPage(1); }} ariaLabel={tx(locale, "Rows per page", "Строк на странице")} className="h-8 w-20">
+            {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
+          </NativeSelect>
+          <Button type="button" variant="secondary" size="icon" className="h-8 w-8" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}><ChevronLeft className="h-4 w-4" /></Button>
+          <Badge variant="secondary">{safePage}/{totalPages}</Badge>
+          <Button type="button" variant="secondary" size="icon" className="h-8 w-8" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}><ChevronRight className="h-4 w-4" /></Button>
         </div>
       </div>
-    </div>
+    </fieldset>
   );
 }

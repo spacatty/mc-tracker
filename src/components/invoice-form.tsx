@@ -59,14 +59,15 @@ export function InvoiceForm({
   const [dueDate, setDueDate] = useState(addPeriod(paymentDate, period, customDays));
 
   return (
-    <form action={createInvoiceAction} className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
+    <form action={createInvoiceAction} className="overflow-hidden rounded-lg border border-border bg-surface shadow-surface">
       <input type="hidden" name="workspaceId" value={workspaceId} />
-      <div className="border-b border-white/10 bg-black/20 p-5">
-        <h2 className="text-lg font-semibold text-white">{t(locale, "addInvoice")}</h2>
-        <p className="text-sm text-zinc-500">{locale === "ru" ? "Выберите запись, укажите даты счета и при необходимости сдвиньте исходный график." : "Select an entry, record invoice dates, and optionally shift the original entry schedule."}</p>
+      <div className="border-b border-border bg-surface-muted p-5">
+        <h2 className="text-lg font-semibold text-white">{t(locale, "recordPayment")}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{t(locale, "recordPaymentDescription")}</p>
       </div>
-      <div className="divide-y divide-white/10">
-        <div className="grid gap-4 p-4 lg:grid-cols-[180px_1fr] lg:items-start">
+      <div className="divide-y divide-border">
+        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_1fr] lg:items-start">
+          <legend className="sr-only">{t(locale, "stepEntry")}</legend>
           <span className="pt-2 text-sm font-medium text-zinc-400">{t(locale, "entry")}</span>
           <EntrySearchSelect
             entries={entries}
@@ -82,12 +83,13 @@ export function InvoiceForm({
               }
             }}
           />
-        </div>
+        </fieldset>
         <input type="hidden" name="dueDate" value={dueDate} />
         <input type="hidden" name="vendorName" value={selectedEntry?.vendorName || ""} />
         <input type="hidden" name="vendorUrl" value={selectedEntry?.vendorUrl || ""} />
         <input type="hidden" name="accountName" value={selectedEntry?.accountName || ""} />
-        <div className="grid gap-4 p-4 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
+        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
+          <legend className="sr-only">{t(locale, "stepPaymentDates")}</legend>
           <span className="text-sm font-medium text-zinc-400">{t(locale, "paymentDate")}</span>
           <DatePickerInput
             name="paymentDate"
@@ -101,14 +103,16 @@ export function InvoiceForm({
           <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-300">
             {dueDate ? new Date(`${dueDate}T00:00:00`).toLocaleDateString("en-GB") : (locale === "ru" ? "Вычисляется из периода" : "Calculated from period")}
           </div>
-        </div>
-        <div className="grid gap-4 p-4 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
+        </fieldset>
+        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
+          <legend className="sr-only">{t(locale, "stepAmount")}</legend>
           <span className="text-sm font-medium text-zinc-400">{t(locale, "amount")}</span>
           <Input key={`${itemId}-amount`} name="amount" type="number" step="0.01" defaultValue={selectedEntry?.amount || 0} />
           <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Валюта" : "Currency"}</span>
           <CurrencySearchSelect key={`${itemId}-currency`} name="currency" defaultValue={selectedEntry?.currency || "USD"} />
-        </div>
-        <div className="grid gap-4 p-4 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
+        </fieldset>
+        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
+          <legend className="sr-only">{t(locale, "stepPeriod")}</legend>
           <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Период счета" : "Invoice period"}</span>
           <SelectInput
             name="period"
@@ -141,8 +145,9 @@ export function InvoiceForm({
           ) : (
             <input type="hidden" name="customPeriodDays" value={customDays} />
           )}
-        </div>
-        <div className="flex flex-wrap gap-5 p-4">
+        </fieldset>
+        <fieldset className="flex flex-wrap gap-5 p-5">
+          <legend className="mb-3 w-full text-sm font-semibold text-foreground">{t(locale, "scheduleUpdates")}</legend>
           <span className="inline-flex items-center gap-2">
             <CheckboxInput name="shiftDates" defaultChecked>{locale === "ru" ? "Сдвигать даты оплаты записи по счету" : "Shift entry payment dates according to invoice"}</CheckboxInput>
             <HelpTooltip locale={locale}>
@@ -159,9 +164,9 @@ export function InvoiceForm({
                 : "When enabled, the entry's recurring period is changed to this invoice period. Example: paying a 3-month invoice for 150 changes the entry to a 3-month period and updates its price to 150."}
             </HelpTooltip>
           </span>
-        </div>
-        <div className="p-4">
-          <Button>{locale === "ru" ? "Создать счет" : "Create invoice"}</Button>
+        </fieldset>
+        <div className="flex justify-end bg-surface-muted p-5">
+          <Button>{t(locale, "recordPayment")}</Button>
         </div>
       </div>
     </form>

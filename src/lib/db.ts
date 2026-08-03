@@ -11,6 +11,8 @@ import type {
   Category,
   CategoryField,
   DashboardStats,
+  EntryBatchSavedRow,
+  EntryDraft,
   Folder,
   Invoice,
   NotificationChannel,
@@ -1290,8 +1292,14 @@ export function upsertItemForWorkspace(formData: FormData, ownerId: number, work
 
   const categoryId = Number(formData.get("categoryId") || 0) || null;
   const category = categoryId ? getCategoryForWorkspace(categoryId, workspaceId, ownerId) : null;
+  if (categoryId && !category) {
+    throw new Error("Category does not belong to this workspace.");
+  }
   const paymentType = String(formData.get("paymentType") || "single") as PaymentType;
   const amount = Number(formData.get("amount") || 0);
+  if (!Number.isFinite(amount) || amount < 0) {
+    throw new Error("Amount must be non-negative.");
+  }
   const currency = ensureSupportedCurrency(String(formData.get("currency") || "USD"));
   const period = paymentType === "recurring" ? (String(formData.get("period") || "1m") as BillingPeriod) : null;
   const customPeriodDays = period === "custom" ? Number(formData.get("customPeriodDays") || 30) : null;
@@ -1399,6 +1407,53 @@ export function upsertItem(formData: FormData, ownerId: number) {
   const workspaceId = Number(formData.get("workspaceId") || 0);
   if (!workspaceId) throw new Error("Workspace is required.");
   return upsertItemForWorkspace(formData, ownerId, workspaceId);
+}
+
+function entryDraftToFormData(draft: EntryDraft, workspaceId: number) {
+  const formData = new FormData();
+  formData.set("workspaceId", String(workspaceId));
+  if (draft.id) formData.set("id", String(draft.id));
+  formData.set("name", draft.name);
+  if (draft.categoryId) formData.set("categoryId", String(draft.categoryId));
+  formData.set("paymentType", draft.paymentType);
+  formData.set("amount", String(draft.amount));
+  formData.set("currency", draft.currency);
+  if (draft.billingStartAt) formData.set("billingStartAt", draft.billingStartAt);
+  if (draft.billingEndAt) formData.set("billingEndAt", draft.billingEndAt);
+  if (draft.period) formData.set("period", draft.period);
+  if (draft.customPeriodDays !== null && draft.customPeriodDays !== undefined) {
+    formData.set("customPeriodDays", String(draft.customPeriodDays));
+  }
+  formData.set("vendorName", draft.vendorName || "");
+  formData.set("vendorUrl", draft.vendorUrl || "");
+  formData.set("accountName", draft.accountName || "");
+  formData.set("notes", draft.notes || "");
+
+  Object.entries(draft.customFields || {}).forEach(([fieldId, value]) => {
+    if (value === true) {
+      formData.set(`custom_${fieldId}`, "on");
+    } else if (value !== false && value !== null && value !== undefined) {
+      formData.set(`custom_${fieldId}`, String(value));
+    }
+  });
+
+  return formData;
+}
+
+export function upsertEntryBatchForWorkspace(
+  drafts: EntryDraft[],
+  workspaceId: number,
+  userId: number,
+): EntryBatchSavedRow[] {
+  requireWorkspaceEditor(workspaceId, userId);
+  const db = getDb();
+  const upsertBatch = db.transaction((rows: EntryDraft[]) =>
+    rows.map((draft) => ({
+      rowKey: draft.rowKey,
+      itemId: upsertItemForWorkspace(entryDraftToFormData(draft, workspaceId), userId, workspaceId),
+    })),
+  );
+  return upsertBatch(drafts);
 }
 
 export function deleteItem(id: number) {

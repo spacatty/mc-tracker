@@ -21,9 +21,9 @@ export function EmojiPickerInput({
       <input type="hidden" name={name} value={value} />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="w-full justify-between">
+          <Button type="button" variant="outline" className="w-full justify-between gap-3 pr-4">
             <span className="text-lg leading-none">{value}</span>
-            <ChevronsUpDown className="h-4 w-4 text-zinc-500" />
+            <ChevronsUpDown className="h-4 w-4 shrink-0 text-zinc-500" />
           </Button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-auto border-white/10 bg-zinc-950 p-0">

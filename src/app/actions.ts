@@ -50,6 +50,7 @@ import {
   updateUserPassword,
   updateUserRole,
   upsertCategoryForWorkspace,
+  upsertEntryBatchForWorkspace,
   upsertTelegramChannelForWorkspace,
   upsertItem,
   archiveItemForWorkspace,
@@ -58,7 +59,15 @@ import {
   deleteArchivedItemsForWorkspace,
 } from "@/lib/db";
 import { canManageUsers, canSetRole, clearSession, createTotpSetup, requireUser, setSession, signIn, verifyTotp } from "@/lib/auth";
-import type { Category, CategoryField, UserRole, WorkspaceRole } from "@/lib/types";
+import type {
+  Category,
+  CategoryField,
+  EntryBatchInput,
+  EntryBatchResult,
+  EntryBatchRowError,
+  UserRole,
+  WorkspaceRole,
+} from "@/lib/types";
 import { exportWorkspaceOptionsSchema, parseImportPayload } from "@/lib/workspace-export";
 
 function required(value: FormDataEntryValue | null, label: string) {
@@ -115,6 +124,66 @@ function setCustomFieldValue(formData: FormData, category: Category, customField
   });
 }
 
+const entryDraftDateSchema = z
+  .string()
+  .refine((value) => {
+    const raw = value.trim();
+    if (!raw) return true;
+    const parsed = raw.includes("T") ? new Date(raw) : new Date(`${raw}T00:00:00.000Z`);
+    return !Number.isNaN(parsed.getTime());
+  }, "Enter a valid date.")
+  .nullable()
+  .optional();
+
+const entryDraftSchema = z
+  .object({
+    rowKey: z.string().refine((value) => value.trim().length > 0, "Row key is required."),
+    id: z.number().int().positive().optional(),
+    name: z.string().refine((value) => value.trim().length > 0, "Name is required."),
+    categoryId: z.number().int().positive().nullable().optional(),
+    paymentType: z.enum(["single", "recurring"]),
+    amount: z.number().finite().nonnegative("Amount must be non-negative."),
+    currency: z.string().refine((value) => value.trim().length > 0, "Currency is required."),
+    billingStartAt: entryDraftDateSchema,
+    billingEndAt: entryDraftDateSchema,
+    period: z.enum(["7d", "1m", "3m", "1y", "custom"]).nullable().optional(),
+    customPeriodDays: z.number().int().positive().nullable().optional(),
+    vendorName: z.string().optional(),
+    vendorUrl: z.string().optional(),
+    accountName: z.string().optional(),
+    notes: z.string().optional(),
+    customFields: z.record(z.string(), z.unknown()).optional(),
+  })
+  .strict();
+
+const entryBatchInputSchema = z
+  .object({
+    workspaceId: z.number().int().positive(),
+    rows: z.array(entryDraftSchema).min(1, "Add at least one row."),
+  })
+  .strict();
+
+function getInputRowKey(input: EntryBatchInput, index: number) {
+  const rawRows = (input as { rows?: unknown }).rows;
+  if (!Array.isArray(rawRows)) return `row-${index + 1}`;
+  const row = rawRows[index];
+  if (!row || typeof row !== "object") return `row-${index + 1}`;
+  const rowKey = (row as { rowKey?: unknown }).rowKey;
+  return typeof rowKey === "string" ? rowKey : `row-${index + 1}`;
+}
+
+function mapEntryBatchRowErrors(input: EntryBatchInput, issues: z.core.$ZodIssue[]): EntryBatchRowError[] {
+  return issues.flatMap((issue) => {
+    if (issue.path[0] !== "rows" || typeof issue.path[1] !== "number") return [];
+    const fieldPath = issue.path.slice(2).map(String);
+    const field =
+      fieldPath[0] === "customFields" && fieldPath.length > 1
+        ? (`customFields.${fieldPath.slice(1).join(".")}` as const)
+        : ((fieldPath[0] || "_row") as EntryBatchRowError["field"]);
+    return [{ rowKey: getInputRowKey(input, issue.path[1]), field, message: issue.message }];
+  });
+}
+
 export async function setupAction(formData: FormData) {
   const username = required(formData.get("username"), "Username");
   const password = required(formData.get("password"), "Password");
@@ -167,6 +236,86 @@ export async function saveItemAction(formData: FormData) {
   revalidatePath("/app");
   revalidatePath("/app/notifications");
   redirect(`/app/items?workspace=${workspaceId}`);
+}
+
+export async function saveEntryBatchAction(input: EntryBatchInput): Promise<EntryBatchResult> {
+  const user = await requireUser();
+  const parsed = entryBatchInputSchema.safeParse(input);
+
+  if (!parsed.success) {
+    const rowErrors = mapEntryBatchRowErrors(input, parsed.error.issues);
+    return {
+      success: false,
+      saved: [],
+      rowErrors,
+      message: rowErrors.length ? undefined : parsed.error.issues[0]?.message || "Invalid batch input.",
+    };
+  }
+
+  const rowKeyCounts = new Map<string, number>();
+  const itemIdCounts = new Map<number, number>();
+  parsed.data.rows.forEach((row) => {
+    rowKeyCounts.set(row.rowKey, (rowKeyCounts.get(row.rowKey) || 0) + 1);
+    if (row.id) itemIdCounts.set(row.id, (itemIdCounts.get(row.id) || 0) + 1);
+  });
+
+  const rowErrors: EntryBatchRowError[] = parsed.data.rows.flatMap((row) => {
+    const errors: EntryBatchRowError[] = [];
+    if ((rowKeyCounts.get(row.rowKey) || 0) > 1) {
+      errors.push({ rowKey: row.rowKey, field: "rowKey", message: "Row key must be unique." });
+    }
+    if (row.id && (itemIdCounts.get(row.id) || 0) > 1) {
+      errors.push({ rowKey: row.rowKey, field: "id", message: "An existing entry can only appear once per batch." });
+    }
+    return errors;
+  });
+
+  if (rowErrors.length) {
+    return { success: false, saved: [], rowErrors };
+  }
+
+  let validCategoryIds: Set<number>;
+  try {
+    validCategoryIds = new Set(
+      listCategoriesForWorkspace(parsed.data.workspaceId, user.id).map((category) => category.id),
+    );
+  } catch {
+    return {
+      success: false,
+      saved: [],
+      rowErrors: [],
+      message: "Unable to validate entry categories.",
+    };
+  }
+
+  parsed.data.rows.forEach((row) => {
+    if (row.categoryId && !validCategoryIds.has(row.categoryId)) {
+      rowErrors.push({
+        rowKey: row.rowKey,
+        field: "categoryId",
+        message: "Category does not belong to this workspace.",
+      });
+    }
+  });
+
+  if (rowErrors.length) {
+    return { success: false, saved: [], rowErrors };
+  }
+
+  try {
+    const saved = upsertEntryBatchForWorkspace(parsed.data.rows, parsed.data.workspaceId, user.id);
+    revalidatePath("/app/items");
+    revalidatePath("/app");
+    revalidatePath("/app/notifications");
+    return { success: true, saved, rowErrors: [] };
+  } catch (error) {
+    return {
+      success: false,
+      saved: [],
+      rowErrors: [],
+      message: error instanceof Error ? error.message : "Unable to save entries.",
+    };
+  }
 }
 
 export async function analyzeAiImportAction(input: string, answers?: Record<string, string>, workspaceIdArg?: number) {
