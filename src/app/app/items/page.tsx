@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { Plus } from "lucide-react";
+import { FileUp, Plus } from "lucide-react";
 import { EntriesTable } from "@/components/entries-table";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
@@ -17,6 +17,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   const selectedCategory = categoryId ? categories.find((category) => category.id === categoryId) : undefined;
   const items = listItemsForWorkspace(workspace.id, user.id).filter((item) => !categoryId || item.categoryId === categoryId);
   const addHref = `/app/items?workspace=${workspace.id}${selectedCategory ? `&category=${selectedCategory.id}` : ""}&add=1`;
+  const importHref = `/app/import?workspace=${workspace.id}${selectedCategory ? `&category=${selectedCategory.id}` : ""}`;
   const entriesStateKey = [
     workspace.id,
     selectedCategory?.id || "all",
@@ -31,12 +32,20 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
           <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-sky-300">{selectedCategory ? `${selectedCategory.name} ${locale === "ru" ? "записи" : "entries"}` : locale === "ru" ? "Все ресурсы" : "All tracked resources"}</h1>
         </div>
         {workspace.accessRole !== "viewer" ? (
-          <Button asChild variant="secondary" className="gap-2 border-violet-400/20 bg-violet-500/[0.14] text-violet-100 hover:border-violet-300/35 hover:bg-violet-500/[0.24] hover:text-white">
-            <Link href={addHref}>
-              <Plus className="h-4 w-4" />
-              {t(locale, "createEntry")}
-            </Link>
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button asChild variant="ghost" size="sm" className="gap-2">
+              <Link href={addHref}>
+                <Plus className="h-4 w-4" />
+                {t(locale, "createEntry")}
+              </Link>
+            </Button>
+            <Button asChild size="sm" className="gap-2">
+              <Link href={importHref}>
+                <FileUp className="h-4 w-4" />
+                {locale === "ru" ? "Импорт пачкой" : "Bulk import"}
+              </Link>
+            </Button>
+          </div>
         ) : null}
       </header>
 

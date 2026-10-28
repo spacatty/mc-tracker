@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { aiDraftItemSchema, extractPaymentItems, normalizeAiDraft } from "@/lib/ai/payment-extractor";
+import { extractPaymentItems } from "@/lib/ai/payment-extractor";
 import { ensureSupportedCurrency } from "@/lib/currencies";
 import { localeCookieName, normalizeLocale } from "@/lib/i18n";
 import {
@@ -60,8 +60,6 @@ import {
 } from "@/lib/db";
 import { canManageUsers, canSetRole, clearSession, createTotpSetup, requireUser, setSession, signIn, verifyTotp } from "@/lib/auth";
 import type {
-  Category,
-  CategoryField,
   EntryBatchInput,
   EntryBatchResult,
   EntryBatchRowError,
@@ -95,33 +93,6 @@ function normalizeInviteToken(raw: FormDataEntryValue | null) {
     return token.split(/[?#]/)[0].trim();
   }
   return value.trim();
-}
-
-function customFieldAliases(field: CategoryField) {
-  return [field.id, field.label, field.label.toLowerCase(), field.label.trim().toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "")];
-}
-
-function customFieldValueFromDraft(customFields: Record<string, unknown>, field: CategoryField) {
-  for (const alias of customFieldAliases(field)) {
-    if (Object.prototype.hasOwnProperty.call(customFields, alias)) {
-      return customFields[alias];
-    }
-  }
-  return undefined;
-}
-
-function setCustomFieldValue(formData: FormData, category: Category, customFields: Record<string, unknown>) {
-  category.fields.forEach((field) => {
-    const value = customFieldValueFromDraft(customFields, field);
-    if (field.type === "checkbox") {
-      if (value === true || value === "true" || value === "on" || value === "yes") formData.set(`custom_${field.id}`, "on");
-      return;
-    }
-
-    if (value !== null && value !== undefined) {
-      formData.set(`custom_${field.id}`, String(value));
-    }
-  });
 }
 
 const entryDraftDateSchema = z
@@ -162,6 +133,22 @@ const entryBatchInputSchema = z
     rows: z.array(entryDraftSchema).min(1, "Add at least one row."),
   })
   .strict();
+
+const importApplyRowSchema = entryDraftSchema.extend({
+  action: z.enum(["create", "edit", "pay"]),
+  targetItemId: z.number().int().positive().nullable(),
+  shiftDates: z.boolean(),
+  shiftPaymentPeriod: z.boolean(),
+});
+
+const importApplyInputSchema = z
+  .object({
+    workspaceId: z.number().int().positive(),
+    rows: z.array(importApplyRowSchema).min(1, "Select at least one row."),
+  })
+  .strict();
+
+export type ImportApplyRow = z.infer<typeof importApplyRowSchema>;
 
 function getInputRowKey(input: EntryBatchInput, index: number) {
   const rawRows = (input as { rows?: unknown }).rows;
@@ -331,71 +318,95 @@ export async function analyzeAiImportAction(input: string, answers?: Record<stri
   });
 }
 
-export async function createAiImportItemsAction(draftsJson: string, workspaceIdArg?: number) {
+/**
+ * Applies reviewed rows from the bulk import grid. Creates and edits go through the
+ * same transactional batch upsert as the entries grid; pay rows record invoices.
+ * Deliberately not premium-gated: CSV/JSON imports are parsed without AI.
+ */
+export async function applyImportRowsAction(input: { workspaceId: number; rows: ImportApplyRow[] }): Promise<EntryBatchResult & { applied?: number }> {
   const user = await requireUser();
-  requirePremium(user);
-  const workspaceId = resolveWorkspaceId(workspaceIdArg || null, user.id);
-  const drafts = z.array(aiDraftItemSchema).parse(JSON.parse(draftsJson)).map(normalizeAiDraft);
-  const categories = listCategoriesForWorkspace(workspaceId, user.id);
-  let processed = 0;
+  const parsed = importApplyInputSchema.safeParse(input);
+  if (!parsed.success) {
+    const rowErrors = mapEntryBatchRowErrors(input as EntryBatchInput, parsed.error.issues);
+    return {
+      success: false,
+      saved: [],
+      rowErrors,
+      message: rowErrors.length ? undefined : parsed.error.issues[0]?.message || "Invalid import.",
+    };
+  }
 
-  drafts.forEach((draft) => {
-    if ((draft.action === "edit" || draft.action === "pay") && !draft.targetItemId) {
-      throw new Error(`Action ${draft.action} requires an existing entry.`);
+  const workspaceId = resolveWorkspaceId(parsed.data.workspaceId, user.id);
+  const categoryIds = new Set(listCategoriesForWorkspace(workspaceId, user.id).map((category) => category.id));
+  const itemIds = new Set(listItemsForWorkspace(workspaceId, user.id).map((item) => item.id));
+  const rowErrors: EntryBatchRowError[] = [];
+  const editTargets = new Map<number, number>();
+
+  parsed.data.rows.forEach((row) => {
+    if (row.categoryId && !categoryIds.has(row.categoryId)) {
+      rowErrors.push({ rowKey: row.rowKey, field: "categoryId", message: "Category does not belong to this workspace." });
     }
-
-    if (draft.action === "pay") {
-      const invoiceData = new FormData();
-      invoiceData.set("itemId", String(draft.targetItemId));
-      if (draft.categoryId) invoiceData.set("categoryId", String(draft.categoryId));
-      invoiceData.set("paymentDate", draft.billingStartAt || new Date().toISOString().slice(0, 10));
-      if (draft.billingEndAt) invoiceData.set("dueDate", draft.billingEndAt);
-      if (draft.period) invoiceData.set("period", draft.period);
-      if (draft.customPeriodDays) invoiceData.set("customPeriodDays", String(draft.customPeriodDays));
-      invoiceData.set("amount", String(draft.amount));
-      invoiceData.set("currency", draft.currency);
-      invoiceData.set("vendorName", draft.vendorName);
-      invoiceData.set("vendorUrl", draft.vendorUrl);
-      invoiceData.set("accountName", draft.accountName);
-      invoiceData.set("workspaceId", String(workspaceId));
-      if (draft.shiftDates) invoiceData.set("shiftDates", "true");
-      if (draft.shiftPaymentPeriod) invoiceData.set("shiftPaymentPeriod", "true");
-      createInvoiceForWorkspace(invoiceData, workspaceId, user.id);
-      processed += 1;
-      return;
+    if (row.action !== "create") {
+      if (!row.targetItemId || !itemIds.has(row.targetItemId)) {
+        rowErrors.push({ rowKey: row.rowKey, field: "id", message: `Pick an existing entry to ${row.action}.` });
+      } else if (row.action === "edit") {
+        editTargets.set(row.targetItemId, (editTargets.get(row.targetItemId) || 0) + 1);
+      }
     }
-
-    const formData = new FormData();
-    if (draft.action === "edit" && draft.targetItemId) {
-      formData.set("id", String(draft.targetItemId));
-    }
-    formData.set("name", draft.name);
-    if (draft.categoryId) formData.set("categoryId", String(draft.categoryId));
-    formData.set("paymentType", draft.paymentType);
-    formData.set("amount", String(draft.amount));
-    formData.set("currency", draft.currency);
-    if (draft.billingStartAt) formData.set("billingStartAt", draft.billingStartAt);
-    if (draft.billingEndAt) formData.set("billingEndAt", draft.billingEndAt);
-    if (draft.period) formData.set("period", draft.period);
-    if (draft.customPeriodDays) formData.set("customPeriodDays", String(draft.customPeriodDays));
-    formData.set("vendorName", draft.vendorName);
-    formData.set("vendorUrl", draft.vendorUrl);
-    formData.set("accountName", draft.accountName);
-    formData.set("workspaceId", String(workspaceId));
-    formData.set("notes", draft.notes);
-
-    const category = categories.find((candidate) => candidate.id === draft.categoryId);
-    if (category) setCustomFieldValue(formData, category, draft.customFields);
-
-    upsertItem(formData, user.id);
-    processed += 1;
   });
+  parsed.data.rows.forEach((row) => {
+    if (row.action === "edit" && row.targetItemId && (editTargets.get(row.targetItemId) || 0) > 1) {
+      rowErrors.push({ rowKey: row.rowKey, field: "id", message: "An existing entry can only be edited once per import." });
+    }
+  });
+  if (rowErrors.length) return { success: false, saved: [], rowErrors };
 
-  revalidatePath("/app");
-  revalidatePath("/app/items");
-  revalidatePath("/app/invoices");
-  revalidatePath("/app/ai-import");
-  return { created: processed };
+  try {
+    const entryRows = parsed.data.rows.filter((row) => row.action !== "pay");
+    const saved = entryRows.length
+      ? upsertEntryBatchForWorkspace(
+          entryRows.map((row) => ({
+            // Non-strict copy of the entry shape drops the import-only fields.
+            ...z.object(entryDraftSchema.shape).parse(row),
+            id: row.action === "edit" && row.targetItemId ? row.targetItemId : undefined,
+          })),
+          workspaceId,
+          user.id,
+        )
+      : [];
+
+    parsed.data.rows.filter((row) => row.action === "pay").forEach((row) => {
+      const invoiceData = new FormData();
+      invoiceData.set("itemId", String(row.targetItemId));
+      if (row.categoryId) invoiceData.set("categoryId", String(row.categoryId));
+      invoiceData.set("paymentDate", row.billingStartAt || new Date().toISOString().slice(0, 10));
+      if (row.billingEndAt) invoiceData.set("dueDate", row.billingEndAt);
+      if (row.period) invoiceData.set("period", row.period);
+      if (row.customPeriodDays) invoiceData.set("customPeriodDays", String(row.customPeriodDays));
+      invoiceData.set("amount", String(row.amount));
+      invoiceData.set("currency", row.currency);
+      invoiceData.set("vendorName", row.vendorName || "");
+      invoiceData.set("vendorUrl", row.vendorUrl || "");
+      invoiceData.set("accountName", row.accountName || "");
+      invoiceData.set("workspaceId", String(workspaceId));
+      if (row.shiftDates) invoiceData.set("shiftDates", "true");
+      if (row.shiftPaymentPeriod) invoiceData.set("shiftPaymentPeriod", "true");
+      createInvoiceForWorkspace(invoiceData, workspaceId, user.id);
+    });
+
+    revalidatePath("/app");
+    revalidatePath("/app/items");
+    revalidatePath("/app/invoices");
+    revalidatePath("/app/notifications");
+    return { success: true, saved, rowErrors: [], applied: parsed.data.rows.length };
+  } catch (error) {
+    return {
+      success: false,
+      saved: [],
+      rowErrors: [],
+      message: error instanceof Error ? error.message : "Unable to apply import.",
+    };
+  }
 }
 
 export async function payEntryAction(formData: FormData) {

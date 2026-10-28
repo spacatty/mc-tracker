@@ -322,7 +322,7 @@ export function AppShell({
   ];
   const extraNav: SidebarNavItem[] = [
     { href: "/app/telegram", label: t(locale, "telegramRoutes"), icon: "MessageCircle", accent: "text-cyan-200 bg-cyan-500/10" },
-    { href: "/app/ai-import", label: t(locale, "aiMagic"), icon: "Sparkles", accent: "text-fuchsia-200 bg-fuchsia-500/10" },
+    { href: "/app/import", label: t(locale, "importData"), icon: "FileUp", accent: "text-fuchsia-200 bg-fuchsia-500/10" },
   ];
   const workspaceItems = [...workspaceNav];
   const extraItems = [...extraNav];

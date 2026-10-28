@@ -104,3 +104,9 @@ export async function openRouterJson<T>({
 
   throw new Error("AI returned invalid JSON twice. Please retry, or split the input into smaller batches.");
 }
+
+export const aiConfigured = openRouterConfigured;
+
+export function aiModelLabel() {
+  return process.env.OPENROUTER_MODEL || "google/gemini-2.5-flash-lite";
+}
