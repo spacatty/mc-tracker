@@ -1,9 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Fragment, type ReactNode, useEffect, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, type ReactNode, useMemo, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -18,8 +17,6 @@ import {
   Edit3,
   ExternalLink,
   Filter,
-  LayoutGrid,
-  List,
   Plus,
   RotateCcw,
   Save,
@@ -35,7 +32,6 @@ import {
   saveEntryBatchAction,
 } from "@/app/actions";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
-import { entryStatus, type EntryStatus } from "@/lib/entry-status";
 import type { Locale } from "@/lib/i18n";
 import type {
   BillingPeriod,
@@ -47,7 +43,6 @@ import type {
   VendorSuggestion,
 } from "@/lib/types";
 import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
-import { EntryCollection, statusLabel, type CollectionGroup, type CollectionLayout, type EntryView } from "./entry-collection";
 import { AppIcon } from "./icons";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -65,13 +60,6 @@ type DraftRow = EntryDraft & {
 type FieldErrors = Record<string, string>;
 
 const PERIODS: BillingPeriod[] = ["7d", "1m", "3m", "1y", "custom"];
-const STATUS_DOTS: Record<EntryStatus, string> = {
-  overdue: "bg-red-400",
-  "due-soon": "bg-amber-400",
-  active: "bg-emerald-400",
-  ended: "bg-zinc-500",
-  "no-date": "bg-zinc-600",
-};
 
 function tx(locale: Locale, en: string, ru: string) {
   return locale === "ru" ? ru : en;
@@ -388,11 +376,6 @@ export function EntriesTable({
   const [nameFilter, setNameFilter] = useState("");
   const [accountFilter, setAccountFilter] = useState("");
   const [vendorFilter, setVendorFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState<EntryStatus | "all">("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
-  const [billingFilter, setBillingFilter] = useState<"all" | "recurring" | "single">("all");
-  const [layout, setLayout] = useState<CollectionLayout>("cards");
-  const [group, setGroup] = useState<CollectionGroup>(selectedCategoryId ? "status" : "category");
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(20);
@@ -409,29 +392,6 @@ export function EntriesTable({
   const saveLockedRef = useRef(false);
   const focusRowRef = useRef<string | null>(safeInitialAdd ? "new-initial" : null);
   const listHref = `/app/items?workspace=${workspaceId}${selectedCategoryId ? `&category=${selectedCategoryId}` : ""}`;
-
-  useEffect(() => {
-    const frame = window.requestAnimationFrame(() => {
-      try {
-        const saved = JSON.parse(localStorage.getItem("mc-tracker-entries-view") || "{}") as { layout?: CollectionLayout; group?: CollectionGroup };
-        if (saved.layout === "cards" || saved.layout === "list") setLayout(saved.layout);
-        if (saved.group && ["none", "category", "status", "vendor", "account"].includes(saved.group)) setGroup(saved.group);
-      } catch {
-        // Ignore unreadable preferences.
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, []);
-
-  function saveViewPreference(next: { layout?: CollectionLayout; group?: CollectionGroup }) {
-    if (next.layout) setLayout(next.layout);
-    if (next.group) setGroup(next.group);
-    try {
-      localStorage.setItem("mc-tracker-entries-view", JSON.stringify({ layout: next.layout || layout, group: next.group || group }));
-    } catch {
-      // Storage can be unavailable (private mode); preferences just won't persist.
-    }
-  }
 
   const sourceById = useMemo(() => new Map(items.map((item) => [item.id, item])), [items]);
   const baselineFromItems = useMemo(
@@ -469,9 +429,6 @@ export function EntriesTable({
       .filter((row) => fuzzyMatch(row.name, nameFilter))
       .filter((row) => fuzzyMatch(row.accountName || "", accountFilter))
       .filter((row) => fuzzyMatch(`${row.vendorName || ""} ${row.vendorUrl || ""}`, vendorFilter))
-      .filter((row) => editMode || categoryFilter === "all" || String(row.categoryId || "none") === categoryFilter)
-      .filter((row) => editMode || billingFilter === "all" || row.paymentType === billingFilter)
-      .filter((row) => editMode || statusFilter === "all" || entryStatus(row).status === statusFilter)
       .sort((a, b) => {
         if (!a.id && b.id) return -1;
         if (a.id && !b.id) return 1;
@@ -483,7 +440,7 @@ export function EntriesTable({
           : String(aValue).localeCompare(String(bValue));
         return direction === "asc" ? result : -result;
       }),
-    [accountFilter, billingFilter, categories, categoryFilter, direction, editMode, nameFilter, query, rows, sortKey, sourceById, statusFilter, vendorFilter],
+    [accountFilter, categories, direction, nameFilter, query, rows, sortKey, sourceById, vendorFilter],
   );
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const safePage = Math.min(page, totalPages);
@@ -495,51 +452,7 @@ export function EntriesTable({
     : selectedOnPage > 0
       ? "indeterminate"
       : false;
-  const activeFilterCount = [nameFilter, accountFilter, vendorFilter].filter((value) => value.trim()).length
-    + (categoryFilter !== "all" ? 1 : 0) + (billingFilter !== "all" ? 1 : 0);
-  const statusCounts = useMemo(() => {
-    const counts: Record<EntryStatus, number> = { overdue: 0, "due-soon": 0, active: 0, ended: 0, "no-date": 0 };
-    rows.forEach((row) => { if (row.id) counts[entryStatus(row).status] += 1; });
-    return counts;
-  }, [rows]);
-  const collectionEntries: EntryView[] = filtered.flatMap((row) => row.id ? [{
-    id: row.id,
-    name: row.name,
-    categoryId: row.categoryId ?? null,
-    paymentType: row.paymentType,
-    amount: Number(row.amountInput) || 0,
-    currency: row.currency,
-    period: row.period ?? null,
-    customPeriodDays: Number(row.customPeriodDaysInput) || null,
-    billingStartAt: row.billingStartAt || null,
-    billingEndAt: row.billingEndAt || null,
-    vendorName: row.vendorName || "",
-    vendorUrl: row.vendorUrl || "",
-    accountName: row.accountName || "",
-    notes: row.notes || "",
-    customFields: row.customFields || {},
-  }] : []);
-  const vendorOptions = [...new Set(rows.map((row) => row.vendorName?.trim()).filter((value): value is string => Boolean(value)))].sort();
-  const accountOptions = [...new Set(rows.map((row) => row.accountName?.trim()).filter((value): value is string => Boolean(value)))].sort();
-
-  function clearFilters() {
-    setNameFilter("");
-    setAccountFilter("");
-    setVendorFilter("");
-    setCategoryFilter("all");
-    setBillingFilter("all");
-    setStatusFilter("all");
-    setPage(1);
-  }
-
-  function editInGrid(id: number) {
-    const row = rows.find((candidate) => candidate.id === id);
-    if (!row || readOnly) return;
-    clearFilters();
-    setQuery(row.name);
-    setEditMode(true);
-    setExpanded((current) => new Set(current).add(row.rowKey));
-  }
+  const activeFilterCount = [nameFilter, accountFilter, vendorFilter].filter((value) => value.trim()).length;
 
   function fieldError(rowKey: string, field: string) {
     return clientErrors[rowKey]?.[field] || serverErrorMap[`${rowKey}:${field}`];
@@ -1017,33 +930,7 @@ export function EntriesTable({
               <Filter className="h-4 w-4" />
               {tx(locale, "Filters", "Фильтры")}{activeFilterCount ? ` (${activeFilterCount})` : ""}
             </Button>
-            {!editMode ? (
-              <>
-                <NativeSelect value={group} onChange={(value) => saveViewPreference({ group: value as CollectionGroup })} ariaLabel={tx(locale, "Group by", "Группировать")} className="h-8 w-40">
-                  <option value="none">{tx(locale, "No grouping", "Без группировки")}</option>
-                  <option value="category">{tx(locale, "Group: category", "Группа: категория")}</option>
-                  <option value="status">{tx(locale, "Group: status", "Группа: статус")}</option>
-                  <option value="vendor">{tx(locale, "Group: vendor", "Группа: поставщик")}</option>
-                  <option value="account">{tx(locale, "Group: account", "Группа: аккаунт")}</option>
-                </NativeSelect>
-                <NativeSelect value={`${sortKey}:${direction}`} onChange={(value) => { const [key, dir] = value.split(":"); setSortKey(key as SortKey); setDirection(dir as "asc" | "desc"); }} ariaLabel={tx(locale, "Sort", "Сортировка")} className="h-8 w-44">
-                  <option value="date:asc">{tx(locale, "Renewal: soonest", "Продление: ближайшие")}</option>
-                  <option value="amount:desc">{tx(locale, "Amount: highest", "Сумма: по убыванию")}</option>
-                  <option value="name:asc">{tx(locale, "Name A–Z", "Название А–Я")}</option>
-                  <option value="created:desc">{tx(locale, "Recently added", "Недавно добавленные")}</option>
-                  <option value="vendor:asc">{tx(locale, "Vendor A–Z", "Поставщик А–Я")}</option>
-                </NativeSelect>
-                <div className="flex rounded-md border border-border bg-surface-muted p-0.5" role="group" aria-label={tx(locale, "Layout", "Вид")}>
-                  {([["cards", LayoutGrid, tx(locale, "Cards", "Карточки")], ["list", List, tx(locale, "List", "Список")]] as const).map(([value, Icon, label]) => (
-                    <button key={value} type="button" onClick={() => saveViewPreference({ layout: value })} aria-pressed={layout === value} title={label} className={cn("rounded-sm px-2 py-1", layout === value ? "bg-surface-raised text-foreground" : "text-muted-foreground hover:text-foreground")}>
-                      <Icon className="h-4 w-4" />
-                      <span className="sr-only">{label}</span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            ) : null}
-            <div className={cn("flex rounded-md border border-border bg-surface-muted p-0.5", !editMode && "hidden")} aria-label={tx(locale, "Table density", "Плотность таблицы")}>
+            <div className="flex rounded-md border border-border bg-surface-muted p-0.5" aria-label={tx(locale, "Table density", "Плотность таблицы")}>
               {(["compact", "comfortable"] as const).map((value) => (
                 <button
                   key={value}
@@ -1082,54 +969,7 @@ export function EntriesTable({
             )}
           </div>
         </div>
-        {filtersOpen && !editMode ? (
-          <div className="grid gap-2 rounded-lg border border-border bg-surface-muted p-3 sm:grid-cols-2 lg:grid-cols-5">
-            {!selectedCategoryId ? (
-              <NativeSelect value={categoryFilter} onChange={(value) => setCategoryFilter(value)} ariaLabel={tx(locale, "Category", "Категория")}>
-                <option value="all">{tx(locale, "All categories", "Все категории")}</option>
-                <option value="none">{tx(locale, "Uncategorized", "Без категории")}</option>
-                {categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
-              </NativeSelect>
-            ) : null}
-            <NativeSelect value={billingFilter} onChange={(value) => setBillingFilter(value as typeof billingFilter)} ariaLabel={tx(locale, "Billing", "Оплата")}>
-              <option value="all">{tx(locale, "Recurring and one-time", "Регулярные и разовые")}</option>
-              <option value="recurring">{tx(locale, "Recurring only", "Только регулярные")}</option>
-              <option value="single">{tx(locale, "One-time only", "Только разовые")}</option>
-            </NativeSelect>
-            <NativeSelect value={vendorFilter} onChange={(value) => setVendorFilter(value)} ariaLabel={tx(locale, "Vendor", "Поставщик")}>
-              <option value="">{tx(locale, "All vendors", "Все поставщики")}</option>
-              {vendorOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-            </NativeSelect>
-            <NativeSelect value={accountFilter} onChange={(value) => setAccountFilter(value)} ariaLabel={tx(locale, "Account", "Аккаунт")}>
-              <option value="">{tx(locale, "All accounts", "Все аккаунты")}</option>
-              {accountOptions.map((value) => <option key={value} value={value}>{value}</option>)}
-            </NativeSelect>
-            {activeFilterCount ? (
-              <Button type="button" variant="ghost" size="sm" className="h-9" onClick={clearFilters}><X className="h-4 w-4" />{tx(locale, "Clear filters", "Сбросить фильтры")}</Button>
-            ) : null}
-          </div>
-        ) : null}
-        {!editMode && rows.some((row) => row.id) ? (
-          <div className="flex flex-wrap gap-1.5" role="group" aria-label={tx(locale, "Status", "Статус")}>
-            {(["all", "overdue", "due-soon", "active", "ended", "no-date"] as const).filter((value) => value === "all" || statusCounts[value]).map((value) => (
-              <button
-                key={value}
-                type="button"
-                aria-pressed={statusFilter === value}
-                onClick={() => setStatusFilter(statusFilter === value ? "all" : value)}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs transition",
-                  statusFilter === value ? "border-violet-400/50 bg-violet-500/15 text-foreground" : "border-border bg-surface-muted text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {value !== "all" ? <span className={cn("h-1.5 w-1.5 rounded-full", STATUS_DOTS[value])} /> : null}
-                {value === "all" ? tx(locale, "All", "Все") : statusLabel(value, locale)}
-                <span className="text-subtle-foreground">{value === "all" ? rows.filter((row) => row.id).length : statusCounts[value]}</span>
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {filtersOpen && editMode ? (
+        {filtersOpen ? (
           <div className="grid gap-2 rounded-lg border border-border bg-surface-muted p-3 md:grid-cols-3">
             <Input value={nameFilter} onChange={(event) => { setNameFilter(event.target.value); setPage(1); }} placeholder={tx(locale, "Filter by name…", "Фильтр по названию…")} />
             <Input value={accountFilter} onChange={(event) => { setAccountFilter(event.target.value); setPage(1); }} placeholder={tx(locale, "Filter by account…", "Фильтр по аккаунту…")} />
@@ -1150,43 +990,6 @@ export function EntriesTable({
         ) : null}
       </div>
 
-      {!editMode ? (
-        <div className="min-h-[320px] bg-surface-muted/40 p-4">
-          {collectionEntries.length ? (
-            <EntryCollection
-              key={`${group}:${layout}`}
-              entries={collectionEntries}
-              categories={categories}
-              layout={layout}
-              group={group}
-              selectedIds={selectedIds}
-              readOnly={readOnly}
-              workspaceId={workspaceId}
-              showCategory={showCategory}
-              pending={isPending}
-              locale={locale}
-              onToggleSelect={(id, checked) => toggleItem(id, checked)}
-              onDuplicate={(id) => { const row = rows.find((candidate) => candidate.id === id); if (row) duplicateRow(row); }}
-              onArchive={(id) => runItemAction(archiveItemAction, id)}
-              onDelete={(id) => runItemAction(deleteItemAction, id)}
-              onEditInGrid={editInGrid}
-            />
-          ) : (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
-              <p className="text-sm text-muted-foreground">
-                {rows.some((row) => row.id) ? tx(locale, "No entries match these filters.", "Нет записей по этим фильтрам.") : tx(locale, "No entries yet.", "Записей пока нет.")}
-              </p>
-              {rows.some((row) => row.id) ? (
-                <Button type="button" variant="secondary" size="sm" onClick={() => { clearFilters(); setQuery(""); }}>{tx(locale, "Clear filters", "Сбросить фильтры")}</Button>
-              ) : !readOnly ? (
-                <Button asChild size="sm"><Link href={`/app/import?workspace=${workspaceId}${selectedCategoryId ? `&category=${selectedCategoryId}` : ""}`}>{tx(locale, "Import entries", "Импортировать записи")}</Link></Button>
-              ) : null}
-            </div>
-          )}
-        </div>
-      ) : null}
-
-      {editMode ? (<>
       <div className="relative isolate hidden max-h-[calc(100vh-285px)] min-h-[420px] overflow-auto md:block">
         <table className={cn("w-full border-collapse text-sm", editMode ? "min-w-[1780px]" : "min-w-[1120px]")}>
           <thead className="sticky top-0 z-30 bg-surface-muted text-xs uppercase tracking-wider text-muted-foreground">
@@ -1421,7 +1224,6 @@ export function EntriesTable({
         })}
         {!paged.length ? <p className="py-16 text-center text-sm text-subtle-foreground">{tx(locale, "No entries match.", "Подходящих записей нет.")}</p> : null}
       </div>
-      </>) : null}
 
       <div className="flex flex-col gap-3 border-t border-border px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex min-h-9 flex-wrap items-center gap-2">
@@ -1450,9 +1252,9 @@ export function EntriesTable({
                 </Dialog.Root>
               ) : null}
             </>
-          ) : <span className="text-xs text-subtle-foreground">{tx(locale, `${editMode ? filtered.length : collectionEntries.length} entries`, `Записей: ${editMode ? filtered.length : collectionEntries.length}`)}</span>}
+          ) : <span className="text-xs text-subtle-foreground">{tx(locale, `${filtered.length} entries`, `Записей: ${filtered.length}`)}</span>}
         </div>
-        <div className={cn("flex items-center gap-2 self-end", !editMode && "hidden")}>
+        <div className="flex items-center gap-2 self-end">
           <NativeSelect value={String(pageSize)} onChange={(value) => { setPageSize(Number(value)); setPage(1); }} ariaLabel={tx(locale, "Rows per page", "Строк на странице")} className="h-8 w-20">
             {[10, 20, 50, 100].map((size) => <option key={size} value={size}>{size}</option>)}
           </NativeSelect>
