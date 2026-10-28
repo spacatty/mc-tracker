@@ -516,7 +516,7 @@ export function BulkImportPanel({
           ) : null}
 
           <div className="max-h-[calc(100vh-320px)] min-h-64 overflow-auto">
-            <table className="w-full min-w-[1280px] border-collapse text-sm">
+            <table className="w-full min-w-[1500px] border-collapse text-sm">
               <thead className="sticky top-0 z-10 bg-surface-muted text-left text-xs uppercase tracking-wider text-muted-foreground">
                 <tr className="border-b border-border">
                   <th className="w-10 px-3 py-2.5">
@@ -530,15 +530,15 @@ export function BulkImportPanel({
                       aria-label={tx(locale, "Select all", "Выбрать все")}
                     />
                   </th>
-                  <th className="w-24 px-2 py-2.5">{tx(locale, "Status", "Статус")}</th>
-                  <th className="w-28 px-2 py-2.5">{tx(locale, "Action", "Действие")}</th>
+                  <th className="min-w-24 px-2 py-2.5">{tx(locale, "Status", "Статус")}</th>
+                  <th className="min-w-32 px-2 py-2.5">{tx(locale, "Action", "Действие")}</th>
                   <th className="min-w-52 px-2 py-2.5">{tx(locale, "Name", "Название")}</th>
                   <th className="min-w-40 px-2 py-2.5">{tx(locale, "Category", "Категория")}</th>
-                  <th className="w-28 px-2 py-2.5">{tx(locale, "Amount", "Сумма")}</th>
-                  <th className="w-24 px-2 py-2.5">{tx(locale, "Currency", "Валюта")}</th>
-                  <th className="w-36 px-2 py-2.5">{tx(locale, "Billing", "Оплата")}</th>
-                  <th className="w-36 px-2 py-2.5">{tx(locale, "Start", "Начало")}</th>
-                  <th className="w-36 px-2 py-2.5">{tx(locale, "End / expiry", "Окончание")}</th>
+                  <th className="min-w-28 px-2 py-2.5">{tx(locale, "Amount", "Сумма")}</th>
+                  <th className="min-w-24 px-2 py-2.5">{tx(locale, "Currency", "Валюта")}</th>
+                  <th className="min-w-36 px-2 py-2.5">{tx(locale, "Billing", "Оплата")}</th>
+                  <th className="min-w-40 px-2 py-2.5">{tx(locale, "Start", "Начало")}</th>
+                  <th className="min-w-40 px-2 py-2.5">{tx(locale, "End / expiry", "Окончание")}</th>
                   <th className="min-w-36 px-2 py-2.5">{tx(locale, "Vendor", "Поставщик")}</th>
                   <th className="min-w-32 px-2 py-2.5">{tx(locale, "Account", "Аккаунт")}</th>
                   <th className="w-20 px-2 py-2.5" />
