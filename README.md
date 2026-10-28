@@ -36,8 +36,10 @@ Open [http://localhost:3000](http://localhost:3000). On the first visit, the app
 - `AUTH_SECRET`: required in production for signing session cookies.
 - `CRON_SECRET`: required in production for `/api/cron/notifications`; send it as the `x-cron-secret` header.
 - `SQLITE_PATH`: optional SQLite database path. Defaults to `data/mc-tracker.sqlite`.
-- `OPENROUTER_API_KEY`: optional; enables premium AI import features.
-- `OPENROUTER_MODEL`, `OPENROUTER_APP_URL`, `OPENROUTER_APP_NAME`, `AI_IMPORT_MAX_INPUT_CHARS`, `AI_IMPORT_MAX_OUTPUT_TOKENS`: optional AI import tuning.
+- `AI_API_KEY` (or legacy `OPENROUTER_API_KEY`): optional; enables Premium AI parsing of free-form text on the Import page. CSV/TSV/JSON import works without it.
+- `AI_MODEL` (or legacy `OPENROUTER_MODEL`): defaults to `deepseek/deepseek-v4.1-flash`. Any OpenRouter model that supports structured outputs works.
+- `AI_BASE_URL`, `AI_STRUCTURED_OUTPUT`: point at another OpenAI-compatible API. For DeepSeek's own API use `AI_BASE_URL=https://api.deepseek.com` with `AI_STRUCTURED_OUTPUT=json_object`.
+- `AI_IMPORT_MAX_INPUT_CHARS`, `AI_IMPORT_MAX_OUTPUT_TOKENS`, `OPENROUTER_APP_URL`, `OPENROUTER_APP_NAME`: optional AI tuning.
 
 Generate strong secrets with:
 

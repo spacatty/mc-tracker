@@ -20,7 +20,7 @@ import {
 import { analyzeAiImportAction, applyImportRowsAction } from "@/app/actions";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import type { Locale } from "@/lib/i18n";
-import type { AiDraftItem, AiQuestion } from "@/lib/ai/payment-extractor";
+import type { AiDraftItem, AiQuestion } from "@/lib/ai/import-schema";
 import {
   blankImportRow,
   entrySignature,
@@ -66,7 +66,7 @@ function rowFromAiDraft(draft: AiDraftItem, index: number): ImportRow {
     targetItemId: draft.targetItemId,
     name: draft.name,
     paymentType: draft.paymentType,
-    amountInput: String(draft.amount),
+    amountInput: draft.amountSource === "unknown" && !draft.amount ? "" : String(draft.amount),
     currency: draft.currency,
     billingStartAt: draft.billingStartAt || "",
     billingEndAt: draft.billingEndAt || "",

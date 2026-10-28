@@ -4,7 +4,7 @@ import { BulkImportPanel } from "@/components/bulk-import-panel";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { requireUser } from "@/lib/auth";
-import { aiConfigured, aiModelLabel } from "@/lib/ai/openrouter";
+import { aiConfigured, aiModelLabel } from "@/lib/ai/client";
 import { listCategoriesForWorkspace, listItemsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { getLocale } from "@/lib/i18n-server";
 
