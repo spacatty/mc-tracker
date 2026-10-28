@@ -39,6 +39,7 @@ Open [http://localhost:3000](http://localhost:3000). On the first visit, the app
 - `AI_API_KEY` (or legacy `OPENROUTER_API_KEY`): optional; enables Premium AI parsing of free-form text on the Import page. CSV/TSV/JSON import works without it.
 - `AI_MODEL` (or legacy `OPENROUTER_MODEL`): defaults to `deepseek/deepseek-v4.1-flash`. Any OpenRouter model that supports structured outputs works.
 - `AI_BASE_URL`, `AI_STRUCTURED_OUTPUT`: point at another OpenAI-compatible API. For DeepSeek's own API use `AI_BASE_URL=https://api.deepseek.com` with `AI_STRUCTURED_OUTPUT=json_object`.
+- `REDACT_KINDS`, `REDACT_DENYLIST`: leak prevention. JSON from `/api` routes and error strings shown in the UI are masked (IPs, domains, emails, credentials in URLs, API keys/tokens/passwords, deny-listed terms). Before free text is sent to the AI provider the same values are swapped for placeholders like `<<IP_1>>` and restored locally in the answer. See `src/lib/security/redact.ts`.
 - `AI_IMPORT_MAX_INPUT_CHARS`, `AI_IMPORT_MAX_OUTPUT_TOKENS`, `OPENROUTER_APP_URL`, `OPENROUTER_APP_NAME`: optional AI tuning.
 
 Generate strong secrets with:

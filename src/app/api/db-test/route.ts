@@ -1,6 +1,6 @@
-import { NextResponse } from "next/server";
 import { requireUser } from "@/lib/auth";
 import { testExternalConnection } from "@/lib/db";
+import { maskedJson } from "@/lib/security/api-response";
 
 export async function POST(request: Request) {
   await requireUser();
@@ -8,9 +8,9 @@ export async function POST(request: Request) {
 
   try {
     const message = await testExternalConnection(body.url || "");
-    return NextResponse.json({ ok: true, message });
+    return maskedJson({ ok: true, message });
   } catch (error) {
-    return NextResponse.json(
+    return maskedJson(
       { ok: false, message: error instanceof Error ? error.message : "Connection failed." },
       { status: 400 },
     );

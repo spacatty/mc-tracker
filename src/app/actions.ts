@@ -66,6 +66,7 @@ import type {
   UserRole,
   WorkspaceRole,
 } from "@/lib/types";
+import { maskText } from "@/lib/security/redact";
 import { exportWorkspaceOptionsSchema, parseImportPayload } from "@/lib/workspace-export";
 
 function required(value: FormDataEntryValue | null, label: string) {
@@ -300,7 +301,7 @@ export async function saveEntryBatchAction(input: EntryBatchInput): Promise<Entr
       success: false,
       saved: [],
       rowErrors: [],
-      message: error instanceof Error ? error.message : "Unable to save entries.",
+      message: error instanceof Error ? maskText(error.message) : "Unable to save entries.",
     };
   }
 }
@@ -309,13 +310,18 @@ export async function analyzeAiImportAction(input: string, answers?: Record<stri
   const user = await requireUser();
   requirePremium(user);
   const workspaceId = resolveWorkspaceId(workspaceIdArg || null, user.id);
-  return extractPaymentItems({
-    input,
-    answers,
-    categories: listCategoriesForWorkspace(workspaceId, user.id),
-    entries: listItemsForWorkspace(workspaceId, user.id),
-    vendors: listVendorSuggestionsForWorkspace(workspaceId, user.id),
-  });
+  try {
+    return await extractPaymentItems({
+      input,
+      answers,
+      categories: listCategoriesForWorkspace(workspaceId, user.id),
+      entries: listItemsForWorkspace(workspaceId, user.id),
+      vendors: listVendorSuggestionsForWorkspace(workspaceId, user.id),
+    });
+  } catch (error) {
+    // Provider errors can echo request fragments; never pass them through raw.
+    throw new Error(error instanceof Error ? maskText(error.message) : "AI parsing failed.");
+  }
 }
 
 /**
@@ -404,7 +410,7 @@ export async function applyImportRowsAction(input: { workspaceId: number; rows: 
       success: false,
       saved: [],
       rowErrors: [],
-      message: error instanceof Error ? error.message : "Unable to apply import.",
+      message: error instanceof Error ? maskText(error.message) : "Unable to apply import.",
     };
   }
 }

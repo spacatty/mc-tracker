@@ -1,5 +1,6 @@
 import "server-only";
 
+import { createRedactor } from "@/lib/security/redact";
 import type { BillingPeriod, Category, PaymentItem, VendorSuggestion } from "@/lib/types";
 import { generateStructured } from "./client";
 import {
@@ -216,13 +217,17 @@ export async function extractPaymentItems({
   if (!rawInput) throw new Error("Paste some text first.");
   if (rawInput.length > maxChars) throw new Error(`AI import input is too large. Limit is ${maxChars} characters.`);
 
-  const payload = buildImportPayload({ input: rawInput, categories, entries, vendors, answers });
-  const { data, model } = await generateStructured({
+  // IPs, domains, emails, secrets and deny-listed terms are swapped for stable
+  // placeholders before anything is sent; the model's answer is mapped back here.
+  const redactor = createRedactor();
+  const payload = redactor.redactDeep(buildImportPayload({ input: rawInput, categories, entries, vendors, answers }));
+  const { data: redacted, model } = await generateStructured({
     name: "tracker_import",
     schema: aiImportOutputSchema,
     system: SYSTEM_PROMPT,
     user: JSON.stringify(payload),
   });
+  const data = redactor.restoreDeep(redacted);
 
   return {
     items: data.items.map((item) => normalizeAiItem(item, categories, entries)),
