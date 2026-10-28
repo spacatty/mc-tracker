@@ -1,5 +1,6 @@
 import "server-only";
 
+import { delimitedColumnValues } from "@/lib/import/rows";
 import { createRedactor } from "@/lib/security/redact";
 import type { BillingPeriod, Category, PaymentItem, VendorSuggestion } from "@/lib/types";
 import { generateStructured } from "./client";
@@ -26,7 +27,7 @@ const SYSTEM_PROMPT = [
   "Priority of sources: the user's input, then answers, then existingEntries, then vendorMemory. vendorMemory only helps reuse exact spelling of a vendor the user clearly refers to; never let it replace a vendor the user named.",
   "vendorName is the provider/registrar/host; accountName is the login or account at that provider. Text like '<provider> account <name>' means vendorName=<provider>, accountName=<name>. Do not merge the two.",
   "Category: use the one the user names; otherwise infer from the data (domain names and registrars -> a domains category; IPs, hostnames, VPS/server labels -> a servers category) when such a category exists. Use null when nothing fits.",
-  "customFields: fill the chosen category's fields from the input using the listed field ids. Put leftover useful details in notes. Placeholders like <<IP_1>> or <<DOMAIN_2>> stand for redacted values: copy them verbatim into the right field.",
+  "customFields: fill the chosen category's fields from the input using the listed field ids. Put leftover useful details in notes. Placeholders like <<IP_1>>, <<DOMAIN_2>>, <<ACCOUNT_1>>, <<NAME_3>> or <<VENDOR_1>> stand for redacted values: copy them verbatim into the right field, and treat equal placeholders as the same value (an input <<NAME_3>> refers to the existing entry named <<NAME_3>>).",
   "Dates: output YYYY-MM-DD. If a row has two dates, they are start then end. A domain row with only an expiry date is recurring period=1y with billingEndAt=expiry and billingStartAt=null.",
   "Amounts: a bare trailing number on a billing row is the amount. Use the stated currency; if none is stated use null. Do not guess missing amounts, dates, periods or vendors: use null/empty and mention it in confidence.",
   "Ask a question only when a missing fact blocks a correct import for many rows (for example which existing entry a payment belongs to). Never ask about something already present in the input. Prefer importing with nulls over asking.",
@@ -220,6 +221,17 @@ export async function extractPaymentItems({
   // IPs, domains, emails, secrets and deny-listed terms are swapped for stable
   // placeholders before anything is sent; the model's answer is mapped back here.
   const redactor = createRedactor();
+  // Known private values are masked literally, on top of the pattern detectors:
+  // account logins, existing entry names, and optionally vendor names.
+  redactor.addTerms("ACCOUNT", [
+    ...entries.map((entry) => entry.accountName),
+    ...vendors.map((vendor) => vendor.accountName),
+    ...delimitedColumnValues(rawInput, "accountName"),
+  ]);
+  redactor.addTerms("NAME", entries.map((entry) => entry.name));
+  if (process.env.AI_REDACT_VENDORS === "true") {
+    redactor.addTerms("VENDOR", [...entries.map((entry) => entry.vendorName), ...vendors.map((vendor) => vendor.vendorName)]);
+  }
   const payload = redactor.redactDeep(buildImportPayload({ input: rawInput, categories, entries, vendors, answers }));
   const { data: redacted, model } = await generateStructured({
     name: "tracker_import",

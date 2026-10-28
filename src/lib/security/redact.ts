@@ -10,24 +10,28 @@
  *
  * Environment:
  *   REDACT_KINDS     comma list of kinds to detect; default all of
- *                    secret,email,url_credentials,ip,domain,denylist
+ *                    secret,email,url_credentials,account,ip,domain,denylist
  *   REDACT_DENYLIST  comma separated literal terms (case-insensitive) or /regex/flags
  *                    entries that must never leave the server, e.g. internal codenames.
  */
 
-export type RedactionKind = "secret" | "email" | "url_credentials" | "ip" | "domain" | "denylist";
+export type RedactionKind = "secret" | "email" | "url_credentials" | "account" | "ip" | "domain" | "denylist";
 
-const ALL_KINDS: RedactionKind[] = ["secret", "email", "url_credentials", "ip", "domain", "denylist"];
+const ALL_KINDS: RedactionKind[] = ["secret", "email", "url_credentials", "account", "ip", "domain", "denylist"];
 
 type Detector = { kind: RedactionKind; label: string; pattern: RegExp; groups?: number[] };
 
-// File extensions and similar dotted tokens that look like domains but are not.
+// File extensions and similar dotted tokens that look like domains but are not real TLDs.
 const NON_TLDS = new Set([
-  "js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "css", "scss", "html", "htm", "md", "mdx", "txt", "csv", "tsv", "xml",
+  "js", "jsx", "ts", "tsx", "mjs", "cjs", "json", "css", "scss", "html", "htm", "mdx", "txt", "csv", "tsv", "xml",
   "yml", "yaml", "toml", "ini", "env", "log", "lock", "sql", "sqlite", "db", "png", "jpg", "jpeg", "gif", "svg", "webp",
-  "ico", "pdf", "zip", "gz", "tar", "exe", "dll", "so", "py", "rb", "go", "rs", "java", "php", "sh", "bat", "ps1", "map",
-  "min", "test", "spec", "d", "config", "local", "example", "prototype", "length", "then", "catch", "value", "name", "id",
+  "ico", "pdf", "gz", "tar", "exe", "dll", "rb", "java", "php", "bat", "ps1", "map",
+  "min", "test", "spec", "d", "config", "local", "example", "prototype", "length", "then", "catch", "value",
 ]);
+// Real TLDs that double as file extensions (.sh is St Helena, .rs Serbia, ...). These are
+// treated as domains unless they clearly sit in a file path, erring on the side of masking.
+const AMBIGUOUS_TLDS = new Set(["md", "sh", "rs", "py", "so", "zip", "mov", "name", "id", "pl", "ps", "rest"]);
+const ACCOUNT_STOPWORDS = new Set(["to", "for", "at", "the", "is", "in", "on", "with", "and", "of", "name", "details", "info", "page", "panel", "a", "an", "id"]);
 
 const SECRET_PATTERNS: RegExp[] = [
   /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/g,
@@ -49,6 +53,9 @@ const EMAIL = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,24}\b/g;
 const URL_CREDENTIALS = /\b([a-z][a-z0-9+.-]*:\/\/)([^\s:@/]+):([^\s@/]+)@/gi;
 // Assignment-style secrets: "password=hunter2", "api_key: abc", "token = xyz".
 const KEY_VALUE_SECRET = /(?<![\p{L}\d_-])((?:pass(?:word|wd)?|pwd|pw|пароль|secret|token|api[_-]?key|apikey|access[_-]?key|auth|private[_-]?key|client[_-]?secret)\s*[:=]\s*)(?:"([^"\n]{1,200})"|'([^'\n]{1,200})'|([^\s"',;]{3,}))/giu;
+// "account ops-team", "login: jdoe", "username=root". The keyword must be followed by
+// whitespace or : / = so "accounts" or "logins" never trigger.
+const ACCOUNT = /(?<![\p{L}\d_-])((?:account|acct|login|username|аккаунт|логин)(?:\s*[:=]\s*|\s+))([^\s,;:"'()<>]{2,64})/giu;
 const DOMAIN = /\b(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+([a-z]{2,24}|xn--[a-z0-9-]{2,59})\b\.?/gi;
 
 function enabledKinds() {
@@ -89,6 +96,7 @@ function detectors(): Detector[] {
   }
   if (kinds.has("url_credentials")) list.push({ kind: "url_credentials", label: "CREDENTIALS", pattern: URL_CREDENTIALS });
   if (kinds.has("email")) list.push({ kind: "email", label: "EMAIL", pattern: EMAIL });
+  if (kinds.has("account")) list.push({ kind: "account", label: "ACCOUNT", pattern: ACCOUNT, groups: [2] });
   if (kinds.has("ip")) {
     list.push({ kind: "ip", label: "IP", pattern: IPV4 });
     list.push({ kind: "ip", label: "IP", pattern: IPV6 });
@@ -97,7 +105,7 @@ function detectors(): Detector[] {
   return list;
 }
 
-const PLACEHOLDER = /<<[A-Z]+_\d+>>|\[(?:secret|ip|email|domain|credentials|redacted)\]/g;
+const PLACEHOLDER = /<<[A-Z]+_\d+>>|\[(?:secret|ip|email|domain|credentials|account|redacted)\]/g;
 
 function replaceOutsidePlaceholders(text: string, pattern: RegExp, replace: (match: RegExpExecArray) => string | null) {
   // Never re-mask an existing placeholder (e.g. "<<IP_1>>" must not become a domain).
@@ -131,6 +139,11 @@ function redactWith(text: string, onValue: (detector: Detector, value: string) =
       if (detector.kind === "domain") {
         const tld = (match[1] || "").toLowerCase();
         if (NON_TLDS.has(tld) || /^\d/.test(match[0])) return null;
+        if (AMBIGUOUS_TLDS.has(tld) && /[\\/]$/.test(output.slice(0, match.index))) return null;
+      }
+      if (detector.kind === "account") {
+        const value = (match[2] || "").replace(/[.]+$/, "");
+        if (!value || ACCOUNT_STOPWORDS.has(value.toLowerCase())) return null;
       }
       if (detector.kind === "url_credentials") {
         return `${match[1]}${onValue(detector, `${match[2]}:${match[3]}`)}@`;
@@ -182,8 +195,28 @@ export function createRedactor() {
     return token;
   }
 
+  // Values the caller already knows are sensitive (account names, entry names, ...),
+  // matched literally before the pattern detectors run. Longest first so
+  // "ops-team-eu" is not split by "ops-team".
+  const knownTerms: Array<{ label: string; term: string; pattern: RegExp }> = [];
+
+  function addTerms(label: string, values: Iterable<string | null | undefined>) {
+    const seen = new Set(knownTerms.map((entry) => entry.term.toLowerCase()));
+    for (const raw of values) {
+      const term = String(raw || "").trim();
+      if (term.length < 3 || seen.has(term.toLowerCase()) || /^<<[A-Z]+_\d+>>$/.test(term)) continue;
+      seen.add(term.toLowerCase());
+      knownTerms.push({ label, term, pattern: new RegExp(`(?<![\\p{L}\\d_.-])${escapeRegExp(term)}(?![\\p{L}\\d_-])`, "giu") });
+    }
+    knownTerms.sort((a, b) => b.term.length - a.term.length);
+  }
+
   function redact(text: string) {
-    return redactWith(text, (detector, value) => tokenFor(detector.label, value));
+    let output = text;
+    for (const { label, term, pattern } of knownTerms) {
+      output = replaceOutsidePlaceholders(output, pattern, () => tokenFor(label, term));
+    }
+    return redactWith(output, (detector, value) => tokenFor(detector.label, value));
   }
 
   function redactDeep<T>(value: T): T {
@@ -209,6 +242,7 @@ export function createRedactor() {
   }
 
   return {
+    addTerms,
     redact,
     redactDeep,
     restore,

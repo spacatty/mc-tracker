@@ -452,3 +452,17 @@ function signaturePart(value: string | null | undefined) {
 export function entrySignature(entry: { name: string; vendorName?: string | null; accountName?: string | null }) {
   return [entry.name, entry.vendorName, entry.accountName].map(signaturePart).join("|");
 }
+
+/**
+ * Values of one logical column (by header alias) in delimited text, or [] when the
+ * text has no recognisable header. Used to pre-register sensitive columns such as
+ * account logins for redaction before free text is sent to the AI.
+ */
+export function delimitedColumnValues(text: string, field: keyof typeof COLUMN_ALIASES) {
+  const delimiter = detectDelimiter(text.trim());
+  if (!delimiter) return [];
+  const [headers, ...body] = splitDelimited(text.trim(), delimiter);
+  const column = headers?.findIndex((header) => COLUMN_ALIASES[field].includes(headerKey(header))) ?? -1;
+  if (column < 0) return [];
+  return body.map((cells) => cells[column] || "").filter(Boolean);
+}
