@@ -13,16 +13,16 @@ export function tx(locale: Locale, en: string, ru: string) {
 /** Text colour + soft background per token kind, shared by the editor highlight and the legend. */
 export const TOKEN_STYLES: Record<TokenKind, string> = {
   name: "text-zinc-50",
-  category: "text-violet-200 bg-violet-500/20 shadow-[0_0_0_2px_rgba(139,92,246,0.20)]",
-  vendor: "text-sky-200 bg-sky-500/15 shadow-[0_0_0_2px_rgba(14,165,233,0.15)]",
-  money: "text-emerald-200 bg-emerald-500/15 shadow-[0_0_0_2px_rgba(16,185,129,0.15)]",
-  period: "text-emerald-200 bg-emerald-500/15 shadow-[0_0_0_2px_rgba(16,185,129,0.15)]",
-  date: "text-amber-200 bg-amber-500/15 shadow-[0_0_0_2px_rgba(245,158,11,0.15)]",
-  field: "text-fuchsia-200 bg-fuchsia-500/15 shadow-[0_0_0_2px_rgba(217,70,239,0.15)]",
-  ip: "text-cyan-200 bg-cyan-500/15 shadow-[0_0_0_2px_rgba(6,182,212,0.15)]",
+  category: "text-violet-200 bg-violet-400/10",
+  vendor: "text-sky-200 bg-sky-400/10",
+  money: "text-emerald-200 bg-emerald-400/10",
+  period: "text-emerald-200 bg-emerald-400/10",
+  date: "text-amber-200 bg-amber-400/10",
+  field: "text-zinc-200 bg-white/[0.07]",
+  ip: "text-zinc-200 bg-white/[0.07]",
   url: "text-blue-300 underline decoration-blue-400/40 underline-offset-4",
   notes: "text-zinc-500 italic",
-  action: "text-orange-200 bg-orange-500/20 shadow-[0_0_0_2px_rgba(249,115,22,0.2)]",
+  action: "text-orange-200 bg-orange-400/10",
 };
 
 export const TOKEN_DOT: Record<TokenKind, string> = {
@@ -129,8 +129,8 @@ const CHIP_TONES: Record<NonNullable<ChipProps["tone"]>, string> = {
   violet: "border-violet-400/20 bg-violet-500/10 text-violet-100 hover:bg-violet-500/20",
   sky: "border-sky-400/20 bg-sky-500/10 text-sky-100 hover:bg-sky-500/20",
   emerald: "border-emerald-400/20 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20",
-  amber: "border-amber-400/20 bg-amber-500/10 text-amber-100 hover:bg-amber-500/20",
-  fuchsia: "border-fuchsia-400/20 bg-fuchsia-500/10 text-fuchsia-100 hover:bg-fuchsia-500/20",
+  amber: "border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]",
+  fuchsia: "border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08]",
   cyan: "border-cyan-400/20 bg-cyan-500/10 text-cyan-100 hover:bg-cyan-500/20",
   orange: "border-orange-400/25 bg-orange-500/10 text-orange-100 hover:bg-orange-500/20",
   red: "border-red-400/25 bg-red-500/10 text-red-100 hover:bg-red-500/20",

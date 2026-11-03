@@ -369,7 +369,6 @@ export function EntryInspector({
           }}
           className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[460px] flex-col border-l border-white/10 bg-[#0b0b10]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
         >
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-48 opacity-25" style={{ background: `radial-gradient(120% 80% at 0% 0%, ${color}55, transparent 60%)` }} />
 
           {/* Top bar */}
           <div className="relative flex items-center gap-1 px-4 pt-3">
@@ -561,7 +560,7 @@ export function EntryInspector({
                 <ol className="relative ml-2 space-y-3 border-l border-white/10 pl-4">
                   {historyRows.map((payment) => (
                     <li key={payment.id} className="relative">
-                      <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.7)]" />
+                      <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-400" />
                       <p className="text-sm text-zinc-200">{formatMoney(payment.amount, payment.currency)}</p>
                       <p className="text-xs text-zinc-500">{shortDate(payment.paymentDate, locale, true)}{payment.dueDate ? ` → ${shortDate(payment.dueDate, locale, true)}` : ""}</p>
                     </li>

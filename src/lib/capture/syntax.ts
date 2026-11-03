@@ -16,8 +16,10 @@ import { slugify } from "@/lib/utils";
  *   @vendor/account vendor (quote names with spaces: @"Digital Ocean"), optional account
  *   €4.51/mo        price with currency (symbol or ISO code) and optional period
  *   /mo /yr /w /q /90d /once   period on its own
- *   2026-11-12      renews / expires on; a range 2026-10-12..2026-11-12 sets start and end
- *   key:value       custom field of the category (by label), or account:, url:, start:, renews:
+ *   12.10.2026      billing start (also 12/10/26, 2026-10-12); renewal follows from the period;
+ *                   a range 2026-10-12..2026-11-12 or renews:2026-11-12 sets the end explicitly
+ *   !attr:value     custom field of the category (by label, fuzzy prefix; "!domain: x" works too)
+ *   key:value       same, plus built-ins account:, url:, start:, renews:
  *   https://…       vendor / panel URL
  *   1.2.3.4         IP, stored in the category's IP field when it has one
  *   // text         notes until the end of the line
@@ -111,10 +113,10 @@ const SYMBOLS: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "
 const SYMBOL_FOR: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", RUB: "₽" };
 
 const PERIOD_ALIASES: Array<[RegExp, BillingPeriod | "once"]> = [
-  [/^(w|wk|week|weekly|7d|нед|неделя)$/i, "7d"],
-  [/^(m|mo|mon|month|monthly|1m|1mo|мес|месяц)$/i, "1m"],
+  [/^(w|wk|week|weekly|7d|нед|неделя|еженедельно)$/i, "7d"],
+  [/^(m|mo|mon|month|monthly|1m|1mo|мес|месяц|ежемесячно)$/i, "1m"],
   [/^(q|3m|3mo|quarter|quarterly|кв|квартал)$/i, "3m"],
-  [/^(y|yr|year|yearly|annual|1y|12m|12mo|г|год)$/i, "1y"],
+  [/^(y|yr|year|yearly|annual|annually|1y|12m|12mo|г|год|ежегодно)$/i, "1y"],
   [/^(once|one|1x|single|разово)$/i, "once"],
 ];
 
@@ -171,7 +173,41 @@ function scan(line: string) {
     }
     raw.push({ start, end: i, text: line.slice(start, i) });
   }
-  return raw;
+  return mergeMoney(raw);
+}
+
+const NUMBER_PART = /^\d+(?:[.,]\d{1,2})?k?$/i;
+const SYMBOL_PART = /^([$€£₽¥₸₹]|zł)$/;
+
+function isCurrencyPart(value: string) {
+  const [head] = splitOnce(value, "/");
+  return SYMBOL_PART.test(head) || CURRENCY_CODES.has(head.toUpperCase());
+}
+
+/** Joins "25 USD", "2500 rub/mo", "$ 25" into one money token so any common spelling works. */
+function mergeMoney(raw: Array<{ start: number; end: number; text: string; notes?: boolean }>) {
+  const merged: typeof raw = [];
+  for (let i = 0; i < raw.length; i += 1) {
+    const current = raw[i];
+    const next = raw[i + 1];
+    if (next && !current.notes && !next.notes) {
+      const numberThenCurrency = NUMBER_PART.test(current.text) && isCurrencyPart(next.text);
+      const symbolThenNumber = SYMBOL_PART.test(current.text) && /^\d+(?:[.,]\d{1,2})?k?(\/.*)?$/i.test(next.text);
+      const keyThenValue = /^!?[\p{L}_][\p{L}\p{N}_-]*:$/u.test(current.text) && !/^(https?|\/\/)/i.test(next.text);
+      if (keyThenValue) {
+        merged.push({ start: current.start, end: next.end, text: `${current.text}${next.text}` });
+        i += 1;
+        continue;
+      }
+      if (numberThenCurrency || symbolThenNumber) {
+        merged.push({ start: current.start, end: next.end, text: `${current.text}${next.text}` });
+        i += 1;
+        continue;
+      }
+    }
+    merged.push(current);
+  }
+  return merged;
 }
 
 export function parsePeriod(value: string): { period: BillingPeriod | null; paymentType: PaymentType; customDays?: number } | null {
@@ -225,10 +261,10 @@ export function parseDate(value: string): string | null {
   let year: number;
   let month: number;
   let day: number;
-  const iso = clean.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  const dotted = clean.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+  const iso = clean.match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})$/);
+  const dotted = clean.match(/^(\d{1,2})[./-](\d{1,2})[./-](\d{2}|\d{4})$/);
   if (iso) [year, month, day] = [Number(iso[1]), Number(iso[2]), Number(iso[3])];
-  else if (dotted) [day, month, year] = [Number(dotted[1]), Number(dotted[2]), Number(dotted[3])];
+  else if (dotted) [day, month, year] = [Number(dotted[1]), Number(dotted[2]), Number(dotted[3].length === 2 ? `20${dotted[3]}` : dotted[3])];
   else return null;
   const date = new Date(Date.UTC(year, month - 1, day));
   if (date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) return null;
@@ -238,8 +274,9 @@ export function parseDate(value: string): string | null {
 function parseDateRange(text: string) {
   const parts = text.split(/\.\.|→|–/);
   if (parts.length === 1) {
-    const end = parseDate(parts[0]);
-    return end ? { start: null as string | null, end } : null;
+    // A lone date is when billing starts; the renewal follows from the period.
+    const start = parseDate(parts[0]);
+    return start ? { start, end: null as string | null } : null;
   }
   if (parts.length !== 2) return null;
   const start = parseDate(parts[0]);
@@ -367,7 +404,7 @@ export function parseLine(text: string, index: number, context: CaptureContext):
       }
       continue;
     }
-    if (value.startsWith("/") && value.length > 1) {
+    if ((value.startsWith("/") && value.length > 1) || /^(monthly|yearly|annually|annual|weekly|quarterly|ежемесячно|ежегодно|еженедельно)$/i.test(value)) {
       const period = parsePeriod(value);
       if (period) {
         token.kind = "period";
@@ -388,6 +425,17 @@ export function parseLine(text: string, index: number, context: CaptureContext):
     if (IP_PATTERN.test(value) && value.split(/[.:]/).slice(0, 4).every((part) => Number(part) <= 255)) {
       token.kind = "ip";
       pendingIps.push(token);
+      continue;
+    }
+    const attribute = value.match(/^!([\p{L}_][\p{L}\p{N}_-]*):?(.*)$/u);
+    if (attribute) {
+      // !attr:value is always a field of the chosen category.
+      token.kind = "field";
+      if (attribute[2]) pendingFields.push({ token, key: attribute[1], value: unquote(attribute[2]) });
+      else {
+        token.ok = false;
+        token.hint = "add :value";
+      }
       continue;
     }
     const keyValue = value.match(/^([\p{L}_][\p{L}\p{N}_-]*):(.+)$/u);
@@ -445,6 +493,11 @@ export function parseLine(text: string, index: number, context: CaptureContext):
   }
   row.name = names.join(" ").trim();
   row.notes = notes.join("\n");
+  // "#domains !domain: sample.com" needs no separate name: the first filled field names it.
+  if (!row.name && row.action === "create" && category) {
+    const first = category.fields.find((field) => typeof row.customFields[field.id] === "string" && String(row.customFields[field.id]).trim());
+    if (first) row.name = String(row.customFields[first.id]).trim();
+  }
 
   const assumed = new Set<"amount" | "dates" | "category" | "currency">();
   if (row.action === "edit" && target) {
@@ -588,17 +641,17 @@ export function rowToLine(row: ImportRow, context: Pick<CaptureContext, "categor
   }
   const customDays = Number(row.customPeriodDaysInput) || 30;
   if (row.billingEndAt || row.billingStartAt) {
-    const derivedStart = row.billingEndAt && row.paymentType === "recurring" ? shiftByPeriod(row.billingEndAt, row.period, customDays, -1) : null;
-    if (row.billingEndAt && (!row.billingStartAt || row.billingStartAt === derivedStart) && !options.keepDates) parts.push(row.billingEndAt);
+    const derivedEnd = row.billingStartAt && row.paymentType === "recurring" ? shiftByPeriod(row.billingStartAt, row.period, customDays, 1) : null;
+    if (row.billingStartAt && (!row.billingEndAt || row.billingEndAt === derivedEnd || row.paymentType !== "recurring") && !options.keepDates) parts.push(row.billingStartAt);
     else if (row.billingStartAt && row.billingEndAt) parts.push(`${row.billingStartAt}..${row.billingEndAt}`);
-    else if (row.billingStartAt) parts.push(`start:${row.billingStartAt}`);
+    else if (row.billingEndAt) parts.push(`renews:${row.billingEndAt}`);
   }
   if (row.vendorUrl.trim()) parts.push(row.vendorUrl.trim().replace(/\s/g, "%20"));
   if (category) {
     category.fields.forEach((field) => {
       const value = row.customFields[field.id];
       if (value === undefined || value === null || value === "" || value === false) return;
-      parts.push(`${fieldKey(field)}:${quoteIfNeeded(value === true ? "yes" : String(value))}`);
+      parts.push(`!${fieldKey(field)}:${quoteIfNeeded(value === true ? "yes" : String(value))}`);
     });
   }
   const notes = row.notes.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -607,7 +660,7 @@ export function rowToLine(row: ImportRow, context: Pick<CaptureContext, "categor
 }
 
 export const CAPTURE_EXAMPLES = [
-  "hz-fsn-01 #servers @Hetzner €4.51/mo ip:95.217.10.4",
-  "acme.dev #domains @Cloudflare $10.44/yr 2027-01-05",
+  "hz-fsn-01 #servers @Hetzner €4.51/mo !ip: 95.217.10.4",
+  "acme.dev #domains @Cloudflare 10.44 USD/yr 05.01.2026",
   "Figma @Figma/design@acme $15/mo // 1 editor seat",
 ];

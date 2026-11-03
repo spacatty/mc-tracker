@@ -61,20 +61,18 @@ export function CaptureCard({
   return (
     <div
       className={cn(
-        "capture-card-in group relative overflow-hidden rounded-2xl border bg-gradient-to-b from-white/[0.045] to-white/[0.015] p-4 transition",
+        "capture-card-in group relative overflow-hidden rounded-xl border bg-white/[0.02] p-5 transition",
         hasErrors ? "border-red-400/40" : "border-white/[0.08] hover:border-white/15",
       )}
       style={{ animationDelay: `${Math.min(index, 6) * 35}ms` }}
     >
-      <span className="pointer-events-none absolute inset-y-0 left-0 w-1" style={{ background: color, boxShadow: `0 0 24px ${color}` }} />
-      <span className="pointer-events-none absolute -right-16 -top-16 h-40 w-40 rounded-full opacity-[0.07] blur-2xl" style={{ background: color }} />
 
       <div className="relative flex items-start gap-3">
         <EditorPopover
           title={tx(locale, "Category", "Категория")}
           width="w-64"
           trigger={
-            <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-xl border border-white/10 transition hover:scale-105" style={{ background: `${color}1f`, color }} title={tx(locale, "Change category", "Сменить категорию")}>
+            <button type="button" className="grid h-11 w-11 shrink-0 place-items-center rounded-lg border border-white/10 bg-white/[0.03] transition hover:bg-white/[0.07]" style={{ color }} title={tx(locale, "Change category", "Сменить категорию")}>
               {isPay ? <Receipt className="h-5 w-5" /> : <AppIcon name={category?.icon || "CircleDashed"} className="h-5 w-5" />}
             </button>
           }
@@ -175,7 +173,7 @@ export function CaptureCard({
         </button>
       </div>
 
-      <div className="relative mt-3 flex flex-wrap items-center gap-1.5 pl-14">
+      <div className="relative mt-4 flex flex-wrap items-center gap-2 pl-14">
         {isPay ? (
           <EditorPopover
             title={tx(locale, "Paid on", "Дата оплаты")}
@@ -192,7 +190,7 @@ export function CaptureCard({
               <Chip tone="amber" icon={row.paymentType === "recurring" ? <RefreshCw className="h-3.5 w-3.5" /> : <CalendarClock className="h-3.5 w-3.5" />} muted={assumed.has("dates")}>
                 {row.paymentType === "recurring" ? (
                   <>
-                    {tx(locale, "Renews", "Продление")} {shortDate(row.billingEndAt, locale)}
+                    {shortDate(row.billingStartAt, locale)} → {shortDate(row.billingEndAt, locale)}
                     {daysLeft !== null ? <span className={cn("ml-1", urgencyTone(daysLeft))}>· {relativeDays(daysLeft, locale)}</span> : null}
                   </>
                 ) : (
@@ -227,7 +225,7 @@ export function CaptureCard({
                 <Chip tone={filled ? "fuchsia" : "ghost"} className={cn(errors[`customFields.${field.id}`] && "border-red-400/60 text-red-200")}>
                   {filled ? (
                     <>
-                      <span className="text-fuchsia-300/70">{field.label}</span> {field.type === "checkbox" ? tx(locale, "yes", "да") : String(value)}
+                      <span className="text-zinc-500">{field.label}</span> {field.type === "checkbox" ? tx(locale, "yes", "да") : String(value)}
                     </>
                   ) : (
                     <>

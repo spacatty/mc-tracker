@@ -5,7 +5,7 @@ import { ArrowRight, CornerDownLeft, FileUp, Loader2, Sparkles, Undo2, Wand2, X,
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { analyzeAiImportAction, applyImportRowsAction, type CaptureContextPayload } from "@/app/actions";
 import type { AiQuestion } from "@/lib/ai/import-schema";
-import { CAPTURE_EXAMPLES, parseCapture, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
+import { CAPTURE_EXAMPLES, parseCapture, parseDate, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import { importRowPayload, parseTabularInput, rowFromAiDraft, validateImportRow, type ImportRow, type ImportRowErrors } from "@/lib/import/rows";
 import type { Locale } from "@/lib/i18n";
@@ -18,7 +18,52 @@ import { Chip, Kbd, TOKEN_DOT, TOKEN_STYLES, monthlyEquivalent, tx } from "./sha
 
 const CURRENCY_CODES = SUPPORTED_CURRENCIES.map((currency) => currency.code as string);
 
-type Suggestion = { key: string; label: string; insert: string; icon?: ReactNode; detail?: string };
+type Suggestion = { key: string; label: string; insert: string; replace?: boolean; icon?: ReactNode; detail?: string };
+type GuideStep = "category" | "name" | "vendor" | "price" | "date";
+type Guide = { step: GuideStep | "done" | "field"; steps: GuideStep[]; done: Set<GuideStep>; suggestions: Suggestion[]; question: string };
+
+const STEP_LABELS: Record<GuideStep, [string, string]> = {
+  category: ["Category", "Категория"],
+  name: ["Name", "Название"],
+  vendor: ["Vendor", "Поставщик"],
+  price: ["Price", "Цена"],
+  date: ["Billing start", "Начало оплаты"],
+};
+const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", RUB: "₽" };
+const SYMBOL_CODES: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "¥": "JPY" };
+const PERIOD_CHOICES = [
+  { token: "/mo", en: "monthly", ru: "в месяц" },
+  { token: "/yr", en: "yearly", ru: "в год" },
+  { token: "/q", en: "quarterly", ru: "в квартал" },
+  { token: "/w", en: "weekly", ru: "в неделю" },
+  { token: "/once", en: "one-time", ru: "разово" },
+];
+
+/** 3 = prefix, 2 = substring, 1 = letters in order (typo-tolerant-ish), 0 = no match. */
+function fuzzyScore(query: string, label: string) {
+  const q = query.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  const l = label.toLowerCase().replace(/[^\p{L}\p{N}]/gu, "");
+  if (!q) return 1;
+  if (l.startsWith(q)) return 3;
+  if (l.includes(q)) return 2;
+  let index = 0;
+  for (const char of l) if (char === q[index]) index += 1;
+  return index === q.length && q.length >= 2 ? 1 : 0;
+}
+
+function preferredCurrencies(context: CaptureContext) {
+  const counts = new Map<string, number>();
+  context.entries.forEach((entry) => counts.set(entry.currency, (counts.get(entry.currency) || 0) + 1));
+  return [...counts.entries()].sort((a, b) => b[1] - a[1]).map(([code]) => code);
+}
+
+function dottedDate(date: Date) {
+  return `${String(date.getUTCDate()).padStart(2, "0")}.${String(date.getUTCMonth() + 1).padStart(2, "0")}.${date.getUTCFullYear()}`;
+}
+
+function formatHuman(iso: string, locale: Locale) {
+  return new Date(`${iso}T00:00:00.000Z`).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
+}
 
 export type CaptureSaveResult = { created: number[]; updated: number; paid: number };
 
@@ -91,6 +136,7 @@ export function QuickCapture({
   const [caret, setCaret] = useState(0);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [categoryOverride, setCategoryOverride] = useState<number | null | undefined>(undefined);
   const [errors, setErrors] = useState<Record<number, ImportRowErrors>>({});
   const [serverMessage, setServerMessage] = useState("");
@@ -103,6 +149,7 @@ export function QuickCapture({
   const [isThinking, startThinking] = useTransition();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
+  const pendingCaret = useRef<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const defaultCategory = categoryOverride === undefined ? defaultCategoryId : categoryOverride;
@@ -130,7 +177,16 @@ export function QuickCapture({
     area.style.height = `${Math.min(Math.max(area.scrollHeight, 64), 260)}px`;
     if (mirrorRef.current) mirrorRef.current.scrollTop = area.scrollTop;
   }
-  useLayoutEffect(fitTextarea, [text, open]);
+  useLayoutEffect(() => {
+    fitTextarea();
+    // Place the caret in the same commit as the new text so fast typing never lands in the wrong spot.
+    const area = textareaRef.current;
+    if (area && pendingCaret.current !== null) {
+      area.focus();
+      area.setSelectionRange(pendingCaret.current, pendingCaret.current);
+      pendingCaret.current = null;
+    }
+  }, [text, open]);
 
   useEffect(() => {
     if (!open) return;
@@ -145,46 +201,140 @@ export function QuickCapture({
     return () => cancelAnimationFrame(frame);
   }, [open]);
 
-  // Autocomplete for the word under the caret: #category, @vendor, @vendor/account, or field keys.
-  const suggestions: Suggestion[] = useMemo(() => {
-    if (!payload) return [];
-    const { word } = wordAt(text, caret);
-    if (word.startsWith("#")) {
-      const query = slugify(word.slice(1).replace(/"/g, ""));
-      return context.categories
-        .filter((category) => !query || slugify(category.name).includes(query))
-        .slice(0, 6)
-        .map((category) => ({
-          key: `c${category.id}`,
-          label: category.name,
-          insert: `#${slugify(category.name)}`,
-          icon: <AppIcon name={category.icon} className="h-3.5 w-3.5" />,
-          detail: category.fields.length ? category.fields.map((field) => field.label).slice(0, 3).join(", ") : undefined,
-        }));
-    }
-    if (word.startsWith("@")) {
-      const body = word.slice(1);
+  // Guided entry: for the line under the caret, work out which step comes next
+  // (category → name → vendor → price → billing start) and offer fuzzy suggestions for it.
+  const caretLine = lineAt(text, caret);
+  const currentLine = parsedByLine.get(caretLine.index);
+  const caretWord = wordAt(text, caret).word;
+  const guide: Guide = useMemo(() => {
+    const steps: GuideStep[] = ["category", "name", "vendor", "price", "date"];
+    if (!payload) return { step: "done", steps, done: new Set(), suggestions: [], question: "" };
+    const row = currentLine?.row;
+    const skippedHere = (step: GuideStep) => skipped.has(`${caretLine.index}:${step}`);
+    const done = new Set<GuideStep>();
+    if (row && (row.categoryId !== null || skippedHere("category"))) done.add("category");
+    if (row?.name) done.add("name");
+    if (row && (row.vendorName || skippedHere("vendor"))) done.add("vendor");
+    if (row && (!currentLine?.assumed.has("amount") || skippedHere("price"))) done.add("price");
+    if (row && (!currentLine?.assumed.has("dates") || skippedHere("date"))) done.add("date");
+    if (row && row.action !== "create") ["category", "name", "vendor", "date"].forEach((step) => done.add(step as GuideStep));
+
+    const word = caretWord.replace(/"/g, "");
+    const plainWord = word && !/^[#@/]/.test(word) && !word.includes(":") ? word : "";
+    const wordIsNumber = /^[$€£₽¥]?\d+(?:[.,]\d{0,2})?k?$/i.test(word) && !/^\d{1,2}[./-]\d/.test(word);
+    const wordIsMoney = Boolean(currentLine?.tokens.find((token) => token.kind === "money" && token.end === caret - caretLine.start));
+    const wordIsDate = /^\d{1,4}[./-]\d{0,2}([./-]\d{0,4})?$/.test(word);
+
+    let step: GuideStep | "done" | "field" = steps.find((candidate) => !done.has(candidate)) || "done";
+    if (word.startsWith("!")) step = "field";
+    else if (word.startsWith("#")) step = "category";
+    else if (word.startsWith("@")) step = "vendor";
+    else if (wordIsMoney || wordIsNumber) step = "price";
+    else if (wordIsDate) step = "date";
+
+    const suggestions: Suggestion[] = [];
+    let question = "";
+    if (step === "field") {
+      const category = context.categories.find((candidate) => candidate.id === (row?.categoryId ?? null));
+      const query = word.slice(1).replace(/:.*$/, "");
+      if (!category) question = tx(locale, "Pick a #category first; its fields show up here.", "Сначала выберите #категорию — её поля появятся здесь.");
+      else {
+        question = tx(locale, `${category.name} fields`, `Поля «${category.name}»`);
+        category.fields
+          .map((field) => ({ field, score: query ? Math.max(fuzzyScore(query, field.label), fuzzyScore(query, field.id)) : 1 }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .forEach(({ field }) => suggestions.push({ key: `f${field.id}`, label: field.label, insert: `!${slugify(field.label) || field.id}:`, replace: true, detail: row?.customFields[field.id] ? String(row.customFields[field.id]) : undefined }));
+      }
+    } else if (step === "category") {
+      question = tx(locale, "Which category?", "Какая категория?");
+      const query = word.startsWith("#") ? word.slice(1) : plainWord;
+      const ranked = context.categories
+        .map((category) => ({ category, score: query ? fuzzyScore(query, category.name) : 1 }))
+        .filter((entry) => entry.score > 0 || !word.startsWith("#"))
+        .sort((a, b) => b.score - a.score);
+      ranked.slice(0, 7).forEach(({ category, score }) => suggestions.push({
+        key: `c${category.id}`,
+        label: category.name,
+        insert: `#${slugify(category.name)}`,
+        replace: word.startsWith("#") || (Boolean(query) && score >= 2),
+        icon: <AppIcon name={category.icon} className="h-3.5 w-3.5" />,
+      }));
+    } else if (step === "name") {
+      question = tx(locale, "What is it called? Type a name, like hz-fsn-01 or acme.dev", "Как называется? Например hz-fsn-01 или acme.dev");
+    } else if (step === "vendor") {
+      question = tx(locale, "Who do you pay? (vendor)", "Кому платите? (поставщик)");
+      const body = word.startsWith("@") ? word.slice(1) : plainWord;
       const slash = body.indexOf("/");
       if (slash >= 0) {
-        const vendor = body.slice(0, slash).replace(/"/g, "");
-        const query = body.slice(slash + 1).toLowerCase();
-        return [...new Set(context.vendors.filter((item) => item.vendorName.toLowerCase() === vendor.toLowerCase()).map((item) => item.accountName).filter(Boolean))]
-          .filter((account) => account.toLowerCase().includes(query))
+        const vendor = body.slice(0, slash);
+        const query = body.slice(slash + 1);
+        question = tx(locale, "Which account?", "Какой аккаунт?");
+        [...new Set(context.vendors.filter((item) => item.vendorName.toLowerCase() === vendor.toLowerCase()).map((item) => item.accountName).filter(Boolean))]
+          .map((account) => ({ account, score: query ? fuzzyScore(query, account) : 1 }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score)
           .slice(0, 6)
-          .map((account) => ({ key: `a${account}`, label: account, insert: `@${quoteIfSpaces(vendor)}/${quoteIfSpaces(account)}`, detail: vendor }));
+          .forEach(({ account }) => suggestions.push({ key: `a${account}`, label: account, insert: `@${quoteIfSpaces(vendor)}/${quoteIfSpaces(account)}`, replace: true, detail: vendor }));
+      } else {
+        const counts = new Map<string, number>();
+        context.vendors.forEach((item) => { if (item.vendorName) counts.set(item.vendorName, (counts.get(item.vendorName) || 0) + 1); });
+        context.entries.forEach((item) => { if (item.vendorName) counts.set(item.vendorName, (counts.get(item.vendorName) || 0) + 1); });
+        const ranked = [...counts.entries()]
+          .map(([vendor, count]) => ({ vendor, score: body ? fuzzyScore(body, vendor) : 1, count }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score || b.count - a.count);
+        ranked.slice(0, 7).forEach(({ vendor, score }) => suggestions.push({
+          key: `v${vendor}`,
+          label: vendor,
+          insert: `@${quoteIfSpaces(vendor)}`,
+          replace: word.startsWith("@") || (Boolean(body) && score >= 2),
+        }));
+        if (body && word.startsWith("@") && !ranked.some((entry) => entry.vendor.toLowerCase() === body.toLowerCase())) {
+          suggestions.push({ key: "v-new", label: tx(locale, `New vendor “${body}”`, `Новый «${body}»`), insert: `@${quoteIfSpaces(body)}`, replace: true });
+        }
       }
-      const query = body.replace(/"/g, "").toLowerCase();
-      return [...new Set(context.vendors.map((item) => item.vendorName).filter(Boolean))]
-        .filter((vendor) => vendor.toLowerCase().includes(query))
-        .slice(0, 6)
-        .map((vendor) => ({ key: `v${vendor}`, label: vendor, insert: `@${quoteIfSpaces(vendor)}` }));
+    } else if (step === "price") {
+      if (wordIsMoney && currentLine) {
+        question = tx(locale, "How often?", "Как часто?");
+        PERIOD_CHOICES.forEach((choice) => suggestions.push({ key: `p${choice.token}`, label: tx(locale, choice.en, choice.ru), insert: `${caretWord.replace(/\/.*$/, "")}${choice.token}`, replace: true }));
+      } else if (wordIsNumber) {
+        question = tx(locale, "Which currency, and how often?", "Какая валюта и период?");
+        const amount = word.replace(/^[$€£₽¥]/, "");
+        const typedSymbol = word.match(/^[$€£₽¥]/)?.[0];
+        const codes = typedSymbol ? [SYMBOL_CODES[typedSymbol] || "USD"] : [...new Set([context.defaultCurrency, ...preferredCurrencies(context), "USD", "EUR", "RUB"])].slice(0, 4);
+        codes.forEach((code) => {
+          ["/mo", "/yr"].forEach((period) => {
+            const symbol = CURRENCY_SYMBOLS[code];
+            const insert = symbol ? `${symbol}${amount}${period}` : `${amount}${code}${period}`;
+            suggestions.push({ key: `m${code}${period}`, label: `${symbol ? `${symbol}${amount}` : `${amount} ${code}`} ${period === "/mo" ? tx(locale, "monthly", "в месяц") : tx(locale, "yearly", "в год")}`, insert, replace: true });
+          });
+        });
+      } else {
+        question = tx(locale, "How much? Type it any way: 25 USD, $25, 25€, 2500 RUB, 10/yr", "Сколько? Как угодно: 25 USD, $25, 25€, 2500 RUB, 10/yr");
+      }
+    } else if (step === "date") {
+      question = tx(locale, "When does billing start? Any format: 03.11.2026, 3/11/26, 2026-11-03", "Когда начало оплаты? Любой формат: 03.11.2026, 3/11/26, 2026-11-03");
+      const parsedDate = wordIsDate ? parseDate(word) : null;
+      if (parsedDate) {
+        suggestions.push({ key: "d-typed", label: tx(locale, `Starts ${formatHuman(parsedDate, locale)}`, `С ${formatHuman(parsedDate, locale)}`), insert: caretWord, replace: true });
+      } else if (!wordIsDate) {
+        const today = new Date();
+        const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
+        [
+          { key: "today", label: tx(locale, "Today", "Сегодня"), date: today },
+          { key: "first", label: tx(locale, "1st of this month", "1-е число"), date: first },
+        ].forEach((choice) => suggestions.push({ key: `d${choice.key}`, label: choice.label, insert: dottedDate(choice.date), replace: false, detail: dottedDate(choice.date) }));
+      }
+    } else {
+      question = row ? tx(locale, "All set. ↵ saves; add more lines with ⇧↵.", "Готово. ↵ сохранит, ⇧↵ — новая строка.") : "";
     }
-    return [];
-  }, [caret, context.categories, context.vendors, payload, text]);
+    return { step, steps, done, suggestions, question };
+  }, [caret, caretLine.index, caretLine.start, caretWord, context, currentLine, locale, payload, skipped]);
+  const suggestions = guide.suggestions;
   const showSuggestions = suggestions.length > 0 && !suggestionsDismissed;
 
-  // Field hints for the line under the caret: the category's fields not yet filled.
-  const currentLine = parsedByLine.get(lineAt(text, caret).index);
+  // Optional category fields not filled yet on the caret line, offered once the main steps are done.
   const fieldHints = useMemo(() => {
     if (!currentLine) return [];
     const category = context.categories.find((candidate) => candidate.id === currentLine.row.categoryId);
@@ -226,22 +376,35 @@ export function QuickCapture({
     setSuggestionsDismissed(false);
     setSelectedSuggestion(0);
     if (nextCaret !== undefined) {
-      requestAnimationFrame(() => {
-        const area = textareaRef.current;
-        if (!area) return;
-        area.focus();
-        area.setSelectionRange(nextCaret, nextCaret);
-        setCaret(nextCaret);
-      });
+      pendingCaret.current = nextCaret;
+      setCaret(nextCaret);
     }
   }
 
   function acceptSuggestion(suggestion: Suggestion) {
+    if (!suggestion.replace) {
+      // Keep what was typed (usually the name) and add the suggestion after it.
+      const { end } = wordAt(text, caret);
+      const before = text.slice(0, end);
+      const after = text.slice(end);
+      const pad = before && !/\s$/.test(before) ? " " : "";
+      const insert = `${pad}${suggestion.insert}${after.startsWith(" ") ? "" : " "}`;
+      updateText(before + insert + after, before.length + insert.length);
+      return;
+    }
     const { start, end } = wordAt(text, caret);
-    const before = text.slice(0, start);
+    // "25 USD" style money spans two words; replace both.
+    const tokenStart = currentLine?.tokens.find((token) => token.kind === "money" && caretLine.start + token.end === end)?.start;
+    const from = tokenStart !== undefined ? caretLine.start + tokenStart : start;
+    const before = text.slice(0, from);
     const after = text.slice(end);
     const insert = `${suggestion.insert}${after.startsWith(" ") ? "" : " "}`;
     updateText(before + insert + after, before.length + insert.length);
+  }
+
+  function skipStep() {
+    if (guide.step === "done") return;
+    setSkipped((current) => new Set(current).add(`${caretLine.index}:${guide.step}`));
   }
 
   function insertAtCaret(snippet: string) {
@@ -362,27 +525,35 @@ export function QuickCapture({
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (showSuggestions) {
-      if (event.key === "ArrowDown" || (event.key === "Tab" && !event.shiftKey && suggestions.length > 1 && selectedSuggestion < suggestions.length - 1 && event.ctrlKey)) {
+      const cycling = Boolean(caretWord) || !text.includes("\n");
+      if (cycling && event.key === "ArrowDown") {
         event.preventDefault();
         setSelectedSuggestion((current) => (current + 1) % suggestions.length);
         return;
       }
-      if (event.key === "ArrowUp") {
+      if (cycling && event.key === "ArrowUp") {
         event.preventDefault();
         setSelectedSuggestion((current) => (current - 1 + suggestions.length) % suggestions.length);
         return;
       }
-      if (event.key === "Tab" || (event.key === "Enter" && !event.metaKey && !event.ctrlKey)) {
+      // Enter completes an explicit #/@ word; otherwise it saves.
+      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && /^[#@]/.test(caretWord)) {
         event.preventDefault();
         acceptSuggestion(suggestions[Math.min(selectedSuggestion, suggestions.length - 1)]);
         return;
       }
-      if (event.key === "Escape") {
-        event.preventDefault();
-        event.stopPropagation();
-        setSuggestionsDismissed(true);
-        return;
-      }
+    }
+    if (event.key === "Tab" && !event.shiftKey) {
+      event.preventDefault();
+      if (suggestions.length) acceptSuggestion(suggestions[Math.min(selectedSuggestion, suggestions.length - 1)]);
+      else skipStep();
+      return;
+    }
+    if (event.key === "Escape" && guide.step !== "done" && currentLine) {
+      event.preventDefault();
+      event.stopPropagation();
+      skipStep();
+      return;
     }
     if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
       event.preventDefault();
@@ -405,22 +576,21 @@ export function QuickCapture({
         <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="capture-panel-in fixed left-1/2 top-[7vh] z-50 flex max-h-[86vh] w-[calc(100vw-1.5rem)] max-w-[780px] -translate-x-1/2 flex-col overflow-hidden rounded-[22px] border border-white/10 bg-[#0c0c11]/95 shadow-[0_40px_120px_-30px_rgba(91,33,182,0.55)] outline-none"
+          className="capture-panel-in fixed left-1/2 top-[7vh] z-50 flex max-h-[86vh] w-[calc(100vw-1.5rem)] max-w-[840px] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
         >
           <Dialog.Title className="sr-only">{tx(locale, "Quick capture", "Быстрое добавление")}</Dialog.Title>
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-violet-400/60 to-transparent" />
           {dragging ? (
-            <div className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-[18px] border-2 border-dashed border-violet-400/50 bg-violet-500/10 text-sm font-medium text-violet-100">
+            <div className="pointer-events-none absolute inset-2 z-20 grid place-items-center rounded-[18px] border-2 border-dashed border-white/20 bg-white/[0.04] text-sm font-medium text-zinc-200">
               {tx(locale, "Drop a CSV, JSON or text file", "Перетащите CSV, JSON или текстовый файл")}
             </div>
           ) : null}
 
           {/* Context bar */}
-          <div className="flex items-center gap-2 border-b border-white/[0.06] px-4 py-2.5 text-xs text-zinc-500">
-            <Zap className="h-3.5 w-3.5 text-violet-300" />
+          <div className="flex items-center gap-2 border-b border-white/[0.06] px-7 py-4 text-xs text-zinc-500">
+            <Zap className="h-3.5 w-3.5 text-zinc-400" />
             <span className="font-medium text-zinc-300">{tx(locale, "Quick capture", "Быстрое добавление")}</span>
             {payload ? <span className="hidden truncate sm:inline">· {payload.workspaceName}</span> : null}
             <Popover>
@@ -446,11 +616,11 @@ export function QuickCapture({
           </div>
 
           {/* Editor */}
-          <div className="relative px-1">
+          <div className="relative">
             <div
               ref={mirrorRef}
               aria-hidden
-              className="pointer-events-none absolute inset-x-1 inset-y-0 overflow-hidden whitespace-pre-wrap break-words px-5 py-4 text-[17px] font-medium leading-8 text-zinc-50"
+              className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre-wrap break-words px-7 py-6 text-[17px] font-medium leading-8 text-zinc-50"
             >
               {lines.map((line, index) => {
                 const parsedLine = parsedByLine.get(index);
@@ -476,58 +646,85 @@ export function QuickCapture({
               onSelect={syncCaret}
               onPaste={onPaste}
               onScroll={(event) => { if (mirrorRef.current) mirrorRef.current.scrollTop = event.currentTarget.scrollTop; }}
-              className="relative block w-full resize-none bg-transparent px-5 py-4 text-[17px] font-medium leading-8 text-transparent caret-violet-300 outline-none selection:bg-violet-500/35 selection:text-transparent placeholder:text-zinc-600"
+              className="relative block w-full resize-none bg-transparent px-7 py-6 text-[17px] font-medium leading-8 text-transparent caret-zinc-100 outline-none selection:bg-violet-500/35 selection:text-transparent placeholder:text-zinc-600"
             />
             {isThinking ? <div className="capture-shimmer pointer-events-none absolute inset-0" /> : null}
           </div>
 
-          {/* Autocomplete + field hints */}
-          {showSuggestions ? (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] px-5 py-2">
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={suggestion.key}
-                  type="button"
-                  onMouseDown={(event) => { event.preventDefault(); acceptSuggestion(suggestion); }}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm transition",
-                    index === selectedSuggestion ? "bg-violet-500/25 text-violet-50 ring-1 ring-violet-400/40" : "text-zinc-300 hover:bg-white/[0.06]",
-                  )}
-                >
-                  {suggestion.icon}
-                  {suggestion.label}
-                  {suggestion.detail ? <span className="text-xs text-zinc-500">{suggestion.detail}</span> : null}
-                </button>
-              ))}
-              <span className="ml-auto flex items-center gap-1 text-[11px] text-zinc-500"><Kbd>Tab</Kbd>{tx(locale, "accept", "выбрать")}</span>
-            </div>
-          ) : fieldHints.length && hasText ? (
-            <div className="flex flex-wrap items-center gap-1.5 border-t border-white/[0.06] bg-white/[0.02] px-5 py-2 text-xs text-zinc-500">
-              <span>{tx(locale, "Add fields:", "Поля:")}</span>
-              {fieldHints.map((field) => (
-                <button
-                  key={field.id}
-                  type="button"
-                  onMouseDown={(event) => { event.preventDefault(); insertAtCaret(`${slugify(field.label) || field.id}:`); }}
-                  className="rounded-md bg-fuchsia-500/10 px-1.5 py-0.5 font-mono text-[11px] text-fuchsia-200 transition hover:bg-fuchsia-500/20"
-                >
-                  {slugify(field.label) || field.id}:
-                </button>
-              ))}
+          {/* Guided steps */}
+          {payload && !readOnly ? (
+            <div className="space-y-3 border-t border-white/[0.06] px-7 py-4">
+              <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+                {guide.steps.map((step, index) => {
+                  const active = guide.step === step;
+                  const complete = guide.done.has(step);
+                  return (
+                    <span key={step} className="flex items-center gap-1.5">
+                      {index ? <span className="h-px w-3 bg-white/10" /> : null}
+                      <span className={cn(
+                        "rounded-full px-2 py-0.5 transition",
+                        active ? "bg-white/10 text-zinc-100" : complete ? "text-zinc-400" : "text-zinc-600",
+                      )}>
+                        {complete && !active ? "✓ " : ""}{STEP_LABELS[step][ru ? 1 : 0]}
+                      </span>
+                    </span>
+                  );
+                })}
+                {guide.step !== "done" && guide.step !== "field" && currentLine ? (
+                  <button type="button" onMouseDown={(event) => { event.preventDefault(); skipStep(); }} className="ml-auto flex items-center gap-1 text-zinc-500 transition hover:text-zinc-300">
+                    {tx(locale, "skip", "пропустить")} <Kbd>Esc</Kbd>
+                  </button>
+                ) : null}
+              </div>
+              {guide.question ? <p className="text-sm text-zinc-300">{guide.question}</p> : null}
+              {showSuggestions ? (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {suggestions.map((suggestion, index) => (
+                    <button
+                      key={suggestion.key}
+                      type="button"
+                      onMouseDown={(event) => { event.preventDefault(); acceptSuggestion(suggestion); }}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition",
+                        index === selectedSuggestion ? "border-white/20 bg-white/10 text-white" : "border-white/[0.06] text-zinc-300 hover:bg-white/[0.05]",
+                      )}
+                    >
+                      {suggestion.icon}
+                      {suggestion.label}
+                      {suggestion.detail ? <span className="text-xs text-zinc-500">{suggestion.detail}</span> : null}
+                    </button>
+                  ))}
+                  <span className="ml-auto flex items-center gap-1 text-[11px] text-zinc-500"><Kbd>Tab</Kbd>{tx(locale, "pick", "выбрать")} <Kbd>↑↓</Kbd></span>
+                </div>
+              ) : guide.step === "done" && fieldHints.length ? (
+                <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
+                  <span>{tx(locale, "Optional fields:", "Доп. поля:")}</span>
+                  {fieldHints.map((field) => (
+                    <button
+                      key={field.id}
+                      type="button"
+                      onMouseDown={(event) => { event.preventDefault(); insertAtCaret(`!${slugify(field.label) || field.id}: `); }}
+                      className="rounded-md border border-white/[0.08] px-2 py-0.5 font-mono text-[11px] text-zinc-300 transition hover:bg-white/[0.06]"
+                    >
+                      !{slugify(field.label) || field.id}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </div>
           ) : null}
 
           {/* Body: cards or onboarding */}
           <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/[0.06]">
             {loading && !payload ? (
-              <div className="flex items-center gap-2 px-5 py-6 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" />{tx(locale, "Loading workspace…", "Загрузка…")}</div>
+              <div className="flex items-center gap-2 px-7 py-6 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" />{tx(locale, "Loading workspace…", "Загрузка…")}</div>
             ) : null}
 
             {aiState ? (
-              <div className="mx-4 mt-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.07] p-3">
+              <div className="mx-7 mt-6 rounded-xl border border-white/10 bg-white/[0.03] p-4">
                 <div className="flex items-start gap-2">
-                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-violet-300" />
-                  <p className="flex-1 text-sm text-violet-100">{aiState.summary || tx(locale, "AI rewrote your text as capture lines.", "AI переписал текст в строки ввода.")}</p>
+                  <Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-zinc-400" />
+                  <p className="flex-1 text-sm text-zinc-200">{aiState.summary || tx(locale, "AI rewrote your text as capture lines.", "AI переписал текст в строки ввода.")}</p>
                   <button type="button" onClick={restoreOriginal} className="inline-flex shrink-0 items-center gap-1 rounded-md px-2 py-0.5 text-xs text-violet-200 transition hover:bg-violet-500/15">
                     <Undo2 className="h-3.5 w-3.5" />{tx(locale, "Original text", "Исходный текст")}
                   </button>
@@ -547,19 +744,19 @@ export function QuickCapture({
               </div>
             ) : null}
 
-            {aiError ? <p className="mx-5 mt-4 text-sm text-red-300">{aiError}</p> : null}
-            {notice ? <p className="mx-5 mt-4 text-xs text-emerald-200/90">{notice}</p> : null}
+            {aiError ? <p className="mx-7 mt-6 text-sm text-red-300">{aiError}</p> : null}
+            {notice ? <p className="mx-7 mt-6 text-xs text-zinc-400">{notice}</p> : null}
 
             {(aiHint || (parsed.some((line) => line.tokens.length > 8 && line.tokens.every((token) => token.kind === "name")))) && !aiState && hasText ? (
               <button
                 type="button"
                 onClick={() => runAi()}
                 disabled={!payload?.aiAvailable || isThinking}
-                className="mx-4 mt-4 flex w-[calc(100%-2rem)] items-center gap-3 rounded-2xl border border-violet-400/25 bg-gradient-to-r from-violet-500/15 via-fuchsia-500/10 to-transparent p-3 text-left transition hover:border-violet-300/40 disabled:cursor-not-allowed disabled:opacity-60"
+                className="mx-7 mt-6 flex w-[calc(100%-3.5rem)] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                <span className="grid h-9 w-9 place-items-center rounded-xl bg-violet-500/20 text-violet-200"><Wand2 className="h-4 w-4" /></span>
+                <span className="grid h-9 w-9 place-items-center rounded-lg bg-white/[0.06] text-zinc-300"><Wand2 className="h-4 w-4" /></span>
                 <span className="flex-1">
-                  <span className="block text-sm font-medium text-violet-50">{tx(locale, "This looks like free text. Let AI sort it into entries?", "Похоже на свободный текст. Разобрать с помощью AI?")}</span>
+                  <span className="block text-sm font-medium text-zinc-100">{tx(locale, "This looks like free text. Let AI sort it into entries?", "Похоже на свободный текст. Разобрать с помощью AI?")}</span>
                   <span className="block text-xs text-zinc-400">
                     {payload?.aiAvailable
                       ? tx(locale, "IPs, domains, logins and names are masked before anything is sent.", "IP, домены, логины и названия маскируются перед отправкой.")
@@ -571,11 +768,11 @@ export function QuickCapture({
             ) : null}
 
             {isThinking ? (
-              <div className="space-y-3 p-4">
+              <div className="space-y-4 px-7 py-6">
                 {[0, 1].map((key) => <div key={key} className="h-24 animate-pulse rounded-2xl border border-white/[0.06] bg-white/[0.03]" />)}
               </div>
             ) : parsed.length ? (
-              <div className="space-y-3 p-4">
+              <div className="space-y-4 px-7 py-6">
                 {parsed.map((line, index) => (
                   <CaptureCard
                     key={`${line.index}`}
@@ -596,7 +793,7 @@ export function QuickCapture({
           </div>
 
           {/* Footer */}
-          <div className="flex flex-wrap items-center gap-3 border-t border-white/[0.06] bg-black/20 px-4 py-3">
+          <div className="flex flex-wrap items-center gap-3 border-t border-white/[0.06] px-7 py-5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
               {parsed.length ? (
                 <>
@@ -604,7 +801,7 @@ export function QuickCapture({
                   {counts.edit ? <span className="text-orange-200">{tx(locale, `${counts.edit} update`, `${counts.edit} изм.`)}</span> : null}
                   {counts.pay ? <span className="text-emerald-200">{tx(locale, `${counts.pay} payment`, `${counts.pay} оплат`)}</span> : null}
                   {totals.length ? (
-                    <span className="text-emerald-300/90">+{totals.map(([currency, value]) => formatMoney(value, currency)).join(" + ")} {tx(locale, "/ month", "/ мес")}</span>
+                    <span className="text-zinc-300">+{totals.map(([currency, value]) => formatMoney(value, currency)).join(" + ")} {tx(locale, "/ month", "/ мес")}</span>
                   ) : null}
                 </>
               ) : (
@@ -616,7 +813,7 @@ export function QuickCapture({
               {serverMessage ? <span className="text-red-300">{serverMessage}</span> : null}
             </div>
             {payload?.aiAvailable && hasText ? (
-              <button type="button" onClick={() => runAi(aiState?.answers)} disabled={isThinking} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-violet-400/20 px-3 text-sm text-violet-100 transition hover:bg-violet-500/15 disabled:opacity-50">
+              <button type="button" onClick={() => runAi(aiState?.answers)} disabled={isThinking} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 transition hover:bg-white/[0.06] disabled:opacity-50">
                 {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
                 {aiState ? tx(locale, "Ask again", "Ещё раз") : tx(locale, "AI", "AI")}
               </button>
@@ -625,7 +822,7 @@ export function QuickCapture({
               type="button"
               onClick={save}
               disabled={!parsed.length || isSaving || readOnly || isThinking}
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-violet-500 px-4 text-sm font-semibold text-white shadow-lg shadow-violet-900/40 transition hover:bg-violet-400 active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none"
+              className="inline-flex h-9 items-center gap-2 rounded-xl bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 transition hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               {parsed.length > 1 ? tx(locale, `Save ${parsed.length}`, `Сохранить ${parsed.length}`) : tx(locale, "Save", "Сохранить")}
@@ -654,16 +851,16 @@ function Onboarding({ locale, onExample, onFile }: { locale: Locale; onExample: 
     { kind: "vendor", syntax: "@Hetzner/login", en: "vendor / account", ru: "поставщик / аккаунт" },
     { kind: "money", syntax: "€4.51/mo", en: "price & period", ru: "цена и период" },
     { kind: "date", syntax: "2026-12-01", en: "renews on", ru: "дата продления" },
-    { kind: "field", syntax: "ip:1.2.3.4", en: "any field", ru: "любое поле" },
+    { kind: "field", syntax: "!ip: 1.2.3.4", en: "category field", ru: "поле категории" },
     { kind: "notes", syntax: "// text", en: "notes", ru: "заметка" },
   ];
   return (
-    <div className="space-y-5 p-5">
+    <div className="space-y-6 px-7 py-6">
       <div>
         <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">{tx(locale, "Try one", "Попробуйте")}</p>
         <div className="space-y-1.5">
           {CAPTURE_EXAMPLES.map((example) => (
-            <button key={example} type="button" onClick={() => onExample(example)} className="group flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left font-mono text-[13px] text-zinc-400 transition hover:border-violet-400/30 hover:bg-violet-500/[0.06] hover:text-zinc-100">
+            <button key={example} type="button" onClick={() => onExample(example)} className="group flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left font-mono text-[13px] text-zinc-400 transition hover:border-white/15 hover:bg-white/[0.04] hover:text-zinc-100">
               <span className="flex-1 truncate">{example}</span>
               <ArrowRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
             </button>
