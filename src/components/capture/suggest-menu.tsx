@@ -1,7 +1,6 @@
 "use client";
 
 import { forwardRef, type ReactNode } from "react";
-import { createPortal } from "react-dom";
 import { cn } from "@/lib/utils";
 import { Kbd } from "./shared";
 
@@ -58,17 +57,16 @@ type Props = {
 };
 
 /**
- * Combobox-style list that floats under the word being typed. It is portalled to <body> so the dialog's
- * overflow never clips it; the parent positions it (style.top/left) from the caret.
+ * Combobox-style list that floats under the word being typed. The parent positions it (style.top/left)
+ * inside the editor from the caret.
  */
 export const SuggestMenu = forwardRef<HTMLDivElement, Props>(function SuggestMenu({ title, icon, progress, items, selected, onHover, onPick, labels }, ref) {
-  if (typeof document === "undefined") return null;
-  return createPortal(
+  return (
     <div
       ref={ref}
       data-suggest-menu
       role="listbox"
-      className="suggest-in pointer-events-auto fixed left-0 top-0 z-[60] w-[min(340px,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-white/10 bg-[#18181c]/95 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+      className="suggest-in absolute left-0 top-0 z-30 w-[min(340px,calc(100vw-1.5rem))] overflow-hidden rounded-xl border border-white/10 bg-[#18181c]/95 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
       onMouseDown={(event) => event.preventDefault()}
     >
       <div className="flex items-center gap-2 px-3 pb-1.5 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
@@ -110,7 +108,6 @@ export const SuggestMenu = forwardRef<HTMLDivElement, Props>(function SuggestMen
         <span className="flex items-center gap-1"><Kbd>↵</Kbd><Kbd>Tab</Kbd>{labels.pick}</span>
         <span className="ml-auto flex items-center gap-1"><Kbd>Esc</Kbd>{labels.close}</span>
       </div>
-    </div>,
-    document.body,
+    </div>
   );
 });

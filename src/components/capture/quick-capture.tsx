@@ -359,37 +359,17 @@ export function QuickCapture({
   const showSuggestions = open && suggestions.length > 0 && !suggestionsDismissed;
   const caretWordStart = wordAt(text, caret).start;
 
-  // Float the menu under the word being typed; flip above when there is no room below.
+  // Float the menu under the word being typed. Offsets are relative to the editor, so the
+  // dialog's own position or animation never matters.
   useLayoutEffect(() => {
     const menu = menuRef.current;
     const marker = markerRef.current;
     const area = textareaRef.current;
     if (!showSuggestions || !menu || !marker || !area) return;
-    const place = () => {
-      const rect = marker.getBoundingClientRect();
-      const areaRect = area.getBoundingClientRect();
-      const top = rect.top - area.scrollTop;
-      const bottom = rect.bottom - area.scrollTop;
-      const height = menu.offsetHeight;
-      const width = menu.offsetWidth;
-      const below = Math.min(bottom, areaRect.bottom) + 6;
-      const y = below + height > window.innerHeight - 8 ? Math.max(8, top - height - 6) : below;
-      const x = Math.min(Math.max(8, rect.left - 10), window.innerWidth - width - 8);
-      menu.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
-    };
-    // Follow the dialog while its open animation settles, then on resize.
-    const started = performance.now();
-    let frame = 0;
-    const tick = () => {
-      place();
-      if (performance.now() - started < 400) frame = requestAnimationFrame(tick);
-    };
-    tick();
-    window.addEventListener("resize", place);
-    return () => {
-      cancelAnimationFrame(frame);
-      window.removeEventListener("resize", place);
-    };
+    const top = Math.min(marker.offsetTop + marker.offsetHeight - area.scrollTop, area.offsetHeight) + 4;
+    const maxLeft = Math.max(8, area.offsetWidth - menu.offsetWidth - 8);
+    menu.style.top = `${top}px`;
+    menu.style.left = `${Math.min(Math.max(8, marker.offsetLeft - 10), maxLeft)}px`;
   }, [showSuggestions, caretWordStart, text, suggestions.length]);
 
   // Optional category fields not filled yet on the caret line, offered once the main steps are done.
@@ -643,7 +623,7 @@ export function QuickCapture({
         <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="capture-panel-in fixed left-1/2 top-[7vh] z-50 flex max-h-[86vh] w-[calc(100vw-1.5rem)] max-w-[840px] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
+          className="capture-panel-in fixed left-1/2 top-[22vh] z-50 flex max-h-[74vh] w-[calc(100vw-1.5rem)] max-w-[840px] -translate-x-1/2 flex-col rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
           onPointerDownOutside={(event) => { if ((event.target as HTMLElement | null)?.closest?.("[data-suggest-menu]")) event.preventDefault(); }}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -684,7 +664,7 @@ export function QuickCapture({
           </div>
 
           {/* Editor */}
-          <div className="relative">
+          <div className="relative z-20">
             <div
               ref={mirrorRef}
               aria-hidden
@@ -720,6 +700,19 @@ export function QuickCapture({
               className="relative block w-full resize-none bg-transparent px-7 py-6 text-[17px] font-medium leading-8 text-transparent caret-zinc-100 outline-none selection:bg-violet-500/35 selection:text-transparent placeholder:text-zinc-600"
             />
             {isThinking ? <div className="capture-shimmer pointer-events-none absolute inset-0" /> : null}
+            {showSuggestions ? (
+              <SuggestMenu
+                ref={menuRef}
+                title={guide.step === "field" ? guide.question : STEP_LABELS[guide.step as GuideStep]?.[ru ? 1 : 0] || ""}
+                icon={STEP_ICONS[guide.step]}
+                progress={guide.step !== "field" && guide.step !== "done" ? tx(locale, `step ${guide.steps.indexOf(guide.step) + 1} of ${guide.steps.length}`, `шаг ${guide.steps.indexOf(guide.step) + 1} из ${guide.steps.length}`) : undefined}
+                items={suggestions}
+                selected={Math.min(selectedSuggestion, suggestions.length - 1)}
+                onHover={setSelectedSuggestion}
+                onPick={(index) => acceptSuggestion(suggestions[index])}
+                labels={{ navigate: tx(locale, "move", "выбор"), pick: tx(locale, "pick", "вставить"), close: tx(locale, "close", "закрыть") }}
+              />
+            ) : null}
           </div>
 
           {/* Guided steps */}
@@ -748,19 +741,6 @@ export function QuickCapture({
                 ) : null}
               </div>
               {guide.question && !showSuggestions ? <p className="text-sm text-zinc-300">{guide.question}</p> : null}
-              {showSuggestions ? (
-                <SuggestMenu
-                  ref={menuRef}
-                  title={guide.step === "field" ? guide.question : STEP_LABELS[guide.step as GuideStep]?.[ru ? 1 : 0] || ""}
-                  icon={STEP_ICONS[guide.step]}
-                  progress={guide.step !== "field" && guide.step !== "done" ? tx(locale, `step ${guide.steps.indexOf(guide.step) + 1} of ${guide.steps.length}`, `шаг ${guide.steps.indexOf(guide.step) + 1} из ${guide.steps.length}`) : undefined}
-                  items={suggestions}
-                  selected={Math.min(selectedSuggestion, suggestions.length - 1)}
-                  onHover={setSelectedSuggestion}
-                  onPick={(index) => acceptSuggestion(suggestions[index])}
-                  labels={{ navigate: tx(locale, "move", "выбор"), pick: tx(locale, "pick", "вставить"), close: tx(locale, "close", "закрыть") }}
-                />
-              ) : null}
               {guide.step === "done" && fieldHints.length > 0 && !showSuggestions ? (
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
                   <span>{tx(locale, "Optional fields:", "Доп. поля:")}</span>
