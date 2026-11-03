@@ -34,11 +34,11 @@ Open [http://localhost:3000](http://localhost:3000). On the first visit, the app
 ## Adding and managing entries
 
 - **Quick capture** (press `N` anywhere, or `Ctrl/⌘+K`): type one entry per line, for example
-  `hz-fsn-01 #servers @Hetzner/ops 4.51 EUR/mo 01.11.2026 !ip: 95.217.10.4 // spare box`.
+  `hz-fsn-01 #servers @Hetzner/ops 4.51 EUR/mo 01.11.2026 /ip: 95.217.10.4 // spare box`.
   A step bar under the input asks for category → name → vendor → price → billing start in turn and fuzzy-suggests
   values (Tab picks, Esc skips). Prices can be written as `$25`, `25$`, `25 USD`, `2500 rub`; a plain date
-  (`03.11.26`, `3/11/2026`, `2026-11-03`) is the billing start and the renewal follows from the period. `!` suggests
-  the chosen category's own fields (`#domains @godaddy !domain: sample.com`).
+  (`03.11.26`, `3/11/2026`, `2026-11-03`) is the billing start and the renewal follows from the period. `/` suggests
+  the chosen category's own fields (`#domains @godaddy /domain: sample.com`).
   Tokens are colored as you type and every line turns into a preview card you can adjust by clicking its chips.
   `#category`, `@vendor/account`, `price/period` (`/mo`, `/yr`, `/q`, `/w`, `/90d`, `/once`), a renewal date
   (or `start..end`), `field:value` for category fields, a URL and `// notes` are understood.

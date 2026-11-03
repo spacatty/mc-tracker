@@ -31,6 +31,7 @@ const STEP_LABELS: Record<GuideStep, [string, string]> = {
 };
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", RUB: "₽" };
 const SYMBOL_CODES: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "¥": "JPY" };
+const PERIOD_WORD = /^\/(w|wk|week|m|mo|mon|month|q|y|yr|year|once|\d+d)$/i;
 const PERIOD_CHOICES = [
   { token: "/mo", en: "monthly", ru: "в месяц" },
   { token: "/yr", en: "yearly", ru: "в год" },
@@ -206,6 +207,13 @@ export function QuickCapture({
   const caretLine = lineAt(text, caret);
   const currentLine = parsedByLine.get(caretLine.index);
   const caretWord = wordAt(text, caret).word;
+  // A lone "/" waits a moment so typing "//" for a note never flashes field suggestions.
+  const [slashReady, setSlashReady] = useState(false);
+  useEffect(() => {
+    if (caretWord !== "/") return;
+    const timer = window.setTimeout(() => setSlashReady(true), 300);
+    return () => { window.clearTimeout(timer); setSlashReady(false); };
+  }, [caretWord]);
   const guide: Guide = useMemo(() => {
     const steps: GuideStep[] = ["category", "name", "vendor", "price", "date"];
     if (!payload) return { step: "done", steps, done: new Set(), suggestions: [], question: "" };
@@ -226,7 +234,7 @@ export function QuickCapture({
     const wordIsDate = /^\d{1,4}[./-]\d{0,2}([./-]\d{0,4})?$/.test(word);
 
     let step: GuideStep | "done" | "field" = steps.find((candidate) => !done.has(candidate)) || "done";
-    if (word.startsWith("!")) step = "field";
+    if (word.startsWith("!") || (word.startsWith("/") && !word.startsWith("//") && (word !== "/" || slashReady) && !/^\/\d/.test(word) && !PERIOD_WORD.test(word))) step = "field";
     else if (word.startsWith("#")) step = "category";
     else if (word.startsWith("@")) step = "vendor";
     else if (wordIsMoney || wordIsNumber) step = "price";
@@ -244,7 +252,7 @@ export function QuickCapture({
           .map((field) => ({ field, score: query ? Math.max(fuzzyScore(query, field.label), fuzzyScore(query, field.id)) : 1 }))
           .filter((entry) => entry.score > 0)
           .sort((a, b) => b.score - a.score)
-          .forEach(({ field }) => suggestions.push({ key: `f${field.id}`, label: field.label, insert: `!${slugify(field.label) || field.id}:`, replace: true, detail: row?.customFields[field.id] ? String(row.customFields[field.id]) : undefined }));
+          .forEach(({ field }) => suggestions.push({ key: `f${field.id}`, label: field.label, insert: `/${slugify(field.label) || field.id}:`, replace: true, detail: row?.customFields[field.id] ? String(row.customFields[field.id]) : undefined }));
       }
     } else if (step === "category") {
       question = tx(locale, "Which category?", "Какая категория?");
@@ -330,7 +338,7 @@ export function QuickCapture({
       question = row ? tx(locale, "All set. ↵ saves; add more lines with ⇧↵.", "Готово. ↵ сохранит, ⇧↵ — новая строка.") : "";
     }
     return { step, steps, done, suggestions, question };
-  }, [caret, caretLine.index, caretLine.start, caretWord, context, currentLine, locale, payload, skipped]);
+  }, [caret, caretLine.index, caretLine.start, caretWord, context, currentLine, locale, payload, skipped, slashReady]);
   const suggestions = guide.suggestions;
   const showSuggestions = suggestions.length > 0 && !suggestionsDismissed;
 
@@ -703,10 +711,10 @@ export function QuickCapture({
                     <button
                       key={field.id}
                       type="button"
-                      onMouseDown={(event) => { event.preventDefault(); insertAtCaret(`!${slugify(field.label) || field.id}: `); }}
+                      onMouseDown={(event) => { event.preventDefault(); insertAtCaret(`/${slugify(field.label) || field.id}: `); }}
                       className="rounded-md border border-white/[0.08] px-2 py-0.5 font-mono text-[11px] text-zinc-300 transition hover:bg-white/[0.06]"
                     >
-                      !{slugify(field.label) || field.id}
+                      /{slugify(field.label) || field.id}
                     </button>
                   ))}
                 </div>
@@ -851,7 +859,7 @@ function Onboarding({ locale, onExample, onFile }: { locale: Locale; onExample: 
     { kind: "vendor", syntax: "@Hetzner/login", en: "vendor / account", ru: "поставщик / аккаунт" },
     { kind: "money", syntax: "€4.51/mo", en: "price & period", ru: "цена и период" },
     { kind: "date", syntax: "2026-12-01", en: "renews on", ru: "дата продления" },
-    { kind: "field", syntax: "!ip: 1.2.3.4", en: "category field", ru: "поле категории" },
+    { kind: "field", syntax: "/ip: 1.2.3.4", en: "category field", ru: "поле категории" },
     { kind: "notes", syntax: "// text", en: "notes", ru: "заметка" },
   ];
   return (

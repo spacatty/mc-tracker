@@ -18,7 +18,7 @@ import { slugify } from "@/lib/utils";
  *   /mo /yr /w /q /90d /once   period on its own
  *   12.10.2026      billing start (also 12/10/26, 2026-10-12); renewal follows from the period;
  *                   a range 2026-10-12..2026-11-12 or renews:2026-11-12 sets the end explicitly
- *   !attr:value     custom field of the category (by label, fuzzy prefix; "!domain: x" works too)
+ *   /attr:value     custom field of the category (by label, fuzzy prefix; "/domain: x" and !attr work too)
  *   key:value       same, plus built-ins account:, url:, start:, renews:
  *   https://…       vendor / panel URL
  *   1.2.3.4         IP, stored in the category's IP field when it has one
@@ -193,7 +193,7 @@ function mergeMoney(raw: Array<{ start: number; end: number; text: string; notes
     if (next && !current.notes && !next.notes) {
       const numberThenCurrency = NUMBER_PART.test(current.text) && isCurrencyPart(next.text);
       const symbolThenNumber = SYMBOL_PART.test(current.text) && /^\d+(?:[.,]\d{1,2})?k?(\/.*)?$/i.test(next.text);
-      const keyThenValue = /^!?[\p{L}_][\p{L}\p{N}_-]*:$/u.test(current.text) && !/^(https?|\/\/)/i.test(next.text);
+      const keyThenValue = /^[!/]?[\p{L}_][\p{L}\p{N}_-]*:$/u.test(current.text) && !/^(https?|\/\/)/i.test(next.text);
       if (keyThenValue) {
         merged.push({ start: current.start, end: next.end, text: `${current.text}${next.text}` });
         i += 1;
@@ -427,9 +427,9 @@ export function parseLine(text: string, index: number, context: CaptureContext):
       pendingIps.push(token);
       continue;
     }
-    const attribute = value.match(/^!([\p{L}_][\p{L}\p{N}_-]*):?(.*)$/u);
+    const attribute = value.match(/^[!/]([\p{L}_][\p{L}\p{N}_-]*):?(.*)$/u);
     if (attribute) {
-      // !attr:value is always a field of the chosen category.
+      // /attr:value (or !attr:value) is always a field of the chosen category.
       token.kind = "field";
       if (attribute[2]) pendingFields.push({ token, key: attribute[1], value: unquote(attribute[2]) });
       else {
@@ -651,7 +651,7 @@ export function rowToLine(row: ImportRow, context: Pick<CaptureContext, "categor
     category.fields.forEach((field) => {
       const value = row.customFields[field.id];
       if (value === undefined || value === null || value === "" || value === false) return;
-      parts.push(`!${fieldKey(field)}:${quoteIfNeeded(value === true ? "yes" : String(value))}`);
+      parts.push(`/${fieldKey(field)}:${quoteIfNeeded(value === true ? "yes" : String(value))}`);
     });
   }
   const notes = row.notes.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
@@ -660,7 +660,7 @@ export function rowToLine(row: ImportRow, context: Pick<CaptureContext, "categor
 }
 
 export const CAPTURE_EXAMPLES = [
-  "hz-fsn-01 #servers @Hetzner €4.51/mo !ip: 95.217.10.4",
+  "hz-fsn-01 #servers @Hetzner €4.51/mo /ip: 95.217.10.4",
   "acme.dev #domains @Cloudflare 10.44 USD/yr 05.01.2026",
   "Figma @Figma/design@acme $15/mo // 1 editor seat",
 ];
