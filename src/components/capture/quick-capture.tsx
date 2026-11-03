@@ -1,11 +1,11 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowRight, CornerDownLeft, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
+import { ArrowRight, CalendarDays, Coins, CornerDownLeft, Plus, Repeat, Store, Tag, Tags, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { analyzeAiImportAction, applyImportRowsAction, type CaptureContextPayload } from "@/app/actions";
 import type { AiQuestion } from "@/lib/ai/import-schema";
-import { CAPTURE_EXAMPLES, parseCapture, parseDate, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
+import { parseCapture, parseDate, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import { importRowPayload, parseTabularInput, rowFromAiDraft, validateImportRow, type ImportRow, type ImportRowErrors } from "@/lib/import/rows";
 import type { Locale } from "@/lib/i18n";
@@ -14,11 +14,12 @@ import { AppIcon } from "../icons";
 import { CaptureCard } from "./capture-card";
 import { CategoryList } from "./editors";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { LetterIcon, SuggestMenu } from "./suggest-menu";
 import { Chip, Kbd, TOKEN_DOT, TOKEN_STYLES, monthlyEquivalent, tx } from "./shared";
 
 const CURRENCY_CODES = SUPPORTED_CURRENCIES.map((currency) => currency.code as string);
 
-type Suggestion = { key: string; label: string; insert: string; replace?: boolean; icon?: ReactNode; detail?: string };
+type Suggestion = { key: string; label: string; insert: string; replace?: boolean; icon?: ReactNode; detail?: string; match?: string };
 type GuideStep = "category" | "name" | "vendor" | "price" | "date";
 type Guide = { step: GuideStep | "done" | "field"; steps: GuideStep[]; done: Set<GuideStep>; suggestions: Suggestion[]; question: string };
 
@@ -28,6 +29,13 @@ const STEP_LABELS: Record<GuideStep, [string, string]> = {
   vendor: ["Vendor", "Поставщик"],
   price: ["Price", "Цена"],
   date: ["Billing start", "Начало оплаты"],
+};
+const STEP_ICONS: Record<string, ReactNode> = {
+  category: <Tags className="h-3 w-3" />,
+  vendor: <Store className="h-3 w-3" />,
+  price: <Coins className="h-3 w-3" />,
+  date: <CalendarDays className="h-3 w-3" />,
+  field: <Tag className="h-3 w-3" />,
 };
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", RUB: "₽" };
 const SYMBOL_CODES: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "¥": "JPY" };
@@ -137,6 +145,7 @@ export function QuickCapture({
   const [caret, setCaret] = useState(0);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
+  const [navigated, setNavigated] = useState(false);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [categoryOverride, setCategoryOverride] = useState<number | null | undefined>(undefined);
   const [errors, setErrors] = useState<Record<number, ImportRowErrors>>({});
@@ -151,6 +160,8 @@ export function QuickCapture({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<number | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const markerRef = useRef<HTMLSpanElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const defaultCategory = categoryOverride === undefined ? defaultCategoryId : categoryOverride;
@@ -252,7 +263,7 @@ export function QuickCapture({
           .map((field) => ({ field, score: query ? Math.max(fuzzyScore(query, field.label), fuzzyScore(query, field.id)) : 1 }))
           .filter((entry) => entry.score > 0)
           .sort((a, b) => b.score - a.score)
-          .forEach(({ field }) => suggestions.push({ key: `f${field.id}`, label: field.label, insert: `/${slugify(field.label) || field.id}:`, replace: true, detail: row?.customFields[field.id] ? String(row.customFields[field.id]) : undefined }));
+          .forEach(({ field }) => suggestions.push({ key: `f${field.id}`, label: field.label, insert: `/${slugify(field.label) || field.id}:`, replace: true, match: query, icon: <Tag className="h-3.5 w-3.5 text-zinc-400" />, detail: row?.customFields[field.id] ? String(row.customFields[field.id]) : `/${slugify(field.label) || field.id}` }));
       }
     } else if (step === "category") {
       question = tx(locale, "Which category?", "Какая категория?");
@@ -266,7 +277,9 @@ export function QuickCapture({
         label: category.name,
         insert: `#${slugify(category.name)}`,
         replace: word.startsWith("#") || (Boolean(query) && score >= 2),
-        icon: <AppIcon name={category.icon} className="h-3.5 w-3.5" />,
+        match: query,
+        detail: `${category.fields.length ? tx(locale, `${category.fields.length} field${category.fields.length === 1 ? "" : "s"}`, `полей: ${category.fields.length}`) : ""}`,
+        icon: <AppIcon name={category.icon} className="h-3.5 w-3.5 text-zinc-300" />,
       }));
     } else if (step === "name") {
       question = tx(locale, "What is it called? Type a name, like hz-fsn-01 or acme.dev", "Как называется? Например hz-fsn-01 или acme.dev");
@@ -283,7 +296,7 @@ export function QuickCapture({
           .filter((entry) => entry.score > 0)
           .sort((a, b) => b.score - a.score)
           .slice(0, 6)
-          .forEach(({ account }) => suggestions.push({ key: `a${account}`, label: account, insert: `@${quoteIfSpaces(vendor)}/${quoteIfSpaces(account)}`, replace: true, detail: vendor }));
+          .forEach(({ account }) => suggestions.push({ key: `a${account}`, label: account, insert: `@${quoteIfSpaces(vendor)}/${quoteIfSpaces(account)}`, replace: true, detail: vendor, match: query, icon: <LetterIcon text={account} /> }));
       } else {
         const counts = new Map<string, number>();
         context.vendors.forEach((item) => { if (item.vendorName) counts.set(item.vendorName, (counts.get(item.vendorName) || 0) + 1); });
@@ -292,20 +305,23 @@ export function QuickCapture({
           .map(([vendor, count]) => ({ vendor, score: body ? fuzzyScore(body, vendor) : 1, count }))
           .filter((entry) => entry.score > 0)
           .sort((a, b) => b.score - a.score || b.count - a.count);
-        ranked.slice(0, 7).forEach(({ vendor, score }) => suggestions.push({
+        ranked.slice(0, 7).forEach(({ vendor, score, count }) => suggestions.push({
           key: `v${vendor}`,
           label: vendor,
           insert: `@${quoteIfSpaces(vendor)}`,
           replace: word.startsWith("@") || (Boolean(body) && score >= 2),
+          match: body,
+          icon: <LetterIcon text={vendor} />,
+          detail: tx(locale, `${count} ${count === 1 ? "entry" : "entries"}`, `${count} зап.`),
         }));
         if (body && word.startsWith("@") && !ranked.some((entry) => entry.vendor.toLowerCase() === body.toLowerCase())) {
-          suggestions.push({ key: "v-new", label: tx(locale, `New vendor “${body}”`, `Новый «${body}»`), insert: `@${quoteIfSpaces(body)}`, replace: true });
+          suggestions.push({ key: "v-new", label: tx(locale, `Create “${body}”`, `Создать «${body}»`), insert: `@${quoteIfSpaces(body)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new vendor", "новый") });
         }
       }
     } else if (step === "price") {
       if (wordIsMoney && currentLine) {
         question = tx(locale, "How often?", "Как часто?");
-        PERIOD_CHOICES.forEach((choice) => suggestions.push({ key: `p${choice.token}`, label: tx(locale, choice.en, choice.ru), insert: `${caretWord.replace(/\/.*$/, "")}${choice.token}`, replace: true }));
+        PERIOD_CHOICES.forEach((choice) => suggestions.push({ key: `p${choice.token}`, label: tx(locale, choice.en, choice.ru), insert: `${caretWord.replace(/\/.*$/, "")}${choice.token}`, replace: true, icon: <Repeat className="h-3.5 w-3.5 text-zinc-400" />, detail: choice.token }));
       } else if (wordIsNumber) {
         question = tx(locale, "Which currency, and how often?", "Какая валюта и период?");
         const amount = word.replace(/^[$€£₽¥]/, "");
@@ -315,7 +331,7 @@ export function QuickCapture({
           ["/mo", "/yr"].forEach((period) => {
             const symbol = CURRENCY_SYMBOLS[code];
             const insert = symbol ? `${symbol}${amount}${period}` : `${amount}${code}${period}`;
-            suggestions.push({ key: `m${code}${period}`, label: `${symbol ? `${symbol}${amount}` : `${amount} ${code}`} ${period === "/mo" ? tx(locale, "monthly", "в месяц") : tx(locale, "yearly", "в год")}`, insert, replace: true });
+            suggestions.push({ key: `m${code}${period}`, label: `${symbol ? `${symbol}${amount}` : `${amount} ${code}`} ${period === "/mo" ? tx(locale, "monthly", "в месяц") : tx(locale, "yearly", "в год")}`, insert, replace: true, icon: <span className="text-[11px] font-semibold text-zinc-300">{symbol || code.slice(0, 1)}</span>, detail: code });
           });
         });
       } else {
@@ -325,14 +341,14 @@ export function QuickCapture({
       question = tx(locale, "When does billing start? Any format: 03.11.2026, 3/11/26, 2026-11-03", "Когда начало оплаты? Любой формат: 03.11.2026, 3/11/26, 2026-11-03");
       const parsedDate = wordIsDate ? parseDate(word) : null;
       if (parsedDate) {
-        suggestions.push({ key: "d-typed", label: tx(locale, `Starts ${formatHuman(parsedDate, locale)}`, `С ${formatHuman(parsedDate, locale)}`), insert: caretWord, replace: true });
+        suggestions.push({ key: "d-typed", label: tx(locale, `Starts ${formatHuman(parsedDate, locale)}`, `С ${formatHuman(parsedDate, locale)}`), insert: caretWord, replace: true, icon: <CalendarDays className="h-3.5 w-3.5 text-zinc-400" />, detail: parsedDate });
       } else if (!wordIsDate) {
         const today = new Date();
         const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
         [
           { key: "today", label: tx(locale, "Today", "Сегодня"), date: today },
           { key: "first", label: tx(locale, "1st of this month", "1-е число"), date: first },
-        ].forEach((choice) => suggestions.push({ key: `d${choice.key}`, label: choice.label, insert: dottedDate(choice.date), replace: false, detail: dottedDate(choice.date) }));
+        ].forEach((choice) => suggestions.push({ key: `d${choice.key}`, label: choice.label, insert: dottedDate(choice.date), replace: false, detail: dottedDate(choice.date), icon: <CalendarDays className="h-3.5 w-3.5 text-zinc-400" /> }));
       }
     } else {
       question = row ? tx(locale, "All set. ↵ saves; add more lines with ⇧↵.", "Готово. ↵ сохранит, ⇧↵ — новая строка.") : "";
@@ -340,7 +356,41 @@ export function QuickCapture({
     return { step, steps, done, suggestions, question };
   }, [caret, caretLine.index, caretLine.start, caretWord, context, currentLine, locale, payload, skipped, slashReady]);
   const suggestions = guide.suggestions;
-  const showSuggestions = suggestions.length > 0 && !suggestionsDismissed;
+  const showSuggestions = open && suggestions.length > 0 && !suggestionsDismissed;
+  const caretWordStart = wordAt(text, caret).start;
+
+  // Float the menu under the word being typed; flip above when there is no room below.
+  useLayoutEffect(() => {
+    const menu = menuRef.current;
+    const marker = markerRef.current;
+    const area = textareaRef.current;
+    if (!showSuggestions || !menu || !marker || !area) return;
+    const place = () => {
+      const rect = marker.getBoundingClientRect();
+      const areaRect = area.getBoundingClientRect();
+      const top = rect.top - area.scrollTop;
+      const bottom = rect.bottom - area.scrollTop;
+      const height = menu.offsetHeight;
+      const width = menu.offsetWidth;
+      const below = Math.min(bottom, areaRect.bottom) + 6;
+      const y = below + height > window.innerHeight - 8 ? Math.max(8, top - height - 6) : below;
+      const x = Math.min(Math.max(8, rect.left - 10), window.innerWidth - width - 8);
+      menu.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    };
+    // Follow the dialog while its open animation settles, then on resize.
+    const started = performance.now();
+    let frame = 0;
+    const tick = () => {
+      place();
+      if (performance.now() - started < 400) frame = requestAnimationFrame(tick);
+    };
+    tick();
+    window.addEventListener("resize", place);
+    return () => {
+      cancelAnimationFrame(frame);
+      window.removeEventListener("resize", place);
+    };
+  }, [showSuggestions, caretWordStart, text, suggestions.length]);
 
   // Optional category fields not filled yet on the caret line, offered once the main steps are done.
   const fieldHints = useMemo(() => {
@@ -383,6 +433,7 @@ export function QuickCapture({
     setServerMessage("");
     setSuggestionsDismissed(false);
     setSelectedSuggestion(0);
+    setNavigated(false);
     if (nextCaret !== undefined) {
       pendingCaret.current = nextCaret;
       setCaret(nextCaret);
@@ -537,15 +588,17 @@ export function QuickCapture({
       if (cycling && event.key === "ArrowDown") {
         event.preventDefault();
         setSelectedSuggestion((current) => (current + 1) % suggestions.length);
+        setNavigated(true);
         return;
       }
       if (cycling && event.key === "ArrowUp") {
         event.preventDefault();
         setSelectedSuggestion((current) => (current - 1 + suggestions.length) % suggestions.length);
+        setNavigated(true);
         return;
       }
-      // Enter completes an explicit #/@ word; otherwise it saves.
-      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && /^[#@]/.test(caretWord)) {
+      // Enter picks from the menu when you are choosing (#, @, /field or after arrowing); otherwise it saves.
+      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && (navigated || /^[#@!/]/.test(caretWord))) {
         event.preventDefault();
         acceptSuggestion(suggestions[Math.min(selectedSuggestion, suggestions.length - 1)]);
         return;
@@ -553,8 +606,14 @@ export function QuickCapture({
     }
     if (event.key === "Tab" && !event.shiftKey) {
       event.preventDefault();
-      if (suggestions.length) acceptSuggestion(suggestions[Math.min(selectedSuggestion, suggestions.length - 1)]);
+      if (showSuggestions) acceptSuggestion(suggestions[Math.min(selectedSuggestion, suggestions.length - 1)]);
       else skipStep();
+      return;
+    }
+    if (event.key === "Escape" && showSuggestions) {
+      event.preventDefault();
+      event.stopPropagation();
+      setSuggestionsDismissed(true);
       return;
     }
     if (event.key === "Escape" && guide.step !== "done" && currentLine) {
@@ -585,6 +644,7 @@ export function QuickCapture({
         <Dialog.Content
           aria-describedby={undefined}
           className="capture-panel-in fixed left-1/2 top-[7vh] z-50 flex max-h-[86vh] w-[calc(100vw-1.5rem)] max-w-[840px] -translate-x-1/2 flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
+          onPointerDownOutside={(event) => { if ((event.target as HTMLElement | null)?.closest?.("[data-suggest-menu]")) event.preventDefault(); }}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
@@ -640,6 +700,9 @@ export function QuickCapture({
                 );
               })}
             </div>
+            <div aria-hidden className="pointer-events-none invisible absolute inset-x-0 top-0 whitespace-pre-wrap break-words px-7 py-6 text-[17px] font-medium leading-8">
+              {text.slice(0, caretWordStart)}<span ref={markerRef}>{text.slice(caretWordStart, caret) || "​"}</span>
+            </div>
             <textarea
               ref={textareaRef}
               value={text}
@@ -684,27 +747,21 @@ export function QuickCapture({
                   </button>
                 ) : null}
               </div>
-              {guide.question ? <p className="text-sm text-zinc-300">{guide.question}</p> : null}
+              {guide.question && !showSuggestions ? <p className="text-sm text-zinc-300">{guide.question}</p> : null}
               {showSuggestions ? (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  {suggestions.map((suggestion, index) => (
-                    <button
-                      key={suggestion.key}
-                      type="button"
-                      onMouseDown={(event) => { event.preventDefault(); acceptSuggestion(suggestion); }}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm transition",
-                        index === selectedSuggestion ? "border-white/20 bg-white/10 text-white" : "border-white/[0.06] text-zinc-300 hover:bg-white/[0.05]",
-                      )}
-                    >
-                      {suggestion.icon}
-                      {suggestion.label}
-                      {suggestion.detail ? <span className="text-xs text-zinc-500">{suggestion.detail}</span> : null}
-                    </button>
-                  ))}
-                  <span className="ml-auto flex items-center gap-1 text-[11px] text-zinc-500"><Kbd>Tab</Kbd>{tx(locale, "pick", "выбрать")} <Kbd>↑↓</Kbd></span>
-                </div>
-              ) : guide.step === "done" && fieldHints.length ? (
+                <SuggestMenu
+                  ref={menuRef}
+                  title={guide.step === "field" ? guide.question : STEP_LABELS[guide.step as GuideStep]?.[ru ? 1 : 0] || ""}
+                  icon={STEP_ICONS[guide.step]}
+                  progress={guide.step !== "field" && guide.step !== "done" ? tx(locale, `step ${guide.steps.indexOf(guide.step) + 1} of ${guide.steps.length}`, `шаг ${guide.steps.indexOf(guide.step) + 1} из ${guide.steps.length}`) : undefined}
+                  items={suggestions}
+                  selected={Math.min(selectedSuggestion, suggestions.length - 1)}
+                  onHover={setSelectedSuggestion}
+                  onPick={(index) => acceptSuggestion(suggestions[index])}
+                  labels={{ navigate: tx(locale, "move", "выбор"), pick: tx(locale, "pick", "вставить"), close: tx(locale, "close", "закрыть") }}
+                />
+              ) : null}
+              {guide.step === "done" && fieldHints.length > 0 && !showSuggestions ? (
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
                   <span>{tx(locale, "Optional fields:", "Доп. поля:")}</span>
                   {fieldHints.map((field) => (
@@ -796,7 +853,7 @@ export function QuickCapture({
                 ))}
               </div>
             ) : payload && !loading ? (
-              <Onboarding locale={locale} onExample={(example) => updateText(example, example.length)} onFile={() => fileRef.current?.click()} />
+              <Onboarding locale={locale} onFile={() => fileRef.current?.click()} />
             ) : null}
           </div>
 
@@ -853,28 +910,17 @@ export function QuickCapture({
   );
 }
 
-function Onboarding({ locale, onExample, onFile }: { locale: Locale; onExample: (text: string) => void; onFile: () => void }) {
+function Onboarding({ locale, onFile }: { locale: Locale; onFile: () => void }) {
   const legend: Array<{ kind: keyof typeof TOKEN_DOT; syntax: string; en: string; ru: string }> = [
     { kind: "category", syntax: "#servers", en: "category", ru: "категория" },
     { kind: "vendor", syntax: "@Hetzner/login", en: "vendor / account", ru: "поставщик / аккаунт" },
     { kind: "money", syntax: "€4.51/mo", en: "price & period", ru: "цена и период" },
-    { kind: "date", syntax: "2026-12-01", en: "renews on", ru: "дата продления" },
+    { kind: "date", syntax: "01.11.26", en: "billing start", ru: "начало оплаты" },
     { kind: "field", syntax: "/ip: 1.2.3.4", en: "category field", ru: "поле категории" },
     { kind: "notes", syntax: "// text", en: "notes", ru: "заметка" },
   ];
   return (
-    <div className="space-y-6 px-7 py-6">
-      <div>
-        <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">{tx(locale, "Try one", "Попробуйте")}</p>
-        <div className="space-y-1.5">
-          {CAPTURE_EXAMPLES.map((example) => (
-            <button key={example} type="button" onClick={() => onExample(example)} className="group flex w-full items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-left font-mono text-[13px] text-zinc-400 transition hover:border-white/15 hover:bg-white/[0.04] hover:text-zinc-100">
-              <span className="flex-1 truncate">{example}</span>
-              <ArrowRight className="h-3.5 w-3.5 opacity-0 transition group-hover:opacity-100" />
-            </button>
-          ))}
-        </div>
-      </div>
+    <div className="space-y-4 px-7 py-5">
       <div className="grid gap-2 sm:grid-cols-3">
         {legend.map((item) => (
           <div key={item.syntax} className="flex items-center gap-2 text-xs">
