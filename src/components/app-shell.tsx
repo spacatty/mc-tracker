@@ -12,6 +12,8 @@ import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { Category, User, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { QuickCaptureButton } from "./capture/quick-capture-button";
+import { CaptureProvider } from "./capture/capture-provider";
 import { AppIcon, BrandLogo } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
 import { Button } from "./ui/button";
@@ -388,6 +390,7 @@ export function AppShell({
   }
 
   return (
+    <CaptureProvider workspaceId={currentWorkspace?.id || null} locale={locale}>
     <div className="flex min-h-screen bg-background">
       <div className="fixed left-0 right-0 top-0 z-40 border-b border-border bg-background/90 px-3 py-2 backdrop-blur md:hidden">
         <div className="flex items-center justify-between">
@@ -532,6 +535,7 @@ export function AppShell({
                 locale={locale}
               />
             </SidebarSection>
+            {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
             <SidebarSection title={t(locale, "main")} collapsed={collapsed}>
               {primaryNav.map((item) => (
                 <SidebarNavLink key={item.href} item={item} active={isActive(item.href) && !activeCategoryId} collapsed={collapsed} workspaceId={currentWorkspace?.id} />
@@ -663,5 +667,6 @@ export function AppShell({
       </aside>
       <main id="main-content" className="min-w-0 flex-1 px-3 py-16 sm:px-5 md:px-6 md:py-6 xl:px-8">{children}</main>
     </div>
+    </CaptureProvider>
   );
 }

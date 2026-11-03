@@ -31,6 +31,18 @@ npm run dev -- -p 3001
 
 Open [http://localhost:3000](http://localhost:3000). On the first visit, the app redirects to `/setup` so you can create the initial superadmin account.
 
+## Adding and managing entries
+
+- **Quick capture** (press `N` anywhere, or `Ctrl/⌘+K`): type one entry per line, for example
+  `hz-fsn-01 #servers @Hetzner/ops €4.51/mo 2026-12-01 ip:95.217.10.4 // spare box`.
+  Tokens are colored as you type and every line turns into a preview card you can adjust by clicking its chips.
+  `#category`, `@vendor/account`, `price/period` (`/mo`, `/yr`, `/q`, `/w`, `/90d`, `/once`), a renewal date
+  (or `start..end`), `field:value` for category fields, a URL and `// notes` are understood.
+  `edit:<id>` and `pay:<id>` change an existing entry or record a payment. Pasting CSV/TSV/JSON converts it to lines;
+  free text can be rewritten into lines by the AI parser (`Ctrl/⌘+J`). The syntax lives in `src/lib/capture/syntax.ts`.
+- **Inspector**: click an entry in the table to open it in a side panel. Click any value to change it (saved right away),
+  mark it paid, duplicate, archive or delete it, and move through entries with `J`/`K`.
+
 ## Environment Variables
 
 - `AUTH_SECRET`: required in production for signing session cookies.

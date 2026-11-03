@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
+import { aiConfigured } from "@/lib/ai/client";
 import { extractPaymentItems } from "@/lib/ai/payment-extractor";
 import { ensureSupportedCurrency } from "@/lib/currencies";
 import { localeCookieName, normalizeLocale } from "@/lib/i18n";
@@ -29,6 +30,7 @@ import {
   importWorkspaceDataForUser,
   listCategoriesForWorkspace,
   listItemsForWorkspace,
+  listInvoicesForWorkspace,
   listNotificationChannelsForWorkspace,
   listWorkspacesForUser,
   listVendorSuggestionsForWorkspace,
@@ -803,4 +805,50 @@ export async function deleteArchivedItemsAction(formData: FormData) {
   revalidatePath("/app");
   revalidatePath("/app/items");
   revalidatePath("/app/archive");
+}
+
+/** Everything the Quick Capture composer needs for one workspace, fetched when it opens. */
+export async function getCaptureContextAction(workspaceIdArg?: number | null) {
+  const user = await requireUser();
+  const workspace = resolveWorkspaceForUser(user.id, workspaceIdArg || null);
+  const items = listItemsForWorkspace(workspace.id, user.id);
+  return {
+    workspaceId: workspace.id,
+    workspaceName: workspace.name,
+    readOnly: workspace.accessRole === "viewer",
+    aiAvailable: Boolean(user.premium && aiConfigured()),
+    defaultCurrency: ensureSupportedCurrency(user.displayCurrency),
+    categories: listCategoriesForWorkspace(workspace.id, user.id),
+    vendors: listVendorSuggestionsForWorkspace(workspace.id, user.id),
+    entries: items.map((item) => ({
+      id: item.id,
+      name: item.name,
+      vendorName: item.vendorName,
+      vendorUrl: item.vendorUrl,
+      accountName: item.accountName,
+      categoryId: item.categoryId,
+      paymentType: item.paymentType,
+      amount: item.amount,
+      currency: item.currency,
+      period: item.period,
+      customPeriodDays: item.customPeriodDays,
+      billingStartAt: item.billingStartAt,
+      billingEndAt: item.billingEndAt,
+      notes: item.notes,
+      customFields: item.customFields,
+    })),
+  };
+}
+
+export type CaptureContextPayload = Awaited<ReturnType<typeof getCaptureContextAction>>;
+
+/** Invoices recorded for one entry, newest first, for the inspector's history. */
+export async function getEntryHistoryAction(workspaceIdArg: number, itemId: number) {
+  const user = await requireUser();
+  const workspaceId = resolveWorkspaceId(workspaceIdArg, user.id);
+  return listInvoicesForWorkspace(workspaceId, user.id)
+    .filter((invoice) => invoice.itemId === itemId)
+    .sort((a, b) => String(b.paymentDate || b.createdAt).localeCompare(String(a.paymentDate || a.createdAt)))
+    .slice(0, 12)
+    .map((invoice) => ({ id: invoice.id, amount: invoice.amount, currency: invoice.currency, paymentDate: invoice.paymentDate, dueDate: invoice.dueDate }));
 }

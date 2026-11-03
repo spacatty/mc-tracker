@@ -20,12 +20,13 @@ import {
 import { analyzeAiImportAction, applyImportRowsAction } from "@/app/actions";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import type { Locale } from "@/lib/i18n";
-import type { AiDraftItem, AiQuestion } from "@/lib/ai/import-schema";
+import type { AiQuestion } from "@/lib/ai/import-schema";
 import {
   blankImportRow,
   entrySignature,
   importRowPayload,
   parseTabularInput,
+  rowFromAiDraft,
   validateImportRow,
   type ImportRow,
   type ImportRowErrors,
@@ -58,30 +59,6 @@ function tx(locale: Locale, en: string, ru: string) {
   return locale === "ru" ? ru : en;
 }
 
-function rowFromAiDraft(draft: AiDraftItem, index: number): ImportRow {
-  const row = blankImportRow(`ai-${Date.now()}-${index}`, "ai", draft.categoryId);
-  return {
-    ...row,
-    action: draft.action,
-    targetItemId: draft.targetItemId,
-    name: draft.name,
-    paymentType: draft.paymentType,
-    amountInput: draft.amountSource === "unknown" && !draft.amount ? "" : String(draft.amount),
-    currency: draft.currency,
-    billingStartAt: draft.billingStartAt || "",
-    billingEndAt: draft.billingEndAt || "",
-    period: draft.paymentType === "recurring" ? draft.period || "1m" : null,
-    customPeriodDaysInput: draft.customPeriodDays ? String(draft.customPeriodDays) : "30",
-    vendorName: draft.vendorName,
-    vendorUrl: draft.vendorUrl,
-    accountName: draft.accountName,
-    notes: draft.notes,
-    customFields: draft.customFields,
-    shiftDates: draft.shiftDates,
-    shiftPaymentPeriod: draft.shiftPaymentPeriod,
-    hint: draft.confidence,
-  };
-}
 
 function CellError({ message }: { message?: string }) {
   return message ? <p className="mt-1 text-[11px] leading-tight text-red-300">{message}</p> : null;

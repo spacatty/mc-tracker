@@ -1,3 +1,4 @@
+import type { AiDraftItem } from "@/lib/ai/import-schema";
 import type { BillingPeriod, Category, PaymentType } from "@/lib/types";
 
 export type ImportAction = "create" | "edit" | "pay";
@@ -465,4 +466,30 @@ export function delimitedColumnValues(text: string, field: keyof typeof COLUMN_A
   const column = headers?.findIndex((header) => COLUMN_ALIASES[field].includes(headerKey(header))) ?? -1;
   if (column < 0) return [];
   return body.map((cells) => cells[column] || "").filter(Boolean);
+}
+
+/** Review row for one AI proposal. */
+export function rowFromAiDraft(draft: AiDraftItem, index: number): ImportRow {
+  const row = blankImportRow(`ai-${Date.now()}-${index}`, "ai", draft.categoryId);
+  return {
+    ...row,
+    action: draft.action,
+    targetItemId: draft.targetItemId,
+    name: draft.name,
+    paymentType: draft.paymentType,
+    amountInput: draft.amountSource === "unknown" && !draft.amount ? "" : String(draft.amount),
+    currency: draft.currency,
+    billingStartAt: draft.billingStartAt || "",
+    billingEndAt: draft.billingEndAt || "",
+    period: draft.paymentType === "recurring" ? draft.period || "1m" : null,
+    customPeriodDaysInput: draft.customPeriodDays ? String(draft.customPeriodDays) : "30",
+    vendorName: draft.vendorName,
+    vendorUrl: draft.vendorUrl,
+    accountName: draft.accountName,
+    notes: draft.notes,
+    customFields: draft.customFields,
+    shiftDates: draft.shiftDates,
+    shiftPaymentPeriod: draft.shiftPaymentPeriod,
+    hint: draft.confidence,
+  };
 }

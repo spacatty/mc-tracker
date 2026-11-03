@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { useRouter } from "next/navigation";
-import { Fragment, type ReactNode, useMemo, useRef, useState, useTransition } from "react";
+import { Fragment, type MouseEvent as ReactMouseEvent, type ReactNode, useMemo, useRef, useState, useTransition } from "react";
 import {
   AlertTriangle,
   Archive,
@@ -345,6 +345,9 @@ export function EntriesTable({
   selectedCategoryId,
   initialAdd = false,
   locale = "en",
+  activeEntryId = null,
+  onOpenEntry,
+  onAddEntry,
 }: {
   items: PaymentItem[];
   categories: Category[];
@@ -354,6 +357,9 @@ export function EntriesTable({
   selectedCategoryId?: number;
   initialAdd?: boolean;
   locale?: Locale;
+  activeEntryId?: number | null;
+  onOpenEntry?: (id: number, visibleOrder: number[]) => void;
+  onAddEntry?: () => void;
 }) {
   const router = useRouter();
   const readOnly = workspaceRole === "viewer";
@@ -453,6 +459,13 @@ export function EntriesTable({
       ? "indeterminate"
       : false;
   const activeFilterCount = [nameFilter, accountFilter, vendorFilter].filter((value) => value.trim()).length;
+
+  function openFromRow(event: ReactMouseEvent, row: DraftRow) {
+    if (!onOpenEntry || editMode || !row.id) return;
+    const target = event.target as HTMLElement;
+    if (target.closest("button, a, input, select, textarea, label, [role=checkbox]")) return;
+    onOpenEntry(row.id, filtered.flatMap((candidate) => candidate.id ? [candidate.id] : []));
+  }
 
   function fieldError(rowKey: string, field: string) {
     return clientErrors[rowKey]?.[field] || serverErrorMap[`${rowKey}:${field}`];
@@ -949,7 +962,7 @@ export function EntriesTable({
                     <Edit3 className="h-4 w-4" />{tx(locale, "Edit", "Изменить")}
                   </Button>
                 ) : null}
-                <Button type="button" variant="secondary" size="sm" onClick={addRow}>
+                <Button type="button" variant="secondary" size="sm" onClick={() => (onAddEntry && !editMode ? onAddEntry() : addRow())}>
                   <Plus className="h-4 w-4" />{tx(locale, "Add row", "Добавить строку")}
                 </Button>
                 {editMode ? (
@@ -1039,7 +1052,11 @@ export function EntriesTable({
               const columnCount = editMode ? 12 : 8 + visibleFields.length + (showCategory ? 1 : 0);
               return (
                 <Fragment key={row.rowKey}>
-                  <tr className={cn("group bg-surface hover:bg-surface-raised", rowHasError(row.rowKey) && "ring-1 ring-inset ring-red-500/25", density === "compact" ? "[&>td]:py-1.5" : "[&>td]:py-3")}>
+                  <tr
+                    data-entry-row
+                    onClick={(event) => openFromRow(event, row)}
+                    className={cn("group bg-surface hover:bg-surface-raised", onOpenEntry && !editMode && row.id && "cursor-pointer", activeEntryId && row.id === activeEntryId && "bg-surface-raised [&>td]:bg-surface-raised shadow-[inset_3px_0_0_0_var(--accent)]", rowHasError(row.rowKey) && "ring-1 ring-inset ring-red-500/25", density === "compact" ? "[&>td]:py-1.5" : "[&>td]:py-3")}
+                  >
                     <td className="sticky left-0 z-20 w-14 min-w-14 bg-surface px-2 group-hover:bg-surface-raised">
                       <div className="flex h-7 items-center gap-1.5">
                         {row.id ? (
@@ -1162,7 +1179,7 @@ export function EntriesTable({
           const category = categories.find((candidate) => candidate.id === row.categoryId);
           const isExpanded = expanded.has(row.rowKey);
           return (
-            <article key={row.rowKey} className={cn("rounded-lg border border-border bg-surface-raised", rowHasError(row.rowKey) && "border-red-400/50")}>
+            <article key={row.rowKey} data-entry-row onClick={(event) => openFromRow(event, row)} className={cn("rounded-lg border border-border bg-surface-raised", onOpenEntry && !editMode && row.id && "cursor-pointer", activeEntryId && row.id === activeEntryId && "border-violet-400/50", rowHasError(row.rowKey) && "border-red-400/50")}>
               <div className="flex items-start justify-between gap-3 border-b border-border p-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">

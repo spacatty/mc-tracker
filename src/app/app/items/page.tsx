@@ -1,13 +1,14 @@
 import Link from "next/link";
-import { FileUp, Plus } from "lucide-react";
-import { EntriesTable } from "@/components/entries-table";
+import { FileUp } from "lucide-react";
+import { OpenCaptureButton } from "@/components/capture/quick-capture-button";
+import { EntriesWorkspace } from "@/components/inspector/entries-workspace";
 import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { listCategoriesForWorkspace, listItemsForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
 
-export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ add?: string; category?: string; workspace?: string }> }) {
+export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ add?: string; category?: string; workspace?: string; entry?: string }> }) {
   const user = await requireUser();
   const locale = await getLocale();
   const params = await searchParams;
@@ -16,7 +17,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   const categoryId = Number(params.category || 0);
   const selectedCategory = categoryId ? categories.find((category) => category.id === categoryId) : undefined;
   const items = listItemsForWorkspace(workspace.id, user.id).filter((item) => !categoryId || item.categoryId === categoryId);
-  const addHref = `/app/items?workspace=${workspace.id}${selectedCategory ? `&category=${selectedCategory.id}` : ""}&add=1`;
   const importHref = `/app/import?workspace=${workspace.id}${selectedCategory ? `&category=${selectedCategory.id}` : ""}`;
   const entriesStateKey = [
     workspace.id,
@@ -34,23 +34,18 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
         {workspace.accessRole !== "viewer" ? (
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="ghost" size="sm" className="gap-2">
-              <Link href={addHref}>
-                <Plus className="h-4 w-4" />
-                {t(locale, "createEntry")}
-              </Link>
-            </Button>
-            <Button asChild size="sm" className="gap-2">
               <Link href={importHref}>
                 <FileUp className="h-4 w-4" />
-                {locale === "ru" ? "Импорт пачкой" : "Bulk import"}
+                {locale === "ru" ? "Импорт файла" : "Import file"}
               </Link>
             </Button>
+            <OpenCaptureButton label={t(locale, "createEntry")} />
           </div>
         ) : null}
       </header>
 
-      <EntriesTable
-        key={entriesStateKey}
+      <EntriesWorkspace
+        tableKey={entriesStateKey}
         items={items}
         categories={categories}
         vendorSuggestions={listVendorSuggestionsForWorkspace(workspace.id, user.id)}
