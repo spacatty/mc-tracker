@@ -151,7 +151,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 
 /* Quick capture + inspector motion */
 @keyframes capture-overlay-in { from { opacity: 0; } to { opacity: 1; } }
-/* The panel is centred with Tailwind's `translate` property, so the animation only uses `transform`. */
+/* The panel is centred with margins, not transforms, so this animation never fights its position. */
 @keyframes capture-panel-in {
   from { opacity: 0; transform: translateY(8px) scale(0.98); }
   to { opacity: 1; transform: none; }

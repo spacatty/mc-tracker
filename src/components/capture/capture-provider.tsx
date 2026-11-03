@@ -35,7 +35,7 @@ export function CaptureProvider({ workspaceId, locale, children }: { workspaceId
   const [open, setOpen] = useState(false);
   const [initialText, setInitialText] = useState("");
   const [openCount, setOpenCount] = useState(0);
-  const [payload, setPayload] = useState<CaptureContextPayload | null>(null);
+  const [loaded, setLoaded] = useState<{ workspaceId: number | null; payload: CaptureContextPayload } | null>(null);
   const [loading, setLoading] = useState(false);
   const entryOpener = useRef<((id: number) => void) | null>(null);
   const categoryParam = Number(searchParams.get("category") || 0) || null;
@@ -44,10 +44,18 @@ export function CaptureProvider({ workspaceId, locale, children }: { workspaceId
   const loadContext = useCallback(async () => {
     setLoading(true);
     try {
-      setPayload(await getCaptureContextAction(workspaceId));
+      setLoaded({ workspaceId, payload: await getCaptureContextAction(workspaceId) });
     } finally {
       setLoading(false);
     }
+  }, [workspaceId]);
+  const payload = loaded?.workspaceId === workspaceId ? loaded.payload : null;
+
+  // Fetch ahead of time so the panel opens with its final content instead of growing mid-animation.
+  useEffect(() => {
+    let live = true;
+    void getCaptureContextAction(workspaceId).then((next) => { if (live) setLoaded({ workspaceId, payload: next }); });
+    return () => { live = false; };
   }, [workspaceId]);
 
   const openCapture = useCallback((options?: { text?: string }) => {

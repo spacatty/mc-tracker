@@ -2,7 +2,7 @@
 
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowRight, CalendarDays, Coins, CornerDownLeft, Plus, Repeat, Store, Tag, Tags, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { analyzeAiImportAction, applyImportRowsAction, type CaptureContextPayload } from "@/app/actions";
 import type { AiQuestion } from "@/lib/ai/import-schema";
 import { parseCapture, parseDate, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
@@ -160,7 +160,13 @@ export function QuickCapture({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const mirrorRef = useRef<HTMLDivElement>(null);
   const pendingCaret = useRef<number | null>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
+  const menuRef = useRef<HTMLDivElement | null>(null);
+  // Radix mounts the dialog content a render after `open`, so placement also re-runs once the menu exists.
+  const [menuMounted, setMenuMounted] = useState(false);
+  const attachMenu = useCallback((node: HTMLDivElement | null) => {
+    menuRef.current = node;
+    setMenuMounted(Boolean(node));
+  }, []);
   const markerRef = useRef<HTMLSpanElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -370,7 +376,7 @@ export function QuickCapture({
     const maxLeft = Math.max(8, area.offsetWidth - menu.offsetWidth - 8);
     menu.style.top = `${top}px`;
     menu.style.left = `${Math.min(Math.max(8, marker.offsetLeft - 10), maxLeft)}px`;
-  }, [showSuggestions, caretWordStart, text, suggestions.length]);
+  }, [menuMounted, showSuggestions, caretWordStart, text, suggestions.length]);
 
   // Optional category fields not filled yet on the caret line, offered once the main steps are done.
   const fieldHints = useMemo(() => {
@@ -623,7 +629,7 @@ export function QuickCapture({
         <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="capture-panel-in fixed left-1/2 top-[22vh] z-50 flex max-h-[74vh] w-[calc(100vw-1.5rem)] max-w-[840px] -translate-x-1/2 flex-col rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
+          className="capture-panel-in fixed inset-x-0 top-[22vh] z-50 mx-auto flex max-h-[74vh] w-[calc(100vw-1.5rem)] max-w-[840px] flex-col rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
           onPointerDownOutside={(event) => { if ((event.target as HTMLElement | null)?.closest?.("[data-suggest-menu]")) event.preventDefault(); }}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -702,7 +708,7 @@ export function QuickCapture({
             {isThinking ? <div className="capture-shimmer pointer-events-none absolute inset-0" /> : null}
             {showSuggestions ? (
               <SuggestMenu
-                ref={menuRef}
+                ref={attachMenu}
                 title={guide.step === "field" ? guide.question : STEP_LABELS[guide.step as GuideStep]?.[ru ? 1 : 0] || ""}
                 icon={STEP_ICONS[guide.step]}
                 progress={guide.step !== "field" && guide.step !== "done" ? tx(locale, `step ${guide.steps.indexOf(guide.step) + 1} of ${guide.steps.length}`, `шаг ${guide.steps.indexOf(guide.step) + 1} из ${guide.steps.length}`) : undefined}
@@ -832,7 +838,7 @@ export function QuickCapture({
                   />
                 ))}
               </div>
-            ) : payload && !loading ? (
+            ) : payload ? (
               <Onboarding locale={locale} onFile={() => fileRef.current?.click()} />
             ) : null}
           </div>
