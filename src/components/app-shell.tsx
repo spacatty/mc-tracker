@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams }
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, Check, ChevronDown, ChevronsUpDown, GripVertical, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, Tags, UserPlus, Users, X } from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronsUpDown, GripVertical, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Search, Settings, Shield, Tags, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { logoutAction, setLanguageAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
@@ -13,7 +13,9 @@ import { t } from "@/lib/i18n";
 import type { Category, User, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { QuickCaptureButton } from "./capture/quick-capture-button";
+import { Kbd } from "./capture/shared";
 import { TableStyleSync } from "./table-style";
+import { CommandPalette, OPEN_PALETTE_EVENT } from "./command-palette";
 import { CaptureProvider } from "./capture/capture-provider";
 import { AppIcon, BrandLogo } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
@@ -500,6 +502,24 @@ export function AppShell({
   return (
     <CaptureProvider workspaceId={currentWorkspace?.id || null} locale={locale}>
     <TableStyleSync />
+    <CommandPalette
+      locale={locale}
+      pages={[
+        ...primaryNav,
+        ...workspaceItems,
+        ...extraItems,
+        { href: "/app/notifications", label: t(locale, "notifications"), icon: "Bell", accent: "text-zinc-300" },
+        { href: "/app/categories", label: t(locale, "manageCategories"), icon: "Tags", accent: "text-zinc-300" },
+        { href: "/app/settings", label: t(locale, "settings"), icon: "Settings", accent: "text-zinc-300" },
+        ...(user.role === "admin" || user.role === "superadmin" ? [{ href: "/app/admin", label: t(locale, "admin"), icon: "Shield", accent: "text-zinc-300" }] : []),
+      ]}
+      workspaces={workspaces}
+      categories={items}
+      currentWorkspaceId={currentWorkspace?.id || null}
+      currentHref={currentHref}
+      canCreate={currentWorkspace?.accessRole !== "viewer"}
+      onToggleSidebar={toggleCollapsed}
+    />
     <div className="flex min-h-screen bg-background">
       <div className="fixed left-0 right-0 top-0 z-40 border-b border-white/[0.06] bg-background/90 px-3 py-2 backdrop-blur md:hidden">
         <div className="flex items-center justify-between">
@@ -593,7 +613,37 @@ export function AppShell({
           collapsed ? "w-[60px]" : "w-52",
         )}
       >
-        <div className={cn("flex shrink-0 items-center gap-1 px-2 pb-2 pt-3", collapsed && "flex-col")}>
+        <div className={cn("flex shrink-0 flex-col gap-1.5 px-3 pb-4 pt-3", collapsed && "items-center px-0")}>
+          <div className={cn("flex items-center gap-1", collapsed && "flex-col")}>
+            <button
+              type="button"
+              onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
+              title={collapsed ? (locale === "ru" ? "Поиск (Ctrl /)" : "Search (Ctrl /)") : undefined}
+              aria-label={locale === "ru" ? "Поиск" : "Search"}
+              className={cn(
+                "group flex h-8 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-left text-xs text-zinc-500 transition hover:border-white/[0.12] hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30",
+                collapsed && "w-8 flex-none justify-center px-0",
+              )}
+            >
+              <Search className="h-3.5 w-3.5 shrink-0" />
+              {!collapsed ? (
+                <>
+                  <span className="flex-1 truncate">{locale === "ru" ? "Поиск" : "Search"}</span>
+                  <Kbd className="h-4 min-w-4 text-[9px]">Ctrl /</Kbd>
+                </>
+              ) : null}
+            </button>
+            <button
+              type="button"
+              onClick={toggleCollapsed}
+              title={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-md text-zinc-600 transition hover:bg-white/[0.06] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30"
+            >
+              {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+            </button>
+          </div>
           <WorkspaceSelect
             workspaces={workspaces}
             currentWorkspaceId={currentWorkspace?.id}
@@ -602,23 +652,8 @@ export function AppShell({
             collapsed={collapsed}
             locale={locale}
           />
-          <button
-            type="button"
-            onClick={toggleCollapsed}
-            title={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
-            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-zinc-600 transition hover:bg-white/[0.06] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30"
-          >
-            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
-          </button>
+          {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
         </div>
-
-        {currentWorkspace?.accessRole !== "viewer" ? (
-          <div className="px-3 pb-4">
-            <QuickCaptureButton collapsed={collapsed} locale={locale} />
-          </div>
-        ) : null}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
           <nav aria-label={t(locale, "primaryNavigation")} className="space-y-4">
