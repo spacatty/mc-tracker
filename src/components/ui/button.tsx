@@ -8,8 +8,8 @@ const buttonVariants = cva(
   {
     variants: {
       variant: {
-        // Light primary, same as the Quick Capture save button.
-        default: "bg-zinc-100 font-semibold text-zinc-900 hover:bg-white",
+        // Aurora (globals.css): animated dark glass, the app's one primary style.
+        default: "btn-aurora font-semibold",
         accent: "border border-violet-400/20 bg-violet-500/10 text-violet-100 hover:border-violet-400/30 hover:bg-violet-500/15",
         destructive:
           "border border-red-400/20 bg-red-500/10 text-red-100 hover:border-red-400/30 hover:bg-red-500/15",

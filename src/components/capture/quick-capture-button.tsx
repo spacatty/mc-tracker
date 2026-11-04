@@ -15,15 +15,15 @@ export function QuickCaptureButton({ collapsed, locale }: { collapsed: boolean; 
       onClick={() => openCapture()}
       title={collapsed ? tx(locale, "Create new entry (N)", "Новая запись (N)") : undefined}
       className={cn(
-        "group flex h-8 w-full items-center gap-2 rounded-lg bg-zinc-100 px-2.5 text-left text-[13px] font-semibold text-zinc-900 shadow-[0_1px_0_rgba(255,255,255,0.4)_inset,0_6px_16px_-8px_rgba(0,0,0,0.8)] transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 active:scale-[0.98]",
+        "btn-aurora group flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
         collapsed && "mx-auto w-8 justify-center px-0",
       )}
     >
-      <Plus className="h-3.5 w-3.5 shrink-0 transition group-hover:rotate-90" />
+      <Plus className="h-3.5 w-3.5 shrink-0" />
       {!collapsed ? (
         <>
           <span className="flex-1 truncate">{tx(locale, "Create new entry", "Новая запись")}</span>
-          <Kbd className="h-[18px] min-w-[18px] border-black/10 bg-black/[0.06] text-zinc-500">N</Kbd>
+          <Kbd className="h-[18px] min-w-[18px] border-white/15 bg-white/10 text-zinc-300">N</Kbd>
         </>
       ) : null}
     </button>
@@ -37,11 +37,11 @@ export function OpenCaptureButton({ label, className, text }: { label: string; c
     <button
       type="button"
       onClick={() => openCapture({ text })}
-      className={cn("inline-flex h-9 items-center gap-2 rounded-lg bg-zinc-100 px-3.5 text-sm font-semibold text-zinc-900 transition hover:bg-white active:scale-[0.98]", className)}
+      className={cn("btn-aurora inline-flex h-9 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold", className)}
     >
       <Plus className="h-4 w-4" />
       {label}
-      <Kbd className="border-black/10 bg-black/5 text-zinc-600">N</Kbd>
+      <Kbd className="border-white/15 bg-white/10 text-zinc-300">N</Kbd>
     </button>
   );
 }

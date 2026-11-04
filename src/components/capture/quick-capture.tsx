@@ -873,7 +873,7 @@ export function QuickCapture({
               type="button"
               onClick={save}
               disabled={!parsed.length || isSaving || readOnly || isThinking}
-              className="inline-flex h-9 items-center gap-2 rounded-xl bg-zinc-100 px-4 text-sm font-semibold text-zinc-900 transition hover:bg-white active:scale-[0.98] disabled:cursor-not-allowed disabled:bg-zinc-800 disabled:text-zinc-500 disabled:shadow-none"
+              className="btn-aurora inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               {parsed.length > 1 ? tx(locale, `Save ${parsed.length}`, `Сохранить ${parsed.length}`) : tx(locale, "Save", "Сохранить")}
