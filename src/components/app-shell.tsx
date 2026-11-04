@@ -170,16 +170,17 @@ function WorkspaceSelect({
           type="button"
           title={collapsed ? (currentWorkspace ? `${t(locale, "workspace")}: ${currentWorkspace.name}` : t(locale, "workspace")) : undefined}
           className={cn(
-            "group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border border-white/[0.08] bg-white/[0.03] pl-1 pr-2 text-left transition hover:border-white/[0.14] hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:border-white/[0.16] data-[state=open]:bg-white/[0.05]",
+            // Same box as the search bar below it: one control family in the sidebar header.
+            "group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-left text-xs text-zinc-300 transition hover:border-white/[0.12] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:border-white/[0.12]",
             collapsed && "w-8 justify-center px-0",
           )}
         >
-          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/[0.05] text-[13px]">
+          <span className="grid h-3.5 w-3.5 shrink-0 place-items-center text-[12px] leading-none">
             {currentWorkspace?.emoji || "📦"}
           </span>
           {!collapsed ? (
             <>
-              <span className="min-w-0 flex-1 truncate text-[13px] font-medium text-zinc-100">{currentWorkspace?.name || t(locale, "workspace")}</span>
+              <span className="min-w-0 flex-1 truncate">{currentWorkspace?.name || t(locale, "workspace")}</span>
               <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-600 transition group-hover:text-zinc-400 group-data-[state=open]:rotate-180" />
             </>
           ) : null}
@@ -631,6 +632,14 @@ export function AppShell({
         </div>
 
         <div className={cn("flex shrink-0 flex-col gap-1.5 px-3 pb-4 pt-1", collapsed && "items-center px-0")}>
+          <WorkspaceSelect
+            workspaces={workspaces}
+            currentWorkspaceId={currentWorkspace?.id}
+            pathname={pathname}
+            searchParams={searchParams}
+            collapsed={collapsed}
+            locale={locale}
+          />
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
@@ -649,14 +658,6 @@ export function AppShell({
               </>
             ) : null}
           </button>
-          <WorkspaceSelect
-            workspaces={workspaces}
-            currentWorkspaceId={currentWorkspace?.id}
-            pathname={pathname}
-            searchParams={searchParams}
-            collapsed={collapsed}
-            locale={locale}
-          />
           {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
         </div>
 
