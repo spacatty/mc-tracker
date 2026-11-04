@@ -13,10 +13,10 @@ import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMe
  * and it is saved in localStorage the moment it changes.
  */
 
-export type TableStyle = "current" | "ledger" | "sheet";
+export type TableStyle = "current" | "sheet";
 
 const STORAGE_KEY = "mc-tracker-table-style";
-const STYLES: TableStyle[] = ["current", "ledger", "sheet"];
+const STYLES: TableStyle[] = ["current", "sheet"];
 const CHANGE_EVENT = "mc-table-style";
 
 function readStyle(): TableStyle {
@@ -42,13 +42,11 @@ export function TableStyleSync() {
 }
 
 function label(style: TableStyle, locale: Locale) {
-  if (style === "ledger") return tx(locale, "Ledger", "Реестр");
   if (style === "sheet") return tx(locale, "Sheet", "Таблица");
   return tx(locale, "Current", "Обычный");
 }
 
 function hint(style: TableStyle, locale: Locale) {
-  if (style === "ledger") return tx(locale, "Dense, borderless, zebra rows", "Плотно, без линий, полосы");
   if (style === "sheet") return tx(locale, "Gridlines, compact 32px rows", "Сетка, компактные строки");
   return tx(locale, "Default spacing and dividers", "Обычные отступы и линии");
 }

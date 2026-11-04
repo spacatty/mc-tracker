@@ -13,17 +13,17 @@ export function QuickCaptureButton({ collapsed, locale }: { collapsed: boolean; 
     <button
       type="button"
       onClick={() => openCapture()}
-      title={collapsed ? tx(locale, "Create new entry (N)", "Новая запись (N)") : undefined}
+      title={collapsed ? tx(locale, "New Entry (N)", "Новая запись (N)") : undefined}
       className={cn(
-        "btn-aurora group flex h-8 w-full items-center gap-2 rounded-lg px-2.5 text-left text-[13px] font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
-        collapsed && "mx-auto w-8 justify-center px-0",
+        "btn-aurora group flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
+        collapsed && "mx-auto w-7 justify-center px-0",
       )}
     >
-      <Plus className="h-3.5 w-3.5 shrink-0" />
+      <Plus className="h-3 w-3 shrink-0" />
       {!collapsed ? (
         <>
-          <span className="flex-1 truncate">{tx(locale, "Create new entry", "Новая запись")}</span>
-          <Kbd className="h-[18px] min-w-[18px] border-white/15 bg-white/10 text-zinc-300">N</Kbd>
+          <span className="flex-1 truncate">{tx(locale, "New Entry", "Новая запись")}</span>
+          <Kbd className="h-4 min-w-4 border-white/15 bg-white/10 text-[9px] text-zinc-300">N</Kbd>
         </>
       ) : null}
     </button>
