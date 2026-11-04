@@ -27,7 +27,7 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
   const aiLockedReason = !user.premium
     ? (ru ? "AI-разбор свободного текста доступен в Premium. CSV и JSON работают всегда." : "AI parsing of free-form text is a Premium feature. CSV and JSON always work.")
     : !configured
-      ? (ru ? "AI не настроен: укажите OPENROUTER_API_KEY (или AI_API_KEY) в .env.local." : "AI is not configured: set OPENROUTER_API_KEY (or AI_API_KEY) in .env.local.")
+      ? (ru ? "AI не настроен: добавьте ключ OpenRouter в разделе Admin или укажите OPENROUTER_API_KEY в .env.local." : "AI is not configured: add an OpenRouter key in Admin, or set OPENROUTER_API_KEY in .env.local.")
       : undefined;
 
   return (

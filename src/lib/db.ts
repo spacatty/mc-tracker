@@ -676,6 +676,18 @@ function migrate(db: Database.Database) {
 
 }
 
+export function getSetting(key: string) {
+  const row = getDb().prepare("SELECT value FROM settings WHERE key = ?").get(key) as DbRow | undefined;
+  return row ? String(row.value) : null;
+}
+
+/** Stores a value, or removes the key when `value` is null or blank. */
+export function setSetting(key: string, value: string | null) {
+  const trimmed = value?.trim();
+  if (trimmed) getDb().prepare("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)").run(key, trimmed);
+  else getDb().prepare("DELETE FROM settings WHERE key = ?").run(key);
+}
+
 export function isSetupComplete() {
   const db = getDb();
   const count = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'superadmin'").get() as DbRow;

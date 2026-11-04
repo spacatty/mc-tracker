@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { z } from "zod";
-import { aiConfigured } from "@/lib/ai/client";
+import { aiConfigured, saveAiSettings } from "@/lib/ai/client";
 import { extractPaymentItems } from "@/lib/ai/payment-extractor";
 import { ensureSupportedCurrency } from "@/lib/currencies";
 import { localeCookieName, normalizeLocale } from "@/lib/i18n";
@@ -490,6 +490,18 @@ export async function createUserAction(formData: FormData) {
   if (!canSetRole(actor, role)) throw new Error("You cannot create that role.");
   await createUser(required(formData.get("username"), "Username"), required(formData.get("password"), "Password"), role);
   revalidatePath("/app/admin");
+}
+
+export async function updateAiSettingsAction(formData: FormData) {
+  const actor = await requireUser();
+  if (actor.role !== "superadmin") throw new Error("Only superadmin can change AI settings.");
+  saveAiSettings({
+    apiKey: String(formData.get("apiKey") || ""),
+    clearKey: formData.get("clearKey") === "1",
+    model: String(formData.get("model") || ""),
+  });
+  revalidatePath("/app/admin");
+  revalidatePath("/app/import");
 }
 
 export async function updateUserPasswordAction(formData: FormData) {

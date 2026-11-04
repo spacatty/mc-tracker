@@ -52,7 +52,7 @@ Open [http://localhost:4271](http://localhost:4271) (the default port). On the f
 - `AUTH_SECRET`: required in production for signing session cookies.
 - `CRON_SECRET`: required in production for `/api/cron/notifications`; send it as the `x-cron-secret` header.
 - `SQLITE_PATH`: optional SQLite database path. Defaults to `data/mc-tracker.sqlite`.
-- `AI_API_KEY` (or legacy `OPENROUTER_API_KEY`): optional; enables Premium AI parsing of free-form text on the Import page. CSV/TSV/JSON import works without it.
+- `AI_API_KEY` (or legacy `OPENROUTER_API_KEY`): optional; enables Premium AI parsing of free-form text on the Import page. CSV/TSV/JSON import works without it. A superadmin can also set the key and model on the Admin page; those saved values win over the environment.
 - `AI_MODEL` (or legacy `OPENROUTER_MODEL`): defaults to `deepseek/deepseek-v4.1-flash`. Any OpenRouter model that supports structured outputs works.
 - `AI_BASE_URL`, `AI_STRUCTURED_OUTPUT`: point at another OpenAI-compatible API. For DeepSeek's own API use `AI_BASE_URL=https://api.deepseek.com` with `AI_STRUCTURED_OUTPUT=json_object`.
 - `REDACT_KINDS`, `REDACT_DENYLIST`: leak prevention. JSON from `/api` routes and error strings shown in the UI are masked (IPs, domains, emails, credentials in URLs, API keys/tokens/passwords, deny-listed terms). Before free text is sent to the AI provider the same values, plus every known account login and entry name (and vendor names with `AI_REDACT_VENDORS=true`), are swapped for placeholders like `<<IP_1>>` or `<<ACCOUNT_2>>` and restored locally in the answer. See `src/lib/security/redact.ts`.

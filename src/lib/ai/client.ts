@@ -1,12 +1,14 @@
 import "server-only";
 
 import { z } from "zod";
+import { getSetting, setSetting } from "@/lib/db";
 
 /**
  * Minimal OpenAI-compatible chat client that only knows how to ask for one
  * schema-validated JSON object.
  *
- * Configuration (all optional except a key):
+ * Configuration (all optional except a key). The key and model can also be set by a
+ * superadmin on the Admin page; those DB values win over the environment.
  *   AI_API_KEY            falls back to OPENROUTER_API_KEY
  *   AI_BASE_URL           default https://openrouter.ai/api/v1 (DeepSeek direct: https://api.deepseek.com)
  *   AI_MODEL              falls back to OPENROUTER_MODEL, then DEFAULT_AI_MODEL
@@ -17,6 +19,16 @@ import { z } from "zod";
 
 export const DEFAULT_AI_MODEL = "deepseek/deepseek-v4.1-flash";
 const OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1";
+const KEY_SETTING = "aiApiKey";
+const MODEL_SETTING = "aiModel";
+
+function envApiKey() {
+  return (process.env.AI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
+}
+
+function envModel() {
+  return (process.env.AI_MODEL || process.env.OPENROUTER_MODEL || "").trim();
+}
 
 type ChatMessage = { role: "system" | "user" | "assistant"; content: string };
 type ChatResponse = {
@@ -29,7 +41,7 @@ type ChatResponse = {
 export type AiUsage = { promptTokens: number; completionTokens: number; cost: number | null };
 
 function config() {
-  const apiKey = (process.env.AI_API_KEY || process.env.OPENROUTER_API_KEY || "").trim();
+  const apiKey = getSetting(KEY_SETTING) || envApiKey();
   const baseUrl = (process.env.AI_BASE_URL || OPENROUTER_BASE_URL).trim().replace(/\/+$/, "");
   const isOpenRouter = baseUrl.startsWith(OPENROUTER_BASE_URL);
   const mode = process.env.AI_STRUCTURED_OUTPUT === "json_object" || (!isOpenRouter && process.env.AI_STRUCTURED_OUTPUT !== "json_schema")
@@ -40,7 +52,7 @@ function config() {
     baseUrl,
     isOpenRouter,
     mode,
-    model: (process.env.AI_MODEL || process.env.OPENROUTER_MODEL || DEFAULT_AI_MODEL).trim(),
+    model: getSetting(MODEL_SETTING) || envModel() || DEFAULT_AI_MODEL,
     maxTokens: Number(process.env.AI_IMPORT_MAX_OUTPUT_TOKENS || 8000),
   } as const;
 }
@@ -51,6 +63,32 @@ export function aiConfigured() {
 
 export function aiModelLabel() {
   return config().model;
+}
+
+function maskKey(key: string) {
+  if (!key) return "";
+  return key.length <= 12 ? "••••" : `${key.slice(0, 6)}…${key.slice(-4)}`;
+}
+
+/** What the Admin page shows. The key only ever leaves the server masked. */
+export function aiSettingsSummary() {
+  const storedKey = getSetting(KEY_SETTING);
+  const storedModel = getSetting(MODEL_SETTING);
+  const fallbackModel = envModel() || DEFAULT_AI_MODEL;
+  return {
+    keySource: storedKey ? "admin" : envApiKey() ? "env" : "none",
+    maskedKey: maskKey(storedKey || envApiKey()),
+    storedModel: storedModel || "",
+    fallbackModel,
+    model: storedModel || fallbackModel,
+  } as const;
+}
+
+/** A blank key keeps the stored one; `clearKey` drops it so the env value applies again. A blank model falls back to env. */
+export function saveAiSettings({ apiKey, clearKey, model }: { apiKey: string; clearKey: boolean; model: string }) {
+  if (clearKey) setSetting(KEY_SETTING, null);
+  else if (apiKey.trim()) setSetting(KEY_SETTING, apiKey);
+  setSetting(MODEL_SETTING, model);
 }
 
 /** JSON Schema for a zod schema, without the $schema header some providers reject. */
@@ -129,7 +167,7 @@ export async function generateStructured<T extends z.ZodType>({
   user: string;
 }): Promise<{ data: z.infer<T>; usage: AiUsage; model: string }> {
   const { apiKey, mode, model, maxTokens } = config();
-  if (!apiKey) throw new Error("AI is not configured. Set AI_API_KEY or OPENROUTER_API_KEY.");
+  if (!apiKey) throw new Error("AI is not configured. Add an API key on the Admin page, or set AI_API_KEY / OPENROUTER_API_KEY.");
 
   const jsonSchema = jsonSchemaFor(schema);
   const systemPrompt = mode === "json_object"
