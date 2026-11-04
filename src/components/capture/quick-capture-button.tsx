@@ -13,17 +13,17 @@ export function QuickCaptureButton({ collapsed, locale }: { collapsed: boolean; 
     <button
       type="button"
       onClick={() => openCapture()}
-      title={collapsed ? tx(locale, "Add (N)", "Добавить (N)") : undefined}
+      title={collapsed ? tx(locale, "Create new entry (N)", "Новая запись (N)") : undefined}
       className={cn(
-        "group flex h-8 w-full items-center gap-2 rounded-lg border border-violet-400/20 bg-violet-500/[0.08] px-2.5 text-left text-[13px] font-medium text-violet-100 transition hover:border-violet-400/30 hover:bg-violet-500/[0.14] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 active:scale-[0.98]",
-        collapsed && "mx-auto w-9 justify-center px-0",
+        "group flex h-8 w-full items-center gap-2 rounded-lg bg-zinc-100 px-2.5 text-left text-[13px] font-semibold text-zinc-900 shadow-[0_1px_0_rgba(255,255,255,0.4)_inset,0_6px_16px_-8px_rgba(0,0,0,0.8)] transition hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 active:scale-[0.98]",
+        collapsed && "mx-auto w-8 justify-center px-0",
       )}
     >
-      <Plus className="h-3.5 w-3.5 shrink-0 text-violet-300 transition group-hover:rotate-90" />
+      <Plus className="h-3.5 w-3.5 shrink-0 transition group-hover:rotate-90" />
       {!collapsed ? (
         <>
-          <span className="flex-1">{tx(locale, "Add anything", "Добавить")}</span>
-          <Kbd className="h-[18px] min-w-[18px] border-violet-400/20 bg-violet-500/10 text-violet-200/80">N</Kbd>
+          <span className="flex-1 truncate">{tx(locale, "Create new entry", "Новая запись")}</span>
+          <Kbd className="h-[18px] min-w-[18px] border-black/10 bg-black/[0.06] text-zinc-500">N</Kbd>
         </>
       ) : null}
     </button>

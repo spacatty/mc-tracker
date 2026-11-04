@@ -1,8 +1,4 @@
-import Link from "next/link";
-import { FileUp } from "lucide-react";
-import { OpenCaptureButton } from "@/components/capture/quick-capture-button";
 import { EntriesWorkspace } from "@/components/inspector/entries-workspace";
-import { Button } from "@/components/ui/button";
 import { requireUser } from "@/lib/auth";
 import { listCategoriesForWorkspace, listItemsForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
@@ -18,7 +14,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   const categoryId = Number(params.category || 0);
   const selectedCategory = categoryId ? categories.find((category) => category.id === categoryId) : undefined;
   const items = listItemsForWorkspace(workspace.id, user.id).filter((item) => !categoryId || item.categoryId === categoryId);
-  const importHref = `/app/import?workspace=${workspace.id}${selectedCategory ? `&category=${selectedCategory.id}` : ""}`;
   const entriesStateKey = [
     workspace.id,
     selectedCategory?.id || "all",
@@ -31,17 +26,6 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
       <PageHeader
         title={selectedCategory ? selectedCategory.name : t(locale, "entries")}
         description={selectedCategory ? (locale === "ru" ? "Записи категории" : "Entries in this category") : locale === "ru" ? "Все ресурсы" : "All tracked resources"}
-        actions={workspace.accessRole !== "viewer" ? (
-          <>
-            <Button asChild variant="ghost" size="sm" className="gap-2">
-              <Link href={importHref}>
-                <FileUp className="h-4 w-4" />
-                {locale === "ru" ? "Импорт файла" : "Import file"}
-              </Link>
-            </Button>
-            <OpenCaptureButton label={t(locale, "createEntry")} />
-          </>
-        ) : null}
       />
 
       <EntriesWorkspace

@@ -18,7 +18,7 @@ export const DialogOverlay = React.forwardRef<
   <DialogPrimitive.Overlay
     ref={ref}
     className={cn(
-      "fixed inset-0 z-50 bg-black/60 backdrop-blur-md transition-opacity data-[state=closed]:opacity-0 data-[state=open]:opacity-100",
+      "capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md",
       className,
     )}
     {...props}
@@ -41,7 +41,8 @@ export const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        "fixed left-1/2 top-1/2 z-50 grid max-h-[calc(100dvh-2rem)] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border border-white/10 bg-[#101013] p-6 text-foreground shadow-overlay outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60",
+        // Same panel as Quick Capture: centred with margins (not transforms) so the open animation never fights its position.
+        "capture-panel-in fixed inset-x-0 top-[14vh] z-50 mx-auto flex max-h-[76vh] w-[calc(100vw-1.5rem)] max-w-lg flex-col overflow-hidden rounded-xl border border-white/10 bg-[#101013] text-foreground shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none",
         className,
       )}
       {...props}
@@ -49,7 +50,7 @@ export const DialogContent = React.forwardRef<
       {children}
       {showClose ? (
         <DialogPrimitive.Close
-          className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 disabled:pointer-events-none"
+          className="absolute right-4 top-4 inline-flex size-7 items-center justify-center rounded-md text-zinc-500 transition-colors hover:bg-white/[0.06] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 disabled:pointer-events-none"
           aria-label={closeLabel}
         >
           <X className="size-4" aria-hidden="true" />
@@ -61,13 +62,17 @@ export const DialogContent = React.forwardRef<
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 export function DialogHeader({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn("flex flex-col gap-2 pr-8 text-left", className)} {...props} />;
+  return <div className={cn("flex shrink-0 flex-col gap-0.5 border-b border-white/[0.06] px-6 py-4 pr-14 text-left", className)} {...props} />;
+}
+
+export function DialogBody({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
+  return <div className={cn("min-h-0 flex-1 overflow-y-auto px-6 py-5", className)} {...props} />;
 }
 
 export function DialogFooter({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   return (
     <div
-      className={cn("flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end", className)}
+      className={cn("flex shrink-0 flex-col-reverse gap-2 border-t border-white/[0.06] px-6 py-4 sm:flex-row sm:items-center sm:justify-end", className)}
       {...props}
     />
   );
@@ -79,7 +84,7 @@ export const DialogTitle = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Title
     ref={ref}
-    className={cn("text-lg font-semibold tracking-tight text-foreground", className)}
+    className={cn("text-[15px] font-semibold text-zinc-100", className)}
     {...props}
   />
 ));
@@ -91,7 +96,7 @@ export const DialogDescription = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <DialogPrimitive.Description
     ref={ref}
-    className={cn("text-sm leading-6 text-muted-foreground", className)}
+    className={cn("text-xs leading-5 text-zinc-500", className)}
     {...props}
   />
 ));

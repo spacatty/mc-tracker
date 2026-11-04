@@ -708,6 +708,7 @@ export async function saveTelegramChannelAction(formData: FormData) {
   const user = await requireUser();
   const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
   upsertTelegramChannelForWorkspace(formData, workspaceId, user.id);
+  revalidatePath("/app/telegram");
   revalidatePath("/app/settings");
   revalidatePath("/app/categories");
 }
@@ -716,6 +717,7 @@ export async function deleteNotificationChannelAction(formData: FormData) {
   const user = await requireUser();
   const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
   deleteNotificationChannelForWorkspace(Number(formData.get("id")), workspaceId, user.id);
+  revalidatePath("/app/telegram");
   revalidatePath("/app/settings");
   revalidatePath("/app/categories");
 }
@@ -727,6 +729,7 @@ export async function sendTelegramTestAction(formData: FormData) {
   const allowed = listNotificationChannelsForWorkspace(workspaceId, user.id).some((channel) => channel.id === channelId);
   if (!allowed) throw new Error("Channel is not accessible in this workspace.");
   await sendTelegramTest(channelId);
+  revalidatePath("/app/telegram");
   revalidatePath("/app/settings");
 }
 

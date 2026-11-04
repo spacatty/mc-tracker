@@ -28,8 +28,8 @@ export function CreateWorkspaceDialog({
         )}
       </Dialog.Trigger>
       <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-white/10 bg-[#101013] shadow-2xl shadow-black/50">
+        <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
+        <Dialog.Content className="capture-panel-in fixed inset-x-0 top-[16vh] z-50 mx-auto w-[calc(100vw-1.5rem)] max-w-xl overflow-hidden rounded-xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
           <div className="flex items-start justify-between gap-4 border-b border-white/10 bg-white/[0.015] p-5">
             <div>
               <Dialog.Title className="text-lg font-semibold text-white">{t(locale, "createWorkspace")}</Dialog.Title>

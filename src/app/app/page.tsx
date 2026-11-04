@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { CalendarClock, CircleDollarSign, Gauge, Plus, Repeat, WalletCards } from "lucide-react";
+import { CalendarClock, CircleDollarSign, Gauge, Repeat, WalletCards } from "lucide-react";
 import {
   DashboardCategoryPressureChart,
   DashboardCategorySplitChart,
@@ -8,7 +8,6 @@ import {
   DashboardWorkspaceObjectDominanceChart,
 } from "@/components/dashboard-pie-charts";
 import { DashboardUpcomingTable } from "@/components/dashboard-upcoming-table";
-import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Surface } from "@/components/ui/surface";
 import { requireUser } from "@/lib/auth";
@@ -52,14 +51,6 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         eyebrow={t(locale, "overview")}
         title={t(locale, "dashboard")}
         description={t(locale, "recurringSpend")}
-        actions={(
-          <Button asChild>
-            <Link href={`/app/items?workspace=${workspace.id}&add=1`}>
-              <Plus className="h-4 w-4" />
-              {t(locale, "createEntry")}
-            </Link>
-          </Button>
-        )}
       >
           <div className="mt-3 inline-flex items-center rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
             <Link
