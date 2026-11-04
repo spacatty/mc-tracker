@@ -127,7 +127,9 @@ function WorkspaceSelect({
   collapsed,
   locale,
   onSelected,
+  placement = "bottom",
 }: {
+  placement?: "top" | "bottom";
   workspaces: Workspace[];
   currentWorkspaceId?: number;
   pathname: string;
@@ -189,7 +191,7 @@ function WorkspaceSelect({
       {/* Same look as the Quick Capture suggestion menu: tinted glass, small caps header, tiled rows. */}
       <PopoverContent
         align="start"
-        side={collapsed ? "right" : "bottom"}
+        side={collapsed ? "right" : placement}
         sideOffset={4}
         className="suggest-in w-[200px] overflow-hidden rounded-xl border-white/10 bg-[#18181c]/95 p-0 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
       >
@@ -629,14 +631,6 @@ export function AppShell({
         </div>
 
         <div className={cn("flex shrink-0 flex-col gap-1.5 px-3 pb-4 pt-1", collapsed && "items-center px-0")}>
-          <WorkspaceSelect
-            workspaces={workspaces}
-            currentWorkspaceId={currentWorkspace?.id}
-            pathname={pathname}
-            searchParams={searchParams}
-            collapsed={collapsed}
-            locale={locale}
-          />
           {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
         </div>
 
@@ -701,6 +695,15 @@ export function AppShell({
         </div>
 
         <div className={cn("flex shrink-0 flex-col gap-1.5 border-t border-white/[0.06] px-3 py-2.5", collapsed && "items-center px-0")}>
+          <WorkspaceSelect
+            workspaces={workspaces}
+            currentWorkspaceId={currentWorkspace?.id}
+            pathname={pathname}
+            searchParams={searchParams}
+            collapsed={collapsed}
+            locale={locale}
+            placement="top"
+          />
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
@@ -719,6 +722,8 @@ export function AppShell({
               </>
             ) : null}
           </button>
+        </div>
+        <div className={cn("shrink-0 border-t border-white/[0.06] px-3 py-2", collapsed && "flex justify-center px-0")}>
           <ProfileMenu user={user} locale={locale} collapsed={collapsed} workspaceId={currentWorkspace?.id || null} currentHref={currentHref} />
         </div>
       </aside>
