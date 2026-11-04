@@ -19,7 +19,8 @@ import { slugify } from "@/lib/utils";
  *   12.10.2026      billing start (also 12/10/26, 2026-10-12); renewal follows from the period;
  *                   a range 2026-10-12..2026-11-12 or renews:2026-11-12 sets the end explicitly
  *   /attr:value     custom field of the category (by label, fuzzy prefix; "/domain: x" and !attr work too)
- *   key:value       same, plus built-ins account:, url:, start:, renews:
+ *   account:login   account / login at the vendor (also @vendor/login)
+ *   key:value       same as /attr:value, plus built-ins url:, start:, renews:
  *   https://…       vendor / panel URL
  *   1.2.3.4         IP, stored in the category's IP field when it has one
  *   // text         notes until the end of the line
@@ -630,10 +631,9 @@ export function rowToLine(row: ImportRow, context: Pick<CaptureContext, "categor
   if (row.action === "edit" && row.targetItemId) parts.push(`edit:${row.targetItemId}`);
   if (row.name.trim()) parts.push(...row.name.trim().split(/\s+/).map(safeNameWord));
   if (category) parts.push(`#${slugify(category.name) || category.id}`);
-  if (row.vendorName.trim() || row.accountName.trim()) {
-    const vendor = row.vendorName.trim() ? quoteIfNeeded(row.vendorName) : '""';
-    parts.push(`@${vendor}${row.accountName.trim() ? `/${quoteIfNeeded(row.accountName)}` : ""}`);
-  }
+  if (row.vendorName.trim()) parts.push(`@${quoteIfNeeded(row.vendorName)}`);
+  // The account gets its own key so it is easy to spot and change in "Edit as text".
+  if (row.accountName.trim()) parts.push(`account:${quoteIfNeeded(row.accountName)}`);
   if (row.amountInput.trim()) parts.push(`${formatAmount(row.amountInput, row.currency)}${periodToken(row)}`);
   else {
     parts.push(periodToken(row));
@@ -662,5 +662,5 @@ export function rowToLine(row: ImportRow, context: Pick<CaptureContext, "categor
 export const CAPTURE_EXAMPLES = [
   "hz-fsn-01 #servers @Hetzner €4.51/mo /ip: 95.217.10.4",
   "acme.dev #domains @Cloudflare 10.44 USD/yr 05.01.2026",
-  "Figma @Figma/design@acme $15/mo // 1 editor seat",
+  "Figma @Figma account:design@acme $15/mo // 1 editor seat",
 ];

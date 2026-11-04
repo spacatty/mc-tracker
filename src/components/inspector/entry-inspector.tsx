@@ -220,6 +220,8 @@ export function EntryInspector({
     function onKey(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       if (target && (["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable)) return;
+      // Ctrl/⌘+K opens Quick Capture; it must not also move to the previous entry.
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (event.key === "ArrowDown" || event.key === "j") { event.preventDefault(); onNavigate(1); }
       if (event.key === "ArrowUp" || event.key === "k") { event.preventDefault(); onNavigate(-1); }
     }

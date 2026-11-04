@@ -11,7 +11,7 @@ import { DashboardUpcomingTable } from "@/components/dashboard-upcoming-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { Surface } from "@/components/ui/surface";
 import { requireUser } from "@/lib/auth";
-import { dashboardStatsForWorkspace, dashboardStatsGlobalForUser, resolveWorkspaceForUser } from "@/lib/db";
+import { dashboardStatsForWorkspace, dashboardStatsGlobalForUser, getUserDashboardPrefs, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
 import { formatMoney } from "@/lib/utils";
@@ -42,6 +42,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const stats = scope === "workspace"
     ? await dashboardStatsForWorkspace(workspace.id, user.id, user.displayCurrency)
     : await dashboardStatsGlobalForUser(user.id, user.displayCurrency);
+  const { showTrend } = getUserDashboardPrefs(user.id);
   const globalHref = `/app?workspace=${workspace.id}&scope=global`;
   const workspaceHref = `/app?workspace=${workspace.id}&scope=workspace`;
 
@@ -80,7 +81,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
         <DashboardUpcomingTable items={stats.upcoming} workspaceId={workspace.id} locale={locale} />
       </Surface>
 
-      <section className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+      <section className={`grid gap-3 sm:grid-cols-2 ${showTrend ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
         <StatCard
           label={locale === "ru" ? "Всего" : "Total"}
           value={formatMoney(stats.totalExpenses, stats.displayCurrency)}
@@ -109,13 +110,13 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           accent="#f43f5e"
           icon={<WalletCards className="h-3.5 w-3.5" />}
         />
-        <StatCard
+        {showTrend ? <StatCard
           label={locale === "ru" ? "Тренд за 1 месяц" : "1-month trend"}
           value={`${stats.oneMonthChangePercent.toFixed(1)}%`}
           hint={locale === "ru" ? `${formatMoney(stats.oneMonthChangeAmount, stats.displayCurrency)} влияние` : `${formatMoney(stats.oneMonthChangeAmount, stats.displayCurrency)} impact`}
           accent="#a3e635"
           icon={<Gauge className="h-3.5 w-3.5" />}
-        />
+        /> : null}
       </section>
 
       <section className={`grid gap-5 ${scope === "global" ? "xl:grid-cols-2" : "xl:grid-cols-2"}`}>

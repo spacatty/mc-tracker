@@ -19,18 +19,20 @@ import {
  * arithmetic on the structured fields the model returns.
  */
 const SYSTEM_PROMPT = [
-  "You turn pasted billing/inventory data into rows for a subscription and infrastructure tracker.",
-  "The user message is a JSON object: `input` is the user's raw text; `categories`, `existingEntries` and `vendorMemory` describe their workspace; `answers` holds replies to questions you asked earlier; `today` anchors relative dates.",
-  "Read the whole input first. Shared context such as a vendor/provider header, a currency note or a category applies to every following row unless a row overrides it.",
-  "Produce one item per tracked thing (domain, server, subscription, licence). Pasted rows are proposals to create entries even if the user never says 'create'.",
-  "action: create for new things; edit when the user changes details of an entry in existingEntries; pay when the user reports a completed payment or renewal of an existing entry. For edit/pay set targetItemId to that entry's id; never invent ids. When the user says they are adding new entries, use create even if names resemble existing ones.",
-  "Priority of sources: the user's input, then answers, then existingEntries, then vendorMemory. vendorMemory only helps reuse exact spelling of a vendor the user clearly refers to; never let it replace a vendor the user named.",
-  "vendorName is the provider/registrar/host; accountName is the login or account at that provider. Text like '<provider> account <name>' means vendorName=<provider>, accountName=<name>. Do not merge the two.",
-  "Category: use the one the user names; otherwise infer from the data (domain names and registrars -> a domains category; IPs, hostnames, VPS/server labels -> a servers category) when such a category exists. Use null when nothing fits.",
-  "customFields: fill the chosen category's fields from the input using the listed field ids. Put leftover useful details in notes. Placeholders like <<IP_1>>, <<DOMAIN_2>>, <<ACCOUNT_1>>, <<NAME_3>> or <<VENDOR_1>> stand for redacted values: copy them verbatim into the right field, and treat equal placeholders as the same value (an input <<NAME_3>> refers to the existing entry named <<NAME_3>>).",
-  "Dates: output YYYY-MM-DD. If a row has two dates, they are start then end. A domain row with only an expiry date is recurring period=1y with billingEndAt=expiry and billingStartAt=null.",
-  "Amounts: a bare trailing number on a billing row is the amount. Use the stated currency; if none is stated use null. Do not guess missing amounts, dates, periods or vendors: use null/empty and mention it in confidence.",
-  "Ask a question only when a missing fact blocks a correct import for many rows (for example which existing entry a payment belongs to). Never ask about something already present in the input. Prefer importing with nulls over asking.",
+  "You turn pasted billing/inventory text into rows for a subscription and infrastructure tracker. Return only the structured output.",
+  "The user message is JSON: `input` is the raw text; `categories`, `existingEntries` and `vendorMemory` describe the workspace; `answers` are replies to your earlier questions; `today` anchors relative dates; `allowNotes` says whether notes may be filled.",
+  "One item per tracked thing (server, domain, subscription, licence). Pasted rows are proposals to create entries even without the word 'create'. Shared context (a vendor header, an account line, a currency note) applies to every following row until another value replaces it.",
+  "Labelled values are authoritative and go straight to their field, case-insensitive, with ':' '=' or '-' as separator: name -> name; vendor/provider/host/registrar -> vendorName; account/acc/login/user -> accountName; price/cost/amount -> amount (+ currency); billing start/start/from/paid -> billingStartAt; end/renews/expires/due/until -> billingEndAt; period/billing -> period; url/panel -> vendorUrl; ip and any other label matching a field of the chosen category -> customFields. Never move a labelled value into another field.",
+  "vendorName is the company you pay; accountName is the login at that company. '<provider> account <x>' means vendorName=<provider>, accountName=<x>.",
+  "action: create for new things; edit when the input changes an entry in existingEntries; pay when it reports a completed payment/renewal of one. For edit/pay set targetItemId to that entry's id and never invent ids. If the user is adding entries, use create even when names match existing ones.",
+  "Source priority: input, then answers, then existingEntries, then vendorMemory. vendorMemory only fixes the spelling of a vendor the user clearly named.",
+  "Category: the one named in the input; else infer (domains/registrars -> a domains category; IPs, hostnames, VPS/server labels -> a servers category) if it exists; else null.",
+  "Placeholders like <<IP_1>>, <<DOMAIN_2>>, <<ACCOUNT_1>>, <<NAME_3>>, <<VENDOR_1>> stand for redacted values: copy them verbatim into the right field; equal placeholders are the same value.",
+  "Dates: output YYYY-MM-DD. Dotted or slashed dates such as 03.11.2026, 03.11.26 or 3/11/2026 are day-first (dd.mm.yyyy). Two dates on a row are start then end. A domain with only an expiry date is recurring period=1y with billingEndAt=expiry and billingStartAt=null.",
+  "Amounts: a bare trailing number on a billing row is the amount. Use the stated currency, else null. Never guess missing amounts, dates, periods or vendors: leave them null/empty.",
+  "Notes: when allowNotes is false, notes MUST be an empty string for every item. When it is true, notes may only hold text copied from the input that fits no field. Never write your own commentary in notes (no remarks about duplicates, differing IPs, missing periods or assumptions).",
+  "confidence: at most 8 words naming an assumption you made, or empty. This is the only place for remarks.",
+  "Ask a question only when a missing fact blocks a correct import for many rows (e.g. which existing entry a payment belongs to). Never ask about facts present in the input. Prefer nulls over questions.",
 ].join("\n");
 
 const ALLOWED_PERIODS: BillingPeriod[] = ["7d", "1m", "3m", "1y", "custom"];
@@ -121,13 +123,15 @@ function deriveAnnualStart(draft: AiDraftItem): AiDraftItem {
   return { ...draft, billingStartAt: start.toISOString().slice(0, 10) };
 }
 
-export function normalizeAiItem(item: AiOutputItem, categories: Category[], entries: PaymentItem[]): AiDraftItem {
+export function normalizeAiItem(item: AiOutputItem, categories: Category[], entries: PaymentItem[], options: { allowNotes?: boolean } = {}): AiDraftItem {
+  const allowNotes = options.allowNotes ?? true;
   const category = categories.find((candidate) => candidate.id === item.categoryId);
   const entry = entries.find((candidate) => candidate.id === item.targetItemId);
   const fieldIds = new Set(category?.fields.map((field) => field.id) || []);
   const recurring = item.paymentType === "recurring";
   const period = recurring ? (item.period && ALLOWED_PERIODS.includes(item.period) ? item.period : "1m") : null;
-  const notes = [item.notes.trim(), ...item.customFields.filter((field) => !fieldIds.has(field.fieldId)).map((field) => `${field.fieldId}: ${field.value}`)]
+  // With notes turned off nothing reaches notes, including fields the category does not have.
+  const notes = !allowNotes ? "" : [item.notes.trim(), ...item.customFields.filter((field) => !fieldIds.has(field.fieldId)).map((field) => `${field.fieldId}: ${field.value}`)]
     .filter(Boolean)
     .join("\n");
 
@@ -183,15 +187,18 @@ export function buildImportPayload({
   entries,
   vendors,
   answers,
+  allowNotes = true,
 }: {
   input: string;
   categories: Category[];
   entries: PaymentItem[];
   vendors: VendorSuggestion[];
   answers: Record<string, string>;
+  allowNotes?: boolean;
 }) {
   return {
     today: new Date().toISOString().slice(0, 10),
+    allowNotes,
     categories: categoryContext(categories),
     existingEntries: entryContext(entries),
     vendorMemory: vendorContext(vendors),
@@ -206,12 +213,14 @@ export async function extractPaymentItems({
   entries = [],
   vendors = [],
   answers = {},
+  allowNotes = true,
 }: {
   input: string;
   categories: Category[];
   entries?: PaymentItem[];
   vendors?: VendorSuggestion[];
   answers?: Record<string, string>;
+  allowNotes?: boolean;
 }): Promise<AiImportResult> {
   const maxChars = Number(process.env.AI_IMPORT_MAX_INPUT_CHARS || 20000);
   const rawInput = input.trim();
@@ -232,7 +241,7 @@ export async function extractPaymentItems({
   if (process.env.AI_REDACT_VENDORS === "true") {
     redactor.addTerms("VENDOR", [...entries.map((entry) => entry.vendorName), ...vendors.map((vendor) => vendor.vendorName)]);
   }
-  const payload = redactor.redactDeep(buildImportPayload({ input: rawInput, categories, entries, vendors, answers }));
+  const payload = redactor.redactDeep(buildImportPayload({ input: rawInput, categories, entries, vendors, answers, allowNotes }));
   const { data: redacted, model } = await generateStructured({
     name: "tracker_import",
     schema: aiImportOutputSchema,
@@ -242,7 +251,7 @@ export async function extractPaymentItems({
   const data = redactor.restoreDeep(redacted);
 
   return {
-    items: data.items.map((item) => normalizeAiItem(item, categories, entries)),
+    items: data.items.map((item) => normalizeAiItem(item, categories, entries, { allowNotes })),
     questions: uniqueQuestions(data.questions),
     summary: data.summary.trim(),
     model,

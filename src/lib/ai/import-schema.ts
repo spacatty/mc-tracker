@@ -41,7 +41,7 @@ export const aiOutputItemSchema = z
     vendorName: z.string().describe("Provider, registrar or host. Empty string when unknown."),
     vendorUrl: z.string().describe("Vendor or panel URL. Empty string when unknown."),
     accountName: z.string().describe("Login / account / username at the vendor, kept separate from vendorName. Empty string when unknown."),
-    notes: z.string().describe("Useful leftover details from the input that have no field. Empty string when none."),
+    notes: z.string().describe("Empty string unless allowNotes is true; then only text copied from the input that fits no field. Never your own remarks."),
     customFields: z
       .array(
         z
@@ -52,7 +52,7 @@ export const aiOutputItemSchema = z
           .strict(),
       )
       .describe("Values for the chosen category's custom fields. Only use field ids listed for that category."),
-    confidence: z.string().describe("One short sentence naming any assumption made for this row, or empty string."),
+    confidence: z.string().describe("At most 8 words naming an assumption made for this row, or empty string."),
   })
   .strict();
 

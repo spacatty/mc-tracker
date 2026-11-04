@@ -121,6 +121,8 @@ export function BulkImportPanel({
 }) {
   const [input, setInput] = useState("");
   const [fileName, setFileName] = useState("");
+  // AI never writes notes unless the user opts in.
+  const [noNotes, setNoNotes] = useState(true);
   const [dragging, setDragging] = useState(false);
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -183,7 +185,7 @@ export function BulkImportPanel({
     setPendingLabel(tx(locale, "AI is reading your data…", "AI разбирает данные…"));
     startTransition(async () => {
       try {
-        const result = await analyzeAiImportAction(input, nextAnswers, workspaceId);
+        const result = await analyzeAiImportAction(input, nextAnswers, workspaceId, { noNotes });
         setQuestions(result.questions);
         if (result.items.length || !result.questions.length) {
           loadRows(result.items.map(rowFromAiDraft), result.summary || tx(locale, `AI found ${result.items.length} rows.`, `AI нашёл строк: ${result.items.length}.`));
@@ -403,6 +405,12 @@ export function BulkImportPanel({
             <Button type="button" variant="secondary" disabled={pending || !input.trim()} onClick={() => parse(true)} title={tx(locale, `Model: ${model}`, `Модель: ${model}`)}>
               <Wand2 className="h-4 w-4" />{tx(locale, "Parse with AI", "Разобрать с AI")}
             </Button>
+          ) : null}
+          {aiAvailable ? (
+            <label className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+              <input type="checkbox" checked={noNotes} onChange={(event) => setNoNotes(event.target.checked)} className="h-3.5 w-3.5 accent-violet-500" />
+              {tx(locale, "Don't add notes", "Без заметок")}
+            </label>
           ) : null}
           {input ? (
             <Button type="button" variant="ghost" size="sm" onClick={() => { setInput(""); setFileName(""); }}>

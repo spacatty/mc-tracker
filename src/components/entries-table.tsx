@@ -17,6 +17,7 @@ import {
   Edit3,
   ExternalLink,
   Filter,
+  Pencil,
   Plus,
   RotateCcw,
   Save,
@@ -1097,6 +1098,19 @@ export function EntriesTable({
                     )}
                     <td className="sticky right-0 z-20 w-px whitespace-nowrap bg-surface px-2 text-right group-hover:bg-surface-raised">
                       <div className="flex justify-end gap-0.5">
+                        {!editMode && onOpenEntry && row.id ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            onClick={() => onOpenEntry(row.id!, filtered.flatMap((candidate) => candidate.id ? [candidate.id] : []))}
+                            title={tx(locale, "Edit", "Изменить")}
+                            aria-label={`${tx(locale, "Edit", "Изменить")} ${row.name}`}
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                        ) : null}
                         {!readOnly ? (
                           <Button
                             type="button"

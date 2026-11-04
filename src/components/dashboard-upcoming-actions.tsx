@@ -3,7 +3,7 @@
 import * as Dialog from "@radix-ui/react-dialog";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { CalendarCheck, Edit3, WalletCards, X } from "lucide-react";
+import { CalendarCheck, Pencil, WalletCards, X } from "lucide-react";
 import { payEntryAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "./ui/button";
@@ -49,8 +49,9 @@ export function DashboardUpcomingActions({
         size="sm"
         className="h-7 gap-1.5 border-sky-400/20 bg-sky-500/10 px-2 text-[11px] text-sky-100 hover:border-sky-300/35 hover:bg-sky-500/20"
       >
-        <Link href={`/app/items/${itemId}?workspace=${workspaceId}`}>
-          <Edit3 className="h-3.5 w-3.5" />
+        {/* Opens the entry in the Entries page inspector, the same editor used there. */}
+        <Link href={`/app/items?workspace=${workspaceId}&entry=${itemId}`} title={tx(locale, "Edit", "Изменить")}>
+          <Pencil className="h-3.5 w-3.5" />
           {tx(locale, "Quick edit", "Изменить")}
         </Link>
       </Button>

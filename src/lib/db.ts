@@ -688,6 +688,15 @@ export function setSetting(key: string, value: string | null) {
   else getDb().prepare("DELETE FROM settings WHERE key = ?").run(key);
 }
 
+/** Per-user dashboard toggles, kept in the settings table so no migration is needed. */
+export function getUserDashboardPrefs(userId: number) {
+  return { showTrend: getSetting(`user:${userId}:dashboard.showTrend`) === "true" };
+}
+
+export function setUserDashboardPrefs(userId: number, prefs: { showTrend: boolean }) {
+  setSetting(`user:${userId}:dashboard.showTrend`, prefs.showTrend ? "true" : null);
+}
+
 export function isSetupComplete() {
   const db = getDb();
   const count = db.prepare("SELECT COUNT(*) as count FROM users WHERE role = 'superadmin'").get() as DbRow;

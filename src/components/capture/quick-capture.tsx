@@ -1,8 +1,8 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowRight, CalendarDays, Coins, CornerDownLeft, Plus, Repeat, Store, Tag, Tags, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
+import { ArrowRight, CalendarDays, Coins, CornerDownLeft, KeyRound, Plus, Repeat, Store, Tag, Tags, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
+import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { analyzeAiImportAction, applyImportRowsAction, type CaptureContextPayload } from "@/app/actions";
 import type { AiQuestion } from "@/lib/ai/import-schema";
 import { parseCapture, parseDate, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
@@ -20,25 +20,28 @@ import { Chip, Kbd, TOKEN_DOT, TOKEN_STYLES, monthlyEquivalent, tx } from "./sha
 const CURRENCY_CODES = SUPPORTED_CURRENCIES.map((currency) => currency.code as string);
 
 type Suggestion = { key: string; label: string; insert: string; replace?: boolean; icon?: ReactNode; detail?: string; match?: string };
-type GuideStep = "category" | "name" | "vendor" | "price" | "date";
+type GuideStep = "category" | "name" | "vendor" | "account" | "price" | "date";
 type Guide = { step: GuideStep | "done" | "field"; steps: GuideStep[]; done: Set<GuideStep>; suggestions: Suggestion[]; question: string };
 
 const STEP_LABELS: Record<GuideStep, [string, string]> = {
   category: ["Category", "Категория"],
   name: ["Name", "Название"],
   vendor: ["Vendor", "Поставщик"],
+  account: ["Account", "Аккаунт"],
   price: ["Price", "Цена"],
   date: ["Billing start", "Начало оплаты"],
 };
 const STEP_ICONS: Record<string, ReactNode> = {
   category: <Tags className="h-3 w-3" />,
   vendor: <Store className="h-3 w-3" />,
+  account: <KeyRound className="h-3 w-3" />,
   price: <Coins className="h-3 w-3" />,
   date: <CalendarDays className="h-3 w-3" />,
   field: <Tag className="h-3 w-3" />,
 };
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", RUB: "₽" };
 const SYMBOL_CODES: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "¥": "JPY" };
+const ACCOUNT_WORD = /^(acc|account|login|user):/i;
 const PERIOD_WORD = /^\/(w|wk|week|m|mo|mon|month|q|y|yr|year|once|\d+d)$/i;
 const PERIOD_CHOICES = [
   { token: "/mo", en: "monthly", ru: "в месяц" },
@@ -145,12 +148,16 @@ export function QuickCapture({
   const [caret, setCaret] = useState(0);
   const [selectedSuggestion, setSelectedSuggestion] = useState(0);
   const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
-  const [navigated, setNavigated] = useState(false);
   const [skipped, setSkipped] = useState<Set<string>>(new Set());
   const [categoryOverride, setCategoryOverride] = useState<number | null | undefined>(undefined);
   const [errors, setErrors] = useState<Record<number, ImportRowErrors>>({});
   const [serverMessage, setServerMessage] = useState("");
   const [aiState, setAiState] = useState<{ original: string; summary: string; questions: AiQuestion[]; answers: Record<string, string> } | null>(null);
+  const [mode, setMode] = useState<"quick" | "ai">("quick");
+  const [aiText, setAiText] = useState("");
+  // AI never writes notes unless the user opts in.
+  const [noNotes, setNoNotes] = useState(true);
+  const aiAreaRef = useRef<HTMLTextAreaElement>(null);
   const [aiHint, setAiHint] = useState(false);
   const [aiError, setAiError] = useState("");
   const [notice, setNotice] = useState("");
@@ -232,7 +239,7 @@ export function QuickCapture({
     return () => { window.clearTimeout(timer); setSlashReady(false); };
   }, [caretWord]);
   const guide: Guide = useMemo(() => {
-    const steps: GuideStep[] = ["category", "name", "vendor", "price", "date"];
+    const steps: GuideStep[] = ["category", "name", "vendor", "account", "price", "date"];
     if (!payload) return { step: "done", steps, done: new Set(), suggestions: [], question: "" };
     const row = currentLine?.row;
     const skippedHere = (step: GuideStep) => skipped.has(`${caretLine.index}:${step}`);
@@ -240,18 +247,21 @@ export function QuickCapture({
     if (row && (row.categoryId !== null || skippedHere("category"))) done.add("category");
     if (row?.name) done.add("name");
     if (row && (row.vendorName || skippedHere("vendor"))) done.add("vendor");
+    if (row && (row.accountName || skippedHere("account"))) done.add("account");
     if (row && (!currentLine?.assumed.has("amount") || skippedHere("price"))) done.add("price");
     if (row && (!currentLine?.assumed.has("dates") || skippedHere("date"))) done.add("date");
-    if (row && row.action !== "create") ["category", "name", "vendor", "date"].forEach((step) => done.add(step as GuideStep));
+    if (row && row.action !== "create") ["category", "name", "vendor", "account", "date"].forEach((step) => done.add(step as GuideStep));
 
     const word = caretWord.replace(/"/g, "");
     const plainWord = word && !/^[#@/]/.test(word) && !word.includes(":") ? word : "";
+    const accountWord = ACCOUNT_WORD.test(word);
     const wordIsNumber = /^[$€£₽¥]?\d+(?:[.,]\d{0,2})?k?$/i.test(word) && !/^\d{1,2}[./-]\d/.test(word);
     const wordIsMoney = Boolean(currentLine?.tokens.find((token) => token.kind === "money" && token.end === caret - caretLine.start));
     const wordIsDate = /^\d{1,4}[./-]\d{0,2}([./-]\d{0,4})?$/.test(word);
 
     let step: GuideStep | "done" | "field" = steps.find((candidate) => !done.has(candidate)) || "done";
     if (word.startsWith("!") || (word.startsWith("/") && !word.startsWith("//") && (word !== "/" || slashReady) && !/^\/\d/.test(word) && !PERIOD_WORD.test(word))) step = "field";
+    else if (accountWord) step = "account";
     else if (word.startsWith("#")) step = "category";
     else if (word.startsWith("@")) step = "vendor";
     else if (wordIsMoney || wordIsNumber) step = "price";
@@ -322,6 +332,28 @@ export function QuickCapture({
         }));
         if (body && word.startsWith("@") && !ranked.some((entry) => entry.vendor.toLowerCase() === body.toLowerCase())) {
           suggestions.push({ key: "v-new", label: tx(locale, `Create “${body}”`, `Создать «${body}»`), insert: `@${quoteIfSpaces(body)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new vendor", "новый") });
+        }
+      }
+    } else if (step === "account") {
+      const vendor = row?.vendorName || "";
+      question = vendor
+        ? tx(locale, `Which account or login at ${vendor}? Type account:name, or skip.`, `Какой аккаунт или логин в ${vendor}? Введите account:имя или пропустите.`)
+        : tx(locale, "Which account or login? Type account:name, or skip.", "Какой аккаунт или логин? Введите account:имя или пропустите.");
+      const query = accountWord ? word.replace(ACCOUNT_WORD, "") : plainWord;
+      // Only offer accounts once something is typed, so Enter at the end of a line still saves.
+      if (accountWord || query) {
+        const known = [...new Set(context.vendors
+          .filter((item) => !vendor || item.vendorName.toLowerCase() === vendor.toLowerCase())
+          .map((item) => item.accountName)
+          .filter(Boolean))];
+        const ranked = known
+          .map((account) => ({ account, score: query ? fuzzyScore(query, account) : 1 }))
+          .filter((entry) => entry.score > 0)
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 6);
+        ranked.forEach(({ account }) => suggestions.push({ key: `a${account}`, label: account, insert: `account:${quoteIfSpaces(account)}`, replace: true, detail: vendor, match: query, icon: <LetterIcon text={account} /> }));
+        if (query && !ranked.some((entry) => entry.account.toLowerCase() === query.toLowerCase())) {
+          suggestions.push({ key: "a-new", label: tx(locale, `Use “${query}”`, `Использовать «${query}»`), insert: `account:${quoteIfSpaces(query)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new account", "новый") });
         }
       }
     } else if (step === "price") {
@@ -419,7 +451,6 @@ export function QuickCapture({
     setServerMessage("");
     setSuggestionsDismissed(false);
     setSelectedSuggestion(0);
-    setNavigated(false);
     if (nextCaret !== undefined) {
       pendingCaret.current = nextCaret;
       setCaret(nextCaret);
@@ -511,17 +542,18 @@ export function QuickCapture({
     if (file) void readFile(file);
   }
 
-  function runAi(answers: Record<string, string> = {}) {
+  function runAi(answers: Record<string, string> = {}, sourceText?: string) {
     if (!payload?.aiAvailable) return;
-    const source = aiState?.original ?? text;
+    const source = sourceText ?? aiState?.original ?? text;
     if (!source.trim()) return;
     setAiError("");
     setAiHint(false);
     startThinking(async () => {
       try {
-        const result = await analyzeAiImportAction(source, answers, payload.workspaceId);
+        const result = await analyzeAiImportAction(source, answers, payload.workspaceId, { noNotes });
         const converted = result.items.map((draft, index) => rowToLine(rowFromAiDraft(draft, index), context));
         setAiState({ original: source, summary: result.summary, questions: result.questions, answers });
+        setMode("quick");
         updateText(converted.join("\n"));
       } catch (error) {
         const reason = error instanceof Error ? error.message : "";
@@ -532,8 +564,24 @@ export function QuickCapture({
 
   function restoreOriginal() {
     if (!aiState) return;
-    updateText(aiState.original);
+    setAiText(aiState.original);
     setAiState(null);
+    updateText("");
+    setMode("ai");
+  }
+
+  /** Free text goes to the AI tab instead of being parsed line by line. */
+  function sendToAi() {
+    setAiText(text);
+    setMode("ai");
+    setAiHint(false);
+  }
+
+  function onAiKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      runAi({}, aiText);
+    }
   }
 
   function save() {
@@ -574,17 +622,15 @@ export function QuickCapture({
       if (cycling && event.key === "ArrowDown") {
         event.preventDefault();
         setSelectedSuggestion((current) => (current + 1) % suggestions.length);
-        setNavigated(true);
         return;
       }
       if (cycling && event.key === "ArrowUp") {
         event.preventDefault();
         setSelectedSuggestion((current) => (current - 1 + suggestions.length) % suggestions.length);
-        setNavigated(true);
         return;
       }
-      // Enter picks from the menu when you are choosing (#, @, /field or after arrowing); otherwise it saves.
-      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey && (navigated || /^[#@!/]/.test(caretWord))) {
+      // Enter picks the highlighted item, like Tab. Ctrl/⌘+Enter (below) always saves.
+      if (event.key === "Enter" && !event.shiftKey && !event.metaKey && !event.ctrlKey) {
         event.preventDefault();
         acceptSuggestion(suggestions[Math.min(selectedSuggestion, suggestions.length - 1)]);
         return;
@@ -608,11 +654,6 @@ export function QuickCapture({
       skipStep();
       return;
     }
-    if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "j") {
-      event.preventDefault();
-      runAi(aiState?.answers);
-      return;
-    }
     if (event.key === "Enter" && (event.metaKey || event.ctrlKey || !event.shiftKey)) {
       event.preventDefault();
       save();
@@ -630,7 +671,9 @@ export function QuickCapture({
         <Dialog.Content
           aria-describedby={undefined}
           className="capture-panel-in fixed inset-x-0 top-[22vh] z-50 mx-auto flex max-h-[74vh] w-[calc(100vw-1.5rem)] max-w-[840px] flex-col rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
-          onPointerDownOutside={(event) => { if ((event.target as HTMLElement | null)?.closest?.("[data-suggest-menu]")) event.preventDefault(); }}
+          // Closes only from the X button: Escape and outside clicks would throw away what was typed.
+          onEscapeKeyDown={(event) => event.preventDefault()}
+          onInteractOutside={(event) => event.preventDefault()}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
           onDrop={onDrop}
@@ -644,10 +687,29 @@ export function QuickCapture({
 
           {/* Context bar */}
           <div className="flex items-center gap-2 border-b border-white/[0.06] px-7 py-4 text-xs text-zinc-500">
-            <Zap className="h-3.5 w-3.5 text-zinc-400" />
-            <span className="font-medium text-zinc-300">{tx(locale, "Quick capture", "Быстрое добавление")}</span>
+            <div role="tablist" aria-label={tx(locale, "Capture mode", "Режим")} className="inline-flex items-center rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+              {([
+                ["quick", <Zap key="i" className="h-3.5 w-3.5" />, tx(locale, "Quick capture", "Быстрое добавление")],
+                ["ai", <Sparkles key="i" className="h-3.5 w-3.5" />, tx(locale, "AI import", "AI-импорт")],
+              ] as const).map(([value, icon, label]) => (
+                <button
+                  key={value}
+                  type="button"
+                  role="tab"
+                  aria-selected={mode === value}
+                  onClick={() => {
+                    setMode(value);
+                    if (value === "ai" && !aiText && text.trim() && !aiState) setAiText(text);
+                    requestAnimationFrame(() => (value === "ai" ? aiAreaRef : textareaRef).current?.focus());
+                  }}
+                  className={cn("inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition", mode === value ? "bg-white/[0.08] text-zinc-100" : "text-zinc-500 hover:text-zinc-300")}
+                >
+                  {icon}{label}
+                </button>
+              ))}
+            </div>
             {payload ? <span className="hidden truncate sm:inline">· {payload.workspaceName}</span> : null}
-            <Popover>
+            {mode === "quick" ? <Popover>
               <PopoverTrigger asChild>
                 <button type="button" className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2 py-0.5 text-zinc-400 transition hover:border-white/20 hover:text-zinc-200">
                   {categoryChip ? <AppIcon name={categoryChip.icon} className="h-3 w-3" /> : null}
@@ -658,17 +720,38 @@ export function QuickCapture({
                 <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{tx(locale, "Lines without #category go to", "Строки без #категории попадут в")}</p>
                 <CategoryList categories={context.categories} value={defaultCategory ?? null} locale={locale} onSelect={(id) => setCategoryOverride(id)} />
               </PopoverContent>
-            </Popover>
-            <div className="ml-auto hidden items-center gap-3 sm:flex">
-              <span className="flex items-center gap-1"><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "save", "сохранить")}</span>
-              <span className="flex items-center gap-1"><Kbd>⇧</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "next line", "новая строка")}</span>
-              {payload?.aiAvailable ? <span className="flex items-center gap-1"><Kbd>⌘J</Kbd>AI</span> : null}
+            </Popover> : null}
+            <div className="ml-auto hidden items-center gap-3 lg:flex">
+              {mode === "quick" ? (
+                <>
+                  <span className="flex items-center gap-1"><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "pick / save", "выбрать / сохранить")}</span>
+                  <span className="flex items-center gap-1"><Kbd>Ctrl</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "save", "сохранить")}</span>
+                  <span className="flex items-center gap-1"><Kbd>⇧</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "next line", "новая строка")}</span>
+                </>
+              ) : (
+                <span className="flex items-center gap-1"><Kbd>Ctrl</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "parse", "разобрать")}</span>
+              )}
             </div>
             <Dialog.Close className="ml-2 rounded-md p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Close", "Закрыть")}>
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>
 
+          {mode === "ai" ? (
+            <AiImportPane
+              ref={aiAreaRef}
+              locale={locale}
+              value={aiText}
+              onChange={setAiText}
+              onKeyDown={onAiKeyDown}
+              noNotes={noNotes}
+              onNoNotesChange={setNoNotes}
+              aiAvailable={Boolean(payload?.aiAvailable)}
+              thinking={isThinking}
+              error={aiError}
+            />
+          ) : (
+          <>
           {/* Editor */}
           <div className="relative z-20">
             <div
@@ -801,8 +884,8 @@ export function QuickCapture({
             {(aiHint || (parsed.some((line) => line.tokens.length > 8 && line.tokens.every((token) => token.kind === "name")))) && !aiState && hasText ? (
               <button
                 type="button"
-                onClick={() => runAi()}
-                disabled={!payload?.aiAvailable || isThinking}
+                onClick={sendToAi}
+                disabled={isThinking}
                 className="mx-7 mt-6 flex w-[calc(100%-3.5rem)] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-4 text-left transition hover:border-white/20 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <span className="grid h-9 w-9 place-items-center rounded-lg bg-white/[0.06] text-zinc-300"><Wand2 className="h-4 w-4" /></span>
@@ -811,10 +894,10 @@ export function QuickCapture({
                   <span className="block text-xs text-zinc-400">
                     {payload?.aiAvailable
                       ? tx(locale, "IPs, domains, logins and names are masked before anything is sent.", "IP, домены, логины и названия маскируются перед отправкой.")
-                      : tx(locale, "AI needs Premium and an API key in .env.local.", "Нужен Premium и ключ API в .env.local.")}
+                      : tx(locale, "AI needs Premium and an API key (Admin → AI import).", "Нужен Premium и ключ API (Админ → AI-импорт).")}
                   </span>
                 </span>
-                {payload?.aiAvailable ? <Kbd>⌘J</Kbd> : null}
+                <ArrowRight className="h-4 w-4 text-zinc-500" />
               </button>
             ) : null}
 
@@ -842,11 +925,15 @@ export function QuickCapture({
               <Onboarding locale={locale} onFile={() => fileRef.current?.click()} />
             ) : null}
           </div>
+          </>
+          )}
 
           {/* Footer */}
           <div className="flex flex-wrap items-center gap-3 border-t border-white/[0.06] px-7 py-5">
             <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-zinc-500">
-              {parsed.length ? (
+              {mode === "ai" ? (
+                <span>{tx(locale, "AI turns the text into capture lines you can check before saving.", "AI превратит текст в строки, которые можно проверить перед сохранением.")}</span>
+              ) : parsed.length ? (
                 <>
                   {counts.create ? <span className="text-zinc-300">{tx(locale, `${counts.create} new`, `${counts.create} новых`)}</span> : null}
                   {counts.edit ? <span className="text-orange-200">{tx(locale, `${counts.edit} update`, `${counts.edit} изм.`)}</span> : null}
@@ -863,12 +950,23 @@ export function QuickCapture({
               )}
               {serverMessage ? <span className="text-red-300">{serverMessage}</span> : null}
             </div>
-            {payload?.aiAvailable && hasText ? (
-              <button type="button" onClick={() => runAi(aiState?.answers)} disabled={isThinking} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 transition hover:bg-white/[0.06] disabled:opacity-50">
+            {mode === "quick" && payload?.aiAvailable && aiState ? (
+              <button type="button" onClick={() => runAi(aiState.answers)} disabled={isThinking} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 transition hover:bg-white/[0.06] disabled:opacity-50">
                 {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {aiState ? tx(locale, "Ask again", "Ещё раз") : tx(locale, "AI", "AI")}
+                {tx(locale, "Ask again", "Ещё раз")}
               </button>
             ) : null}
+            {mode === "ai" ? (
+              <button
+                type="button"
+                onClick={() => runAi({}, aiText)}
+                disabled={!payload?.aiAvailable || !aiText.trim() || isThinking}
+                className="btn-aurora inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
+                {tx(locale, "Parse with AI", "Разобрать с AI")}
+              </button>
+            ) : (
             <button
               type="button"
               onClick={save}
@@ -878,6 +976,7 @@ export function QuickCapture({
               {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
               {parsed.length > 1 ? tx(locale, `Save ${parsed.length}`, `Сохранить ${parsed.length}`) : tx(locale, "Save", "Сохранить")}
             </button>
+            )}
           </div>
           <input
             ref={fileRef}
@@ -896,10 +995,57 @@ export function QuickCapture({
   );
 }
 
+const AiImportPane = forwardRef<HTMLTextAreaElement, {
+  locale: Locale;
+  value: string;
+  onChange: (value: string) => void;
+  onKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  noNotes: boolean;
+  onNoNotesChange: (value: boolean) => void;
+  aiAvailable: boolean;
+  thinking: boolean;
+  error: string;
+}>(function AiImportPane({ locale, value, onChange, onKeyDown, noNotes, onNoNotesChange, aiAvailable, thinking, error }, ref) {
+  return (
+    <div className="relative min-h-0 flex-1 overflow-y-auto">
+      <textarea
+        ref={ref}
+        autoFocus
+        value={value}
+        spellCheck={false}
+        disabled={!aiAvailable || thinking}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={tx(
+          locale,
+          "Paste anything: an invoice, a list, a table.\nname: hz-fsn-01\nvendor: Hetzner\naccount: ops\nip: 95.217.10.4\nprice: 4.51 EUR/mo\nbilling start: 03.11.2026",
+          "Вставьте что угодно: счёт, список, таблицу.\nname: hz-fsn-01\nvendor: Hetzner\naccount: ops\nip: 95.217.10.4\nprice: 4.51 EUR/mo\nbilling start: 03.11.2026",
+        )}
+        className="block min-h-[240px] w-full resize-none bg-transparent px-7 py-6 font-mono text-[14px] leading-6 text-zinc-100 outline-none placeholder:text-zinc-600 disabled:opacity-60"
+      />
+      {thinking ? <div className="capture-shimmer pointer-events-none absolute inset-0" /> : null}
+      <div className="space-y-2 border-t border-white/[0.06] px-7 py-4">
+        <label className="flex items-center gap-2 text-sm text-zinc-300">
+          <input type="checkbox" checked={noNotes} onChange={(event) => onNoNotesChange(event.target.checked)} className="h-4 w-4 accent-violet-500" />
+          {tx(locale, "Don't add notes", "Не добавлять заметки")}
+          <span className="text-xs text-zinc-500">{tx(locale, "AI fills fields only, never the notes", "AI заполняет только поля, без заметок")}</span>
+        </label>
+        <p className="text-xs text-zinc-500">
+          {aiAvailable
+            ? tx(locale, "Labels like name:, vendor:, account:, ip:, price: and billing start: (dd.mm.yyyy) are used as given. IPs, domains, logins and names are masked before anything is sent.", "Метки name:, vendor:, account:, ip:, price: и billing start: (дд.мм.гггг) используются как есть. IP, домены, логины и названия маскируются перед отправкой.")
+            : tx(locale, "AI needs Premium and an API key (Admin → AI import).", "Нужен Premium и ключ API (Админ → AI-импорт).")}
+        </p>
+        {error ? <p className="text-sm text-red-300">{error}</p> : null}
+      </div>
+    </div>
+  );
+});
+
 function Onboarding({ locale, onFile }: { locale: Locale; onFile: () => void }) {
   const legend: Array<{ kind: keyof typeof TOKEN_DOT; syntax: string; en: string; ru: string }> = [
     { kind: "category", syntax: "#servers", en: "category", ru: "категория" },
-    { kind: "vendor", syntax: "@Hetzner/login", en: "vendor / account", ru: "поставщик / аккаунт" },
+    { kind: "vendor", syntax: "@Hetzner", en: "vendor", ru: "поставщик" },
+    { kind: "field", syntax: "account:ops", en: "account / login", ru: "аккаунт / логин" },
     { kind: "money", syntax: "€4.51/mo", en: "price & period", ru: "цена и период" },
     { kind: "date", syntax: "01.11.26", en: "billing start", ru: "начало оплаты" },
     { kind: "field", syntax: "/ip: 1.2.3.4", en: "category field", ru: "поле категории" },

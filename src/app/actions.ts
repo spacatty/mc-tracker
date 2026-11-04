@@ -27,6 +27,7 @@ import {
   exportSelectedEntriesForWorkspace,
   exportWorkspaceForUser,
   getUserById,
+  setUserDashboardPrefs,
   importWorkspaceDataForUser,
   listCategoriesForWorkspace,
   listItemsForWorkspace,
@@ -308,7 +309,7 @@ export async function saveEntryBatchAction(input: EntryBatchInput): Promise<Entr
   }
 }
 
-export async function analyzeAiImportAction(input: string, answers?: Record<string, string>, workspaceIdArg?: number) {
+export async function analyzeAiImportAction(input: string, answers?: Record<string, string>, workspaceIdArg?: number, options?: { noNotes?: boolean }) {
   const user = await requireUser();
   requirePremium(user);
   const workspaceId = resolveWorkspaceId(workspaceIdArg || null, user.id);
@@ -316,6 +317,7 @@ export async function analyzeAiImportAction(input: string, answers?: Record<stri
     return await extractPaymentItems({
       input,
       answers,
+      allowNotes: !options?.noNotes,
       categories: listCategoriesForWorkspace(workspaceId, user.id),
       entries: listItemsForWorkspace(workspaceId, user.id),
       vendors: listVendorSuggestionsForWorkspace(workspaceId, user.id),
@@ -562,6 +564,13 @@ export async function updateMyDisplayCurrencyAction(formData: FormData) {
   const user = await requireUser();
   const nextCurrency = ensureSupportedCurrency(formData.get("displayCurrency")?.toString(), user.displayCurrency || "USD");
   updateUserDisplayCurrency(user.id, nextCurrency);
+  revalidatePath("/app/settings");
+  revalidatePath("/app");
+}
+
+export async function updateMyDashboardPrefsAction(formData: FormData) {
+  const user = await requireUser();
+  setUserDashboardPrefs(user.id, { showTrend: formData.get("showTrend") === "on" });
   revalidatePath("/app/settings");
   revalidatePath("/app");
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { Fragment, useState } from "react";
-import { ChevronDown, ChevronUp, ExternalLink } from "lucide-react";
+import { Fragment, useMemo, useState } from "react";
+import { ChevronDown, ChevronUp, ExternalLink, Search } from "lucide-react";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { PaymentItem } from "@/lib/types";
@@ -10,7 +10,9 @@ import { AppIcon } from "./icons";
 import { DashboardUpcomingActions } from "./dashboard-upcoming-actions";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { Input } from "./ui/input";
+import { NativeSelect } from "./ui/native-select";
+import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
 
 type UpcomingItem = PaymentItem & {
   nextPaymentAt: string;
@@ -70,6 +72,30 @@ export function DashboardUpcomingTable({
   locale: Locale;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [whenFilter, setWhenFilter] = useState<"all" | "overdue" | "week">("all");
+
+  const categoryOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    items.forEach((item) => seen.set(String(item.categoryId ?? "none"), item.categoryName || t(locale, "uncategorized")));
+    return [...seen.entries()].sort((a, b) => a[1].localeCompare(b[1]));
+  }, [items, locale]);
+
+  const visible = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    return items.filter((item) => {
+      if (categoryFilter !== "all" && String(item.categoryId ?? "none") !== categoryFilter) return false;
+      if (whenFilter === "overdue" && item.daysUntilPayment >= 0) return false;
+      if (whenFilter === "week" && (item.daysUntilPayment < 0 || item.daysUntilPayment > 7)) return false;
+      if (!needle) return true;
+      return [item.name, item.vendorName, item.accountName, item.categoryName, item.vendorUrl].some((value) => String(value || "").toLowerCase().includes(needle));
+    });
+  }, [categoryFilter, items, query, whenFilter]);
+  const filtering = Boolean(query.trim()) || categoryFilter !== "all" || whenFilter !== "all";
+  const emptyText = filtering
+    ? tx(locale, "Nothing matches these filters.", "Ничего не найдено по фильтрам.")
+    : tx(locale, "No payments due in the next 2 weeks.", "Платежей в ближайшие 2 недели нет.");
 
   function toggle(itemId: number) {
     setExpanded((current) => {
@@ -123,8 +149,30 @@ export function DashboardUpcomingTable({
 
   return (
     <>
-      <div className="space-y-3 p-3 md:hidden">
-        {items.map((item) => (
+      <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.06] px-3 py-2.5 md:px-5">
+        <div className="relative min-w-[12rem] flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
+          <Input
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder={tx(locale, "Search name, vendor, account…", "Поиск по названию, вендору, аккаунту…")}
+            aria-label={tx(locale, "Search upcoming payments", "Поиск по ближайшим платежам")}
+            className="h-8 pl-8 text-[13px]"
+          />
+        </div>
+        <NativeSelect value={categoryFilter} onChange={setCategoryFilter} ariaLabel={t(locale, "category")} className="h-8 w-auto min-w-[9rem] [&_select]:text-[13px]">
+          <option value="all">{tx(locale, "All categories", "Все категории")}</option>
+          {categoryOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+        </NativeSelect>
+        <NativeSelect value={whenFilter} onChange={(value) => setWhenFilter(value as typeof whenFilter)} ariaLabel={tx(locale, "Due", "Срок")} className="h-8 w-auto min-w-[8rem] [&_select]:text-[13px]">
+          <option value="all">{tx(locale, "Any date", "Любая дата")}</option>
+          <option value="overdue">{tx(locale, "Overdue", "Просрочено")}</option>
+          <option value="week">{tx(locale, "Next 7 days", "Ближайшие 7 дней")}</option>
+        </NativeSelect>
+        <span className="text-xs text-zinc-500">{filtering ? `${visible.length} / ${items.length}` : items.length}</span>
+      </div>
+      <div className="h-[420px] space-y-3 overflow-y-auto p-3 md:hidden">
+        {visible.map((item) => (
           <article key={item.id} className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02]">
             <div className="p-3">
               <div className="flex items-start gap-2">
@@ -149,12 +197,13 @@ export function DashboardUpcomingTable({
             {expanded.has(item.id) ? <div className="border-t border-border bg-surface p-3">{details(item)}</div> : null}
           </article>
         ))}
-        {!items.length ? <p className="py-8 text-center text-sm text-muted-foreground">{tx(locale, "No payments due in the next 2 weeks.", "Платежей в ближайшие 2 недели нет.")}</p> : null}
+        {!visible.length ? <p className="py-8 text-center text-sm text-muted-foreground">{emptyText}</p> : null}
       </div>
 
-      <div className="hidden md:block">
-        <Table bare>
-          <TableHeader>
+      {/* Fixed height so a long list scrolls inside the card; the header stays pinned. */}
+      <div className="hidden h-[420px] overflow-auto md:block">
+        <table className="w-full caption-bottom text-sm">
+          <TableHeader className="sticky top-0 z-10 bg-surface">
             <TableRow>
               <TableHead className="w-12 px-0 text-center first:pl-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
               <TableHead>{tx(locale, "Name", "Название")}</TableHead>
@@ -167,7 +216,7 @@ export function DashboardUpcomingTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {items.map((item) => (
+            {visible.map((item) => (
               <Fragment key={item.id}>
                 <TableRow className="group">
                   <TableCell className="w-12 px-0 py-2 text-center first:pl-0">{disclosure(item)}</TableCell>
@@ -211,11 +260,11 @@ export function DashboardUpcomingTable({
                 ) : null}
               </Fragment>
             ))}
-            {!items.length ? (
-              <TableRow><TableCell colSpan={8} className="py-10 text-center text-zinc-500">{tx(locale, "No payments due in the next 2 weeks.", "Платежей в ближайшие 2 недели нет.")}</TableCell></TableRow>
+            {!visible.length ? (
+              <TableRow><TableCell colSpan={8} className="py-10 text-center text-zinc-500">{emptyText}</TableCell></TableRow>
             ) : null}
           </TableBody>
-        </Table>
+        </table>
       </div>
     </>
   );
