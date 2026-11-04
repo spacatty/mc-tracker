@@ -156,7 +156,7 @@ export function DashboardUpcomingTable({
         <Table bare>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-11 pr-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
+              <TableHead className="w-12 px-0 text-center first:pl-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
               <TableHead>{tx(locale, "Name", "Название")}</TableHead>
               <TableHead className="text-center">{tx(locale, "Payment date", "Дата оплаты")}</TableHead>
               <TableHead className="text-center">{t(locale, "category")}</TableHead>
@@ -170,7 +170,7 @@ export function DashboardUpcomingTable({
             {items.map((item) => (
               <Fragment key={item.id}>
                 <TableRow className="group">
-                  <TableCell className="w-11 py-2 pr-0">{disclosure(item)}</TableCell>
+                  <TableCell className="w-12 px-0 py-2 text-center first:pl-0">{disclosure(item)}</TableCell>
                   <TableCell className="font-medium text-white">{item.name}</TableCell>
                   <TableCell className="whitespace-nowrap text-center text-zinc-300">
                     {relativeDays(item.daysUntilPayment, locale)} <span className="text-zinc-500">({displayDate(item.nextPaymentAt)})</span>
