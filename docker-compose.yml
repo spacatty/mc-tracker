@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    image: mc-tracker:latest
+    restart: unless-stopped
+    # Same env files as local runs. SQLITE_PATH=./data/mc-tracker.sqlite resolves
+    # to /app/data inside the container, which is the host's ./data folder.
+    env_file:
+      - path: .env
+        required: false
+      - path: .env.local
+        required: false
+    environment:
+      PORT: "4271"
+      HOSTNAME: 0.0.0.0
+    ports:
+      # Host-only: reachable from this machine, not from the network.
+      - "127.0.0.1:${MC_TRACKER_PORT:-4271}:4271"
+    volumes:
+      - ./data:/app/data

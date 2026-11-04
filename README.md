@@ -4,7 +4,7 @@ MC Tracker is a self-hosted Next.js app for tracking recurring and persistent pa
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 26 LTS (see `.nvmrc`), or Docker
 - npm
 - Persistent disk storage for the SQLite database
 
@@ -29,7 +29,7 @@ To use a different port, pass Next.js the `-p` flag:
 npm run dev -- -p 3001
 ```
 
-Open [http://localhost:3000](http://localhost:3000). On the first visit, the app redirects to `/setup` so you can create the initial superadmin account.
+Open [http://localhost:4271](http://localhost:4271) (the default port). On the first visit, the app redirects to `/setup` so you can create the initial superadmin account.
 
 ## Adding and managing entries
 
@@ -79,6 +79,16 @@ To run production on another port:
 npm run start -- -p 3001
 ```
 
+### Docker
+
+`docker-compose.yml` builds a production image on Node 26 and reads the same `.env` / `.env.local` files as local runs. The host's `./data` folder is mounted at `/app/data`, so an existing database at `SQLITE_PATH=./data/mc-tracker.sqlite` is used as is and survives rebuilds. The port is published on `127.0.0.1:4271` only (set `MC_TRACKER_PORT` to change the host side).
+
+```bash
+docker compose up -d --build
+```
+
+`AUTH_SECRET` (and `CRON_SECRET` for notifications) must be set in the env file, since the container runs in production mode. Don't run the container and a local server against the same SQLite file at the same time: file locking across a Docker Desktop bind mount isn't reliable.
+
 Use a Node.js host or container with persistent storage mounted at `SQLITE_PATH` or the default `data/` directory. SQLite is the runtime database; PostgreSQL/MySQL support in the settings UI is only a connection test for future expansion.
 
 For recurring notification delivery, schedule a POST request to:
@@ -95,6 +105,7 @@ The app is not a good fit for stateless serverless deployments unless the storag
 Run these before deploying:
 
 ```bash
+npm run typecheck
 npm run lint
 npm run build
 ```
