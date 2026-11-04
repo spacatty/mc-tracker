@@ -1,11 +1,12 @@
 "use client";
 
 import * as Dialog from "@radix-ui/react-dialog";
-import { ArrowRight, CalendarDays, Coins, CornerDownLeft, KeyRound, Plus, Repeat, Store, Tag, Tags, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
+import { ArrowRight, CalendarDays, ChevronDown, Coins, CornerDownLeft, KeyRound, Plus, Repeat, Store, Tag, Tags, FileUp, Loader2, Sparkles, Undo2, Wand2, X, Zap } from "lucide-react";
 import { forwardRef, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useTransition, type ClipboardEvent, type DragEvent, type KeyboardEvent, type ReactNode } from "react";
 import { analyzeAiImportAction, applyImportRowsAction, type CaptureContextPayload } from "@/app/actions";
 import type { AiQuestion } from "@/lib/ai/import-schema";
 import { parseCapture, parseDate, rowToLine, type CaptureContext, type ParsedLine, type Token } from "@/lib/capture/syntax";
+import { format } from "date-fns";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import { importRowPayload, parseTabularInput, rowFromAiDraft, validateImportRow, type ImportRow, type ImportRowErrors } from "@/lib/import/rows";
 import type { Locale } from "@/lib/i18n";
@@ -13,13 +14,15 @@ import { cn, formatMoney, slugify } from "@/lib/utils";
 import { AppIcon } from "../icons";
 import { CaptureCard } from "./capture-card";
 import { CategoryList } from "./editors";
+import { DateCalendar } from "../ui/date-picker";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { LetterIcon, SuggestMenu } from "./suggest-menu";
 import { Chip, Kbd, TOKEN_DOT, TOKEN_STYLES, monthlyEquivalent, tx } from "./shared";
 
 const CURRENCY_CODES = SUPPORTED_CURRENCIES.map((currency) => currency.code as string);
 
-type Suggestion = { key: string; label: string; insert: string; replace?: boolean; icon?: ReactNode; detail?: string; match?: string };
+/** `calendar` items open the date picker instead of inserting text. */
+type Suggestion = { key: string; label: string; insert: string; replace?: boolean; icon?: ReactNode; detail?: string; match?: string; calendar?: boolean };
 type GuideStep = "category" | "name" | "vendor" | "account" | "price" | "date";
 type Guide = { step: GuideStep | "done" | "field"; steps: GuideStep[]; done: Set<GuideStep>; suggestions: Suggestion[]; question: string };
 
@@ -42,6 +45,7 @@ const STEP_ICONS: Record<string, ReactNode> = {
 const CURRENCY_SYMBOLS: Record<string, string> = { USD: "$", EUR: "€", GBP: "£", RUB: "₽" };
 const SYMBOL_CODES: Record<string, string> = { $: "USD", "€": "EUR", "£": "GBP", "₽": "RUB", "¥": "JPY" };
 const ACCOUNT_WORD = /^(acc|account|login|user):/i;
+const DATE_WORD = /^\d{1,4}[./-]\d{0,2}([./-]\d{0,4})?$/;
 const PERIOD_WORD = /^\/(w|wk|week|m|mo|mon|month|q|y|yr|year|once|\d+d)$/i;
 const PERIOD_CHOICES = [
   { token: "/mo", en: "monthly", ru: "в месяц" },
@@ -175,6 +179,8 @@ export function QuickCapture({
     setMenuMounted(Boolean(node));
   }, []);
   const markerRef = useRef<HTMLSpanElement>(null);
+  // Where the billing-start calendar floats (same spot as the menu it replaced), or null when closed.
+  const [calendarAt, setCalendarAt] = useState<{ top: string; left: string } | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const defaultCategory = categoryOverride === undefined ? defaultCategoryId : categoryOverride;
@@ -257,7 +263,7 @@ export function QuickCapture({
     const accountWord = ACCOUNT_WORD.test(word);
     const wordIsNumber = /^[$€£₽¥]?\d+(?:[.,]\d{0,2})?k?$/i.test(word) && !/^\d{1,2}[./-]\d/.test(word);
     const wordIsMoney = Boolean(currentLine?.tokens.find((token) => token.kind === "money" && token.end === caret - caretLine.start));
-    const wordIsDate = /^\d{1,4}[./-]\d{0,2}([./-]\d{0,4})?$/.test(word);
+    const wordIsDate = DATE_WORD.test(word);
 
     let step: GuideStep | "done" | "field" = steps.find((candidate) => !done.has(candidate)) || "done";
     if (word.startsWith("!") || (word.startsWith("/") && !word.startsWith("//") && (word !== "/" || slashReady) && !/^\/\d/.test(word) && !PERIOD_WORD.test(word))) step = "field";
@@ -388,13 +394,14 @@ export function QuickCapture({
           { key: "first", label: tx(locale, "1st of this month", "1-е число"), date: first },
         ].forEach((choice) => suggestions.push({ key: `d${choice.key}`, label: choice.label, insert: dottedDate(choice.date), replace: false, detail: dottedDate(choice.date), icon: <CalendarDays className="h-3.5 w-3.5 text-zinc-400" /> }));
       }
+      suggestions.push({ key: "d-calendar", label: tx(locale, "Pick on calendar…", "Выбрать в календаре…"), insert: "", calendar: true, icon: <CalendarDays className="h-3.5 w-3.5 text-violet-300" /> });
     } else {
       question = row ? tx(locale, "All set. ↵ saves; add more lines with ⇧↵.", "Готово. ↵ сохранит, ⇧↵ — новая строка.") : "";
     }
     return { step, steps, done, suggestions, question };
   }, [caret, caretLine.index, caretLine.start, caretWord, context, currentLine, locale, payload, skipped, slashReady]);
   const suggestions = guide.suggestions;
-  const showSuggestions = open && suggestions.length > 0 && !suggestionsDismissed;
+  const showSuggestions = open && suggestions.length > 0 && !suggestionsDismissed && !calendarAt;
   const caretWordStart = wordAt(text, caret).start;
 
   // Float the menu under the word being typed. Offsets are relative to the editor, so the
@@ -447,6 +454,7 @@ export function QuickCapture({
 
   function updateText(next: string, nextCaret?: number) {
     setText(next);
+    setCalendarAt(null);
     setErrors({});
     setServerMessage("");
     setSuggestionsDismissed(false);
@@ -458,6 +466,10 @@ export function QuickCapture({
   }
 
   function acceptSuggestion(suggestion: Suggestion) {
+    if (suggestion.calendar) {
+      setCalendarAt({ top: menuRef.current?.style.top || "72px", left: menuRef.current?.style.left || "8px" });
+      return;
+    }
     if (!suggestion.replace) {
       // Keep what was typed (usually the name) and add the suggestion after it.
       const { end } = wordAt(text, caret);
@@ -476,6 +488,17 @@ export function QuickCapture({
     const after = text.slice(end);
     const insert = `${suggestion.insert}${after.startsWith(" ") ? "" : " "}`;
     updateText(before + insert + after, before.length + insert.length);
+  }
+
+  function pickCalendarDate(date?: Date) {
+    if (!date) return;
+    // A half-typed date under the caret is replaced; otherwise the date is added after it.
+    acceptSuggestion({ key: "d-picked", label: "", insert: format(date, "dd.MM.yyyy"), replace: DATE_WORD.test(caretWord) });
+  }
+
+  function closeCalendar() {
+    setCalendarAt(null);
+    textareaRef.current?.focus();
   }
 
   function skipStep() {
@@ -617,6 +640,12 @@ export function QuickCapture({
   }
 
   function onKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
+    if (calendarAt && event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeCalendar();
+      return;
+    }
     if (showSuggestions) {
       const cycling = Boolean(caretWord) || !text.includes("\n");
       if (cycling && event.key === "ArrowDown") {
@@ -685,11 +714,11 @@ export function QuickCapture({
             </div>
           ) : null}
 
-          {/* Context bar */}
-          <div className="flex items-center gap-2 border-b border-white/[0.06] px-7 py-4 text-xs text-zinc-500">
-            <div role="tablist" aria-label={tx(locale, "Capture mode", "Режим")} className="inline-flex items-center rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
+          {/* Context bar: mode tabs, default category, close. Keyboard hints live in the menu and footer. */}
+          <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] px-5 text-[13px]">
+            <div role="tablist" aria-label={tx(locale, "Capture mode", "Режим")} className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
               {([
-                ["quick", <Zap key="i" className="h-3.5 w-3.5" />, tx(locale, "Quick capture", "Быстрое добавление")],
+                ["quick", <Zap key="i" className="h-3.5 w-3.5" />, tx(locale, "Quick", "Быстро")],
                 ["ai", <Sparkles key="i" className="h-3.5 w-3.5" />, tx(locale, "AI import", "AI-импорт")],
               ] as const).map(([value, icon, label]) => (
                 <button
@@ -702,37 +731,32 @@ export function QuickCapture({
                     if (value === "ai" && !aiText && text.trim() && !aiState) setAiText(text);
                     requestAnimationFrame(() => (value === "ai" ? aiAreaRef : textareaRef).current?.focus());
                   }}
-                  className={cn("inline-flex items-center gap-1.5 rounded-md px-2.5 py-1 font-medium transition", mode === value ? "bg-white/[0.08] text-zinc-100" : "text-zinc-500 hover:text-zinc-300")}
+                  className={cn("inline-flex h-7 items-center gap-1.5 whitespace-nowrap rounded-md px-3 font-medium transition", mode === value ? "bg-white/[0.08] text-zinc-100" : "text-zinc-500 hover:text-zinc-300")}
                 >
                   {icon}{label}
                 </button>
               ))}
             </div>
-            {payload ? <span className="hidden truncate sm:inline">· {payload.workspaceName}</span> : null}
-            {mode === "quick" ? <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" className="ml-1 inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2 py-0.5 text-zinc-400 transition hover:border-white/20 hover:text-zinc-200">
-                  {categoryChip ? <AppIcon name={categoryChip.icon} className="h-3 w-3" /> : null}
-                  {categoryChip ? tx(locale, `into ${categoryChip.name}`, `в ${categoryChip.name}`) : tx(locale, "no default category", "без категории по умолчанию")}
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="start" className="w-64">
-                <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{tx(locale, "Lines without #category go to", "Строки без #категории попадут в")}</p>
-                <CategoryList categories={context.categories} value={defaultCategory ?? null} locale={locale} onSelect={(id) => setCategoryOverride(id)} />
-              </PopoverContent>
-            </Popover> : null}
-            <div className="ml-auto hidden items-center gap-3 lg:flex">
-              {mode === "quick" ? (
-                <>
-                  <span className="flex items-center gap-1"><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "pick / save", "выбрать / сохранить")}</span>
-                  <span className="flex items-center gap-1"><Kbd>Ctrl</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "save", "сохранить")}</span>
-                  <span className="flex items-center gap-1"><Kbd>⇧</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "next line", "новая строка")}</span>
-                </>
-              ) : (
-                <span className="flex items-center gap-1"><Kbd>Ctrl</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "parse", "разобрать")}</span>
-              )}
-            </div>
-            <Dialog.Close className="ml-2 rounded-md p-1 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Close", "Закрыть")}>
+            {mode === "quick" ? (
+              <Popover>
+                <PopoverTrigger asChild>
+                  <button
+                    type="button"
+                    title={tx(locale, "Lines without #category go here", "Строки без #категории попадут сюда")}
+                    className="inline-flex h-7 min-w-0 max-w-[14rem] items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-zinc-500 transition hover:bg-white/[0.04] hover:text-zinc-200"
+                  >
+                    {categoryChip ? <AppIcon name={categoryChip.icon} className="h-3.5 w-3.5 shrink-0" /> : <Tags className="h-3.5 w-3.5 shrink-0" />}
+                    <span className="truncate">{categoryChip ? categoryChip.name : tx(locale, "Any category", "Любая категория")}</span>
+                    <ChevronDown className="h-3 w-3 shrink-0 opacity-60" />
+                  </button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64">
+                  <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-500">{tx(locale, "Lines without #category go to", "Строки без #категории попадут в")}</p>
+                  <CategoryList categories={context.categories} value={defaultCategory ?? null} locale={locale} onSelect={(id) => setCategoryOverride(id)} />
+                </PopoverContent>
+              </Popover>
+            ) : null}
+            <Dialog.Close className="ml-auto grid h-8 w-8 shrink-0 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Close", "Закрыть")}>
               <X className="h-4 w-4" />
             </Dialog.Close>
           </div>
@@ -783,6 +807,7 @@ export function QuickCapture({
               onKeyDown={onKeyDown}
               onKeyUp={syncCaret}
               onClick={syncCaret}
+              onMouseDown={() => setCalendarAt(null)}
               onSelect={syncCaret}
               onPaste={onPaste}
               onScroll={(event) => { if (mirrorRef.current) mirrorRef.current.scrollTop = event.currentTarget.scrollTop; }}
@@ -801,6 +826,30 @@ export function QuickCapture({
                 onPick={(index) => acceptSuggestion(suggestions[index])}
                 labels={{ navigate: tx(locale, "move", "выбор"), pick: tx(locale, "pick", "вставить"), close: tx(locale, "close", "закрыть") }}
               />
+            ) : null}
+            {calendarAt ? (
+              <div
+                data-suggest-menu
+                ref={(node) => {
+                  // Lift the calendar when it would run past the bottom of the window.
+                  if (!node) return;
+                  const overflow = node.getBoundingClientRect().bottom - (window.innerHeight - 12);
+                  if (overflow > 0) node.style.top = `${node.offsetTop - overflow}px`;
+                }}
+                style={calendarAt}
+                onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); closeCalendar(); } }}
+                className="suggest-in absolute z-30 overflow-hidden rounded-xl border border-white/10 bg-[#18181c]/95 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+              >
+                <DateCalendar
+                  locale={locale}
+                  showClear={false}
+                  selected={(() => {
+                    const typed = DATE_WORD.test(caretWord) ? parseDate(caretWord) : null;
+                    return typed ? new Date(`${typed}T00:00:00`) : undefined;
+                  })()}
+                  onSelect={pickCalendarDate}
+                />
+              </div>
             ) : null}
           </div>
 
@@ -956,6 +1005,10 @@ export function QuickCapture({
                 {tx(locale, "Ask again", "Ещё раз")}
               </button>
             ) : null}
+            <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[11px] text-zinc-600 md:flex">
+              <Kbd>Ctrl</Kbd><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>
+              {mode === "ai" ? tx(locale, "parse", "разобрать") : tx(locale, "save", "сохранить")}
+            </span>
             {mode === "ai" ? (
               <button
                 type="button"
