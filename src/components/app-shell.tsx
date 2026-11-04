@@ -13,6 +13,7 @@ import { t } from "@/lib/i18n";
 import type { Category, User, Workspace } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { QuickCaptureButton } from "./capture/quick-capture-button";
+import { TableStyleSync } from "./table-style";
 import { CaptureProvider } from "./capture/capture-provider";
 import { AppIcon, BrandLogo } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
@@ -485,6 +486,7 @@ export function AppShell({
 
   return (
     <CaptureProvider workspaceId={currentWorkspace?.id || null} locale={locale}>
+    <TableStyleSync />
     <div className="flex min-h-screen bg-background">
       <div className="fixed left-0 right-0 top-0 z-40 border-b border-white/[0.06] bg-background/90 px-3 py-2 backdrop-blur md:hidden">
         <div className="flex items-center justify-between">

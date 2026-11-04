@@ -43,6 +43,7 @@ import type {
   VendorSuggestion,
 } from "@/lib/types";
 import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
+import { TableStyleSelect } from "./table-style";
 import { AppIcon } from "./icons";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -52,7 +53,6 @@ import { Input, Textarea } from "./ui/input";
 import { NativeSelect } from "./ui/native-select";
 
 type SortKey = "name" | "category" | "vendor" | "created" | "date" | "amount" | "billing";
-type Density = "compact" | "comfortable";
 type DraftRow = EntryDraft & {
   amountInput: string;
   customPeriodDaysInput: string;
@@ -376,7 +376,6 @@ export function EntriesTable({
     })),
   );
   const [editMode, setEditMode] = useState(safeInitialAdd);
-  const [density, setDensity] = useState<Density>("compact");
   const [expanded, setExpanded] = useState<Set<string>>(() => safeInitialAdd ? new Set(["new-initial"]) : new Set());
   const [query, setQuery] = useState("");
   const [nameFilter, setNameFilter] = useState("");
@@ -943,18 +942,7 @@ export function EntriesTable({
               <Filter className="h-4 w-4" />
               {tx(locale, "Filters", "Фильтры")}{activeFilterCount ? ` (${activeFilterCount})` : ""}
             </Button>
-            <div className="flex rounded-md border border-border bg-surface-muted p-0.5" aria-label={tx(locale, "Table density", "Плотность таблицы")}>
-              {(["compact", "comfortable"] as const).map((value) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => setDensity(value)}
-                  className={cn("rounded-sm px-2 py-1 text-xs", density === value ? "bg-surface-raised text-foreground" : "text-muted-foreground")}
-                >
-                  {value === "compact" ? tx(locale, "Compact", "Компактно") : tx(locale, "Comfortable", "Удобно")}
-                </button>
-              ))}
-            </div>
+            <TableStyleSelect locale={locale} />
             {!readOnly ? (
               <>
                 {!editMode ? (
@@ -1055,7 +1043,7 @@ export function EntriesTable({
                   <tr
                     data-entry-row
                     onClick={(event) => openFromRow(event, row)}
-                    className={cn("group bg-surface hover:bg-surface-raised", onOpenEntry && !editMode && row.id && "cursor-pointer", activeEntryId && row.id === activeEntryId && "bg-surface-raised [&>td]:bg-surface-raised shadow-[inset_3px_0_0_0_var(--accent)]", rowHasError(row.rowKey) && "ring-1 ring-inset ring-red-500/25", density === "compact" ? "[&>td]:py-1.5" : "[&>td]:py-3")}
+                    className={cn("group bg-surface hover:bg-surface-raised", onOpenEntry && !editMode && row.id && "cursor-pointer", activeEntryId && row.id === activeEntryId && "bg-surface-raised [&>td]:bg-surface-raised shadow-[inset_3px_0_0_0_var(--accent)]", rowHasError(row.rowKey) && "ring-1 ring-inset ring-red-500/25", "[&>td]:py-1.5")}
                   >
                     <td className="sticky left-0 z-20 w-14 min-w-14 bg-surface px-2 group-hover:bg-surface-raised">
                       <div className="flex h-7 items-center gap-1.5">

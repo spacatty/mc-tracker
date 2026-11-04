@@ -298,3 +298,19 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 @media (prefers-reduced-motion: reduce) {
   .btn-fx-orbit, .btn-fx-aurora, .btn-fx-sweep::after, .btn-fx-sweep:hover { animation: none; }
 }
+
+/* Table styles, picked from the entries toolbar and stored on <html data-table-style>. "current" sets nothing. */
+/* Ledger: no dividers, zebra rows, quiet small-caps headers, tabular numbers. */
+[data-table-style="ledger"] main table { font-variant-numeric: tabular-nums; }
+[data-table-style="ledger"] main table > tbody > tr { border-width: 0 !important; }
+[data-table-style="ledger"] main table > tbody > tr:nth-child(even) > td { background-color: color-mix(in srgb, var(--surface) 96%, white); }
+[data-table-style="ledger"] main table > thead > tr { border-bottom-color: rgb(255 255 255 / 0.04); }
+[data-table-style="ledger"] main table > thead th { font-size: 10px; letter-spacing: 0.14em; color: #52525b; padding-top: 0.625rem; padding-bottom: 0.625rem; }
+[data-table-style="ledger"] main table > tbody td { padding-top: 0.4rem; padding-bottom: 0.4rem; }
+/* Sheet: spreadsheet gridlines, compact rows, plain-case headers. */
+[data-table-style="sheet"] main table { font-size: 12px; font-variant-numeric: tabular-nums; }
+[data-table-style="sheet"] main table > thead th,
+[data-table-style="sheet"] main table > tbody td { border: 1px solid rgb(255 255 255 / 0.05); }
+[data-table-style="sheet"] main table > thead th { text-transform: none; letter-spacing: 0; font-size: 11px; font-weight: 500; color: #71717a; padding-top: 0.4rem; padding-bottom: 0.4rem; background-color: color-mix(in srgb, var(--surface) 95%, white); }
+[data-table-style="sheet"] main table > tbody td { padding-top: 0.25rem; padding-bottom: 0.25rem; height: 2rem; }
+[data-table-style="sheet"] main table > tbody > tr:hover > td { background-color: color-mix(in srgb, var(--surface) 94%, #8b5cf6); }
