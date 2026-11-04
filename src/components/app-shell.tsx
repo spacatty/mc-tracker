@@ -342,23 +342,20 @@ function ProfileMenu({
           type="button"
           title={t(locale, "profile")}
           className={cn(
-            "group flex h-11 w-full min-w-0 items-center gap-2.5 rounded-lg pl-1.5 pr-2 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:bg-white/[0.05]",
-            collapsed && "mx-auto h-9 w-9 justify-center p-0",
+            "group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg px-1 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:bg-white/[0.05]",
+            collapsed && "mx-auto w-8 justify-center p-0",
           )}
         >
-          <UserAvatar name={user.username} className={cn("h-8 w-8", collapsed && "h-7 w-7")} />
+          <UserAvatar name={user.username} className="h-6 w-6 text-[10px]" />
           {!collapsed ? (
             <>
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-[13px] font-medium leading-4 text-zinc-100">{user.username}</span>
-                <span className="block truncate text-[11px] capitalize leading-4 text-zinc-500">{user.role}</span>
-              </span>
+              <span className="min-w-0 flex-1 truncate text-xs text-zinc-300">{user.username}</span>
               <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-zinc-600 transition group-hover:text-zinc-400" />
             </>
           ) : null}
         </button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent side={collapsed ? "right" : "top"} align={collapsed ? "end" : "start"} sideOffset={6} className="w-64">
+      <DropdownMenuContent side={collapsed ? "right" : "top"} align={collapsed ? "end" : "start"} sideOffset={6} className="w-52">
         <div className="flex items-center gap-2.5 px-2 py-2">
           <UserAvatar name={user.username} className="h-8 w-8" />
           <span className="min-w-0">
@@ -640,24 +637,6 @@ export function AppShell({
             collapsed={collapsed}
             locale={locale}
           />
-          <button
-            type="button"
-            onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
-            title={collapsed ? (locale === "ru" ? "Поиск (Ctrl /)" : "Search (Ctrl /)") : undefined}
-            aria-label={locale === "ru" ? "Поиск" : "Search"}
-            className={cn(
-              "group flex h-8 w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-left text-xs text-zinc-500 transition hover:border-white/[0.12] hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30",
-              collapsed && "w-8 justify-center px-0",
-            )}
-          >
-            <Search className="h-3.5 w-3.5 shrink-0" />
-            {!collapsed ? (
-              <>
-                <span className="flex-1 truncate">{locale === "ru" ? "Поиск" : "Search"}</span>
-                <Kbd className="h-4 min-w-4 text-[9px]">Ctrl /</Kbd>
-              </>
-            ) : null}
-          </button>
           {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
         </div>
 
@@ -721,7 +700,25 @@ export function AppShell({
           </nav>
         </div>
 
-        <div className="shrink-0 border-t border-white/[0.06] p-2">
+        <div className={cn("flex shrink-0 flex-col gap-1.5 border-t border-white/[0.06] px-3 py-2.5", collapsed && "items-center px-0")}>
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
+            title={collapsed ? (locale === "ru" ? "Поиск (Ctrl /)" : "Search (Ctrl /)") : undefined}
+            aria-label={locale === "ru" ? "Поиск" : "Search"}
+            className={cn(
+              "group flex h-8 w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-left text-xs text-zinc-500 transition hover:border-white/[0.12] hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30",
+              collapsed && "w-8 justify-center px-0",
+            )}
+          >
+            <Search className="h-3.5 w-3.5 shrink-0" />
+            {!collapsed ? (
+              <>
+                <span className="flex-1 truncate">{locale === "ru" ? "Поиск" : "Search"}</span>
+                <Kbd className="h-4 min-w-4 text-[9px]">Ctrl /</Kbd>
+              </>
+            ) : null}
+          </button>
           <ProfileMenu user={user} locale={locale} collapsed={collapsed} workspaceId={currentWorkspace?.id || null} currentHref={currentHref} />
         </div>
       </aside>
