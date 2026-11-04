@@ -158,8 +158,8 @@ export function DashboardUpcomingTable({
             <TableRow>
               <TableHead className="w-11 pr-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
               <TableHead>{tx(locale, "Name", "Название")}</TableHead>
-              <TableHead>{tx(locale, "Payment date", "Дата оплаты")}</TableHead>
-              <TableHead>{t(locale, "category")}</TableHead>
+              <TableHead className="text-center">{tx(locale, "Payment date", "Дата оплаты")}</TableHead>
+              <TableHead className="text-center">{t(locale, "category")}</TableHead>
               <TableHead>{tx(locale, "Vendor", "Вендор")}</TableHead>
               <TableHead>{tx(locale, "Account", "Аккаунт")}</TableHead>
               <TableHead className="text-right">{t(locale, "amount")}</TableHead>
@@ -172,10 +172,10 @@ export function DashboardUpcomingTable({
                 <TableRow className="group">
                   <TableCell className="w-11 py-2 pr-0">{disclosure(item)}</TableCell>
                   <TableCell className="font-medium text-white">{item.name}</TableCell>
-                  <TableCell className="whitespace-nowrap text-zinc-300">
+                  <TableCell className="whitespace-nowrap text-center text-zinc-300">
                     {relativeDays(item.daysUntilPayment, locale)} <span className="text-zinc-500">({displayDate(item.nextPaymentAt)})</span>
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     <Badge className="gap-1.5" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}18`, color: item.categoryColor || "#c4b5fd" }}>
                       <AppIcon name={item.categoryIcon} className="h-3 w-3" />
                       {item.categoryName || t(locale, "uncategorized")}

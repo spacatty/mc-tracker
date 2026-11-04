@@ -194,7 +194,7 @@ export function ArchivedEntriesTable({
                 />
               </TableHead>
               <TableHead className="text-zinc-300"><SortButton label={t(locale, "name")} sortKey="name" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="text-zinc-300"><SortButton label={t(locale, "category")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
+              <TableHead className="text-center text-zinc-300"><SortButton label={t(locale, "category")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
               <TableHead className="text-zinc-300">{t(locale, "account")}</TableHead>
               <TableHead className="text-center text-zinc-300"><SortButton label={t(locale, "archived")} sortKey="archived" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
               <TableHead className="w-[1%] whitespace-nowrap text-center text-zinc-300"><SortButton label={t(locale, "amount")} sortKey="amount" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
@@ -224,7 +224,7 @@ export function ArchivedEntriesTable({
                     <span className="font-semibold text-white">{item.name}</span>
                     {item.notes ? <p className="mt-1 line-clamp-1 max-w-xs text-xs text-zinc-500">{item.notes.replace(/<[^>]+>/g, "")}</p> : null}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="text-center">
                     <Badge className="gap-2 border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}20`, color: item.categoryColor || "#c4b5fd" }}>
                       <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
                       {item.categoryName || (locale === "ru" ? "Без категории" : "Uncategorized")}

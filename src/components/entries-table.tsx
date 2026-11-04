@@ -1022,11 +1022,11 @@ export function EntriesTable({
               ) : (
                 <>
                   {visibleFields.map((field) => <th key={field.id} className="px-3 py-3 text-left">{field.label}</th>)}
-                  {showCategory ? <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Category", "Категория")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></th> : null}
+                  {showCategory ? <th className="px-3 py-3 text-center"><SortButton label={tx(locale, "Category", "Категория")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></th> : null}
                   <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Vendor / account", "Поставщик / аккаунт")} sortKey="vendor" active={sortKey} direction={direction} onClick={changeSort} /></th>
-                  <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Dates", "Даты")} sortKey="date" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="px-3 py-3 text-center"><SortButton label={tx(locale, "Dates", "Даты")} sortKey="date" active={sortKey} direction={direction} onClick={changeSort} /></th>
                   <th className="px-3 py-3 text-right"><SortButton label={tx(locale, "Amount", "Сумма")} sortKey="amount" active={sortKey} direction={direction} onClick={changeSort} /></th>
-                  <th className="px-3 py-3 text-left"><SortButton label={tx(locale, "Billing", "Оплата")} sortKey="billing" active={sortKey} direction={direction} onClick={changeSort} /></th>
+                  <th className="px-3 py-3 text-center"><SortButton label={tx(locale, "Billing", "Оплата")} sortKey="billing" active={sortKey} direction={direction} onClick={changeSort} /></th>
                 </>
               )}
               <th className="sticky right-0 z-40 w-px whitespace-nowrap bg-surface-muted px-2 py-3 text-right">{tx(locale, "Actions", "Действия")}</th>
@@ -1088,11 +1088,11 @@ export function EntriesTable({
                           {row.notes ? <p className="mt-1 max-w-64 truncate text-xs text-subtle-foreground">{row.notes.replace(/<[^>]+>/g, "")}</p> : null}
                         </td>
                         {visibleFields.map((field) => <td key={field.id} className={cn("px-3 text-muted-foreground", field.bold && "font-semibold text-foreground")} style={{ color: field.color || undefined }}>{field.type === "checkbox" ? (row.customFields?.[field.id] ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет")) : String(row.customFields?.[field.id] ?? "—")}</td>)}
-                        {showCategory ? <td className="px-3"><Badge variant="secondary" style={{ color: category?.color || undefined }}><AppIcon name={category?.icon} className="mr-1.5 h-3.5 w-3.5" />{category?.name || tx(locale, "Uncategorized", "Без категории")}</Badge></td> : null}
+                        {showCategory ? <td className="px-3 text-center"><Badge variant="secondary" style={{ color: category?.color || undefined }}><AppIcon name={category?.icon} className="mr-1.5 h-3.5 w-3.5" />{category?.name || tx(locale, "Uncategorized", "Без категории")}</Badge></td> : null}
                         <td className="px-3 text-muted-foreground"><p className="font-medium text-foreground">{row.accountName || "—"}</p><p className="max-w-48 truncate text-xs">{row.vendorName || row.vendorUrl || ""}</p></td>
-                        <td className="whitespace-nowrap px-3 text-muted-foreground"><span>{entryDateLabel(row.billingStartAt, locale)}</span><span className="mx-1 text-subtle-foreground">→</span><span>{entryDateLabel(row.billingEndAt, locale)}</span></td>
+                        <td className="whitespace-nowrap px-3 text-center text-muted-foreground"><span>{entryDateLabel(row.billingStartAt, locale)}</span><span className="mx-1 text-subtle-foreground">→</span><span>{entryDateLabel(row.billingEndAt, locale)}</span></td>
                         <td className="whitespace-nowrap px-3 text-right font-semibold text-foreground">{formatMoney(Number(row.amountInput), row.currency)}</td>
-                        <td className="px-3"><Badge variant={row.paymentType === "recurring" ? "success" : "secondary"}>{shortBillingLabel(row, locale)}</Badge></td>
+                        <td className="px-3 text-center"><Badge variant={row.paymentType === "recurring" ? "success" : "secondary"}>{shortBillingLabel(row, locale)}</Badge></td>
                       </>
                     )}
                     <td className="sticky right-0 z-20 w-px whitespace-nowrap bg-surface px-2 text-right group-hover:bg-surface-raised">

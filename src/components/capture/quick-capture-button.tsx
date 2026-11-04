@@ -15,7 +15,7 @@ export function QuickCaptureButton({ collapsed, locale }: { collapsed: boolean; 
       onClick={() => openCapture()}
       title={collapsed ? tx(locale, "New Entry (N)", "Новая запись (N)") : undefined}
       className={cn(
-        "btn-aurora group flex h-7 w-full items-center gap-1.5 rounded-md px-2 text-left text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
+        "btn-aurora group flex h-7 w-44 items-center gap-1.5 rounded-md px-2 text-left text-xs font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
         collapsed && "mx-auto w-7 justify-center px-0",
       )}
     >
