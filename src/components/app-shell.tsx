@@ -5,7 +5,7 @@ import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams }
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, Check, ChevronDown, ChevronsUpDown, GripVertical, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, Tags, UserPlus, X } from "lucide-react";
+import { Bell, Check, ChevronDown, ChevronsUpDown, GripVertical, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, Tags, UserPlus, Users, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { logoutAction, setLanguageAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
@@ -18,7 +18,8 @@ import { CaptureProvider } from "./capture/capture-provider";
 import { AppIcon, BrandLogo } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
 import { Button } from "./ui/button";
-import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from "./ui/command";
+import { Command as CommandPrimitive } from "cmdk";
+import { Command, CommandEmpty, CommandItem, CommandList } from "./ui/command";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -182,50 +183,62 @@ function WorkspaceSelect({
           ) : null}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" side={collapsed ? "right" : "bottom"} sideOffset={6} className="w-[264px] p-0">
-        <Command shouldFilter={false} className="bg-transparent">
-          <CommandInput placeholder={t(locale, "searchWorkspace")} value={query} onValueChange={setQuery} />
-          <CommandList className="max-h-80">
-            <CommandEmpty>{locale === "ru" ? "Пространство не найдено." : "No workspace found."}</CommandEmpty>
-            <CommandGroup heading={t(locale, "switchWorkspace")}>
-              {filteredWorkspaces.map((workspace) => {
-                const current = workspace.id === currentWorkspace?.id;
-                return (
-                  <CommandItem
-                    key={workspace.id}
-                    value={`${workspace.name}-${workspace.id}`}
-                    onSelect={() => selectWorkspace(workspace.id)}
-                    className={cn("gap-2.5", current && "text-zinc-50")}
-                  >
-                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/[0.05] text-xs">{workspace.emoji}</span>
-                    <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-                    {workspace.accessRole !== "owner" ? (
-                      <span className="shrink-0 text-[11px] capitalize text-zinc-500">{workspace.ownerUsername ? `${workspace.ownerUsername} · ` : ""}{workspace.accessRole}</span>
-                    ) : null}
-                    <Check className={cn("h-3.5 w-3.5 shrink-0 text-zinc-300", !current && "invisible")} />
-                  </CommandItem>
-                );
-              })}
-            </CommandGroup>
+      {/* Same look as the Quick Capture suggestion menu: tinted glass, small caps header, tiled rows. */}
+      <PopoverContent
+        align="start"
+        side={collapsed ? "right" : "bottom"}
+        sideOffset={4}
+        className="suggest-in w-[200px] overflow-hidden rounded-xl border-white/10 bg-[#18181c]/95 p-0 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+      >
+        <Command shouldFilter={false} className="rounded-none bg-transparent">
+          <div className="flex items-center gap-2 px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
+            <span className="truncate">{t(locale, "switchWorkspace")}</span>
+            <span className="ml-auto font-medium tabular-nums tracking-normal text-zinc-600">{workspaces.length}</span>
+          </div>
+          {workspaces.length > 5 ? (
+            <div className="px-1.5 pb-1">
+              <CommandPrimitive.Input
+                value={query}
+                onValueChange={setQuery}
+                placeholder={t(locale, "searchWorkspace")}
+                className="h-7 w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/15"
+              />
+            </div>
+          ) : null}
+          <CommandList className="max-h-64 px-1.5 pb-1.5">
+            <CommandEmpty className="py-4 text-center text-xs text-zinc-500">{locale === "ru" ? "Не найдено" : "No match"}</CommandEmpty>
+            {filteredWorkspaces.map((workspace) => {
+              const current = workspace.id === currentWorkspace?.id;
+              return (
+                <CommandItem
+                  key={workspace.id}
+                  value={`${workspace.name}-${workspace.id}`}
+                  onSelect={() => selectWorkspace(workspace.id)}
+                  title={workspace.accessRole !== "owner" ? `${workspace.ownerUsername ? `${workspace.ownerUsername} · ` : ""}${workspace.accessRole}` : undefined}
+                  className={cn("h-8 gap-2 rounded-lg px-1.5 py-0", current && "text-zinc-50")}
+                >
+                  <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03] text-xs", current && "border-white/15 bg-white/[0.08]")}>{workspace.emoji}</span>
+                  <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+                  {current ? <Check className="h-3.5 w-3.5 shrink-0 text-zinc-400" /> : workspace.accessRole !== "owner" ? <Users className="h-3 w-3 shrink-0 text-zinc-600" /> : null}
+                </CommandItem>
+              );
+            })}
           </CommandList>
         </Command>
-        <div className="border-t border-white/[0.06] p-1">
+        <div className="border-t border-white/[0.06] p-1.5">
           <Link
             href={`/app/folders${currentWorkspace ? `?workspace=${currentWorkspace.id}` : ""}`}
             onClick={() => { setOpen(false); onSelected?.(); }}
-            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
+            className="flex h-8 w-full items-center gap-2 rounded-lg px-1.5 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
           >
-            <Settings className="h-3.5 w-3.5" />
+            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03]"><Settings className="h-3 w-3" /></span>
             <span className="truncate">{t(locale, "shareAndSpace")}</span>
           </Link>
           <JoinWorkspaceDialog
             locale={locale}
             trigger={(
-              <button
-                type="button"
-                className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
-              >
-                <UserPlus className="h-3.5 w-3.5" />
+              <button type="button" className="flex h-8 w-full items-center gap-2 rounded-lg px-1.5 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03]"><UserPlus className="h-3 w-3" /></span>
                 <span className="truncate">{t(locale, "joinWorkspace")}</span>
               </button>
             )}
