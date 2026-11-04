@@ -25,9 +25,13 @@ ENV NODE_ENV=production \
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next/standalone ./
 COPY --from=builder --chown=node:node /app/.next/static ./.next/static
-RUN mkdir -p /app/data && chown node:node /app/data
+COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN sed -i 's/\r$//' /usr/local/bin/docker-entrypoint.sh \
+  && chmod +x /usr/local/bin/docker-entrypoint.sh \
+  && mkdir -p /app/data && chown node:node /app/data
 
-USER node
+# Starts as root only to match the data folder's owner, then drops privileges.
+ENTRYPOINT ["docker-entrypoint.sh"]
 EXPOSE 4271
 VOLUME ["/app/data"]
 
