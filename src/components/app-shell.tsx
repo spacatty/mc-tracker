@@ -5,9 +5,9 @@ import { usePathname, useRouter, useSearchParams, type ReadonlyURLSearchParams }
 import { DndContext, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Bell, Check, ChevronsLeft, ChevronsRight, ChevronsUpDown, GripVertical, LogOut, Menu, Settings, Shield, UserPlus, UserRound, X } from "lucide-react";
+import { Bell, Check, ChevronsUpDown, GripVertical, Languages, LogOut, Menu, PanelLeftClose, PanelLeftOpen, Settings, Shield, Tags, UserPlus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { logoutAction } from "@/app/actions";
+import { logoutAction, setLanguageAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { Category, User, Workspace } from "@/lib/types";
@@ -22,12 +22,10 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
-import { Badge } from "./ui/badge";
 type SidebarNavItem = {
   href: string;
   label: string;
@@ -51,14 +49,30 @@ function SidebarSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="space-y-1.5">
+    <section className="space-y-1">
       {!collapsed ? (
-        <p className="px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">{title}</p>
+        <p className="px-2 pb-0.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-zinc-600">{title}</p>
       ) : (
-        <div className="mx-auto h-px w-6 bg-white/10" aria-hidden="true" />
+        <div className="mx-auto mb-1 h-px w-5 bg-white/[0.06]" aria-hidden="true" />
       )}
-      <div className="space-y-0.5">{children}</div>
+      <div className="space-y-px">{children}</div>
     </section>
+  );
+}
+
+/** One row style for every sidebar link, so nav items, categories and notifications line up. */
+const sidebarRowClass = (active: boolean, collapsed: boolean) =>
+  cn(
+    "group relative flex h-8 items-center gap-2.5 rounded-md px-2 text-[13px] text-zinc-400 transition hover:bg-white/[0.04] hover:text-zinc-100",
+    active && "bg-white/[0.06] text-zinc-50",
+    collapsed && "mx-auto w-8 justify-center px-0",
+  );
+
+function UserAvatar({ name, className }: { name: string; className?: string }) {
+  return (
+    <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.08] bg-white/[0.04] text-xs font-semibold uppercase text-zinc-200", className)}>
+      {name.slice(0, 1) || "?"}
+    </span>
   );
 }
 
@@ -80,16 +94,10 @@ function SidebarNavLink({
       href={withWorkspace(item.href, workspaceId || null)}
       onClick={onClick}
       title={collapsed ? item.label : undefined}
-      className={cn(
-        "group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] text-zinc-300 transition hover:bg-white/[0.07] hover:text-white",
-        active && "bg-white/[0.09] text-white shadow-sm shadow-black/20",
-        collapsed && "justify-center px-0",
-      )}
+      className={sidebarRowClass(active, collapsed)}
     >
-      <span className={cn("grid h-7 w-7 shrink-0 place-items-center rounded-md transition group-hover:scale-105", item.accent)}>
-        <AppIcon name={item.icon} className="h-3.5 w-3.5" />
-      </span>
-      {!collapsed ? <span className="truncate font-medium">{item.label}</span> : null}
+      <AppIcon name={item.icon} className={cn("h-4 w-4 shrink-0 opacity-70 transition group-hover:opacity-100", item.accent, active && "opacity-100")} />
+      {!collapsed ? <span className="truncate">{item.label}</span> : null}
     </Link>
   );
 }
@@ -154,66 +162,67 @@ function WorkspaceSelect({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button
+        <button
           type="button"
-          variant="outline"
           title={collapsed ? (currentWorkspace ? `${t(locale, "workspace")}: ${currentWorkspace.name}` : t(locale, "workspace")) : undefined}
           className={cn(
-            "h-9 w-full justify-between gap-3 rounded-lg border-white/15 bg-gradient-to-r from-violet-500/10 via-indigo-500/5 to-transparent pl-2 pr-3 hover:bg-violet-500/15",
-            collapsed && "h-8 w-full justify-center rounded-md border-white/10 bg-transparent px-0 hover:bg-white/[0.08]",
+            "group flex h-11 w-full items-center gap-2.5 rounded-lg border border-white/[0.08] bg-white/[0.03] pl-1.5 pr-2 text-left transition hover:border-white/[0.12] hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:border-white/[0.14] data-[state=open]:bg-white/[0.05]",
+            collapsed && "mx-auto h-9 w-9 justify-center p-0",
           )}
         >
-          {currentWorkspace ? (
-            <span className={cn("flex min-w-0 items-center gap-2", collapsed && "justify-center")}>
-              <span className={cn("grid h-6 w-6 place-items-center rounded-md bg-white/10 text-xs", collapsed && "h-7 w-7 bg-violet-500/15 text-sm")}>{currentWorkspace.emoji}</span>
-              {!collapsed ? (
-                <span className="min-w-0 text-left">
-                  <span className="block truncate text-xs font-medium text-white">{currentWorkspace.name}</span>
-                  <span className="block text-[10px] text-zinc-500">{currentWorkspace.accessRole}</span>
-                </span>
-              ) : null}
-            </span>
-          ) : (
-            <span className={cn("text-zinc-500", collapsed && "text-lg")}>{collapsed ? "📦" : t(locale, "workspace")}</span>
-          )}
-          {!collapsed ? <ChevronsUpDown className="h-4 w-4 text-zinc-500" /> : null}
-        </Button>
+          <span className={cn("grid h-8 w-8 shrink-0 place-items-center rounded-md bg-white/[0.06] text-sm", collapsed && "h-7 w-7 bg-transparent")}>
+            {currentWorkspace?.emoji || "📦"}
+          </span>
+          {!collapsed ? (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium leading-4 text-zinc-100">{currentWorkspace?.name || t(locale, "workspace")}</span>
+                <span className="block truncate text-[11px] capitalize leading-4 text-zinc-500">{currentWorkspace?.accessRole || ""}</span>
+              </span>
+              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-zinc-600 transition group-hover:text-zinc-400" />
+            </>
+          ) : null}
+        </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-64 border-white/10 bg-zinc-950 p-0 shadow-2xl shadow-black/40">
-        <Command shouldFilter={false}>
-          <CommandInput placeholder={t(locale, "searchWorkspace")} value={query} onValueChange={setQuery} className="text-xs" />
-          <CommandList>
+      <PopoverContent align="start" side={collapsed ? "right" : "bottom"} sideOffset={6} className="w-72 p-0">
+        <Command shouldFilter={false} className="bg-transparent">
+          <CommandInput placeholder={t(locale, "searchWorkspace")} value={query} onValueChange={setQuery} />
+          <CommandList className="max-h-80">
             <CommandEmpty>{locale === "ru" ? "Пространство не найдено." : "No workspace found."}</CommandEmpty>
             <CommandGroup heading={t(locale, "switchWorkspace")}>
-              {filteredWorkspaces.map((workspace) => (
-                <CommandItem
-                  key={workspace.id}
-                  value={`${workspace.name}-${workspace.id}`}
-                  onSelect={() => selectWorkspace(workspace.id)}
-                  className="justify-between rounded-xl py-2 text-xs"
-                >
-                  <span className="min-w-0 truncate">{workspace.emoji} {workspace.name}</span>
-                  <span className="ml-2 flex items-center gap-2">
-                    {workspace.accessRole !== "owner" ? <Badge className="h-5 bg-violet-500/20 px-1.5 text-[10px] font-medium text-violet-200">{t(locale, "shared")}</Badge> : null}
-                    {workspace.id === currentWorkspace?.id ? <Check className="h-4 w-4" /> : null}
-                  </span>
-                </CommandItem>
-              ))}
+              {filteredWorkspaces.map((workspace) => {
+                const current = workspace.id === currentWorkspace?.id;
+                return (
+                  <CommandItem
+                    key={workspace.id}
+                    value={`${workspace.name}-${workspace.id}`}
+                    onSelect={() => selectWorkspace(workspace.id)}
+                    className={cn("gap-2.5", current && "text-zinc-50")}
+                  >
+                    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/[0.05] text-xs">{workspace.emoji}</span>
+                    <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
+                    {workspace.accessRole !== "owner" ? (
+                      <span className="shrink-0 text-[11px] capitalize text-zinc-500">{workspace.ownerUsername ? `${workspace.ownerUsername} · ` : ""}{workspace.accessRole}</span>
+                    ) : null}
+                    <Check className={cn("h-3.5 w-3.5 shrink-0 text-zinc-300", !current && "invisible")} />
+                  </CommandItem>
+                );
+              })}
             </CommandGroup>
           </CommandList>
         </Command>
-        <div className="border-t border-white/10 p-1">
+        <div className="border-t border-white/[0.06] p-1">
           <JoinWorkspaceDialog
             locale={locale}
             trigger={(
               <button
                 type="button"
-                className="group flex w-full items-center gap-2 rounded-lg border border-sky-400/20 bg-sky-500/[0.08] px-2 py-1.5 text-left text-xs text-sky-100 transition hover:border-sky-300/35 hover:bg-sky-500/[0.14]"
+                className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
               >
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-sky-500/20 text-sky-200">
+                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-dashed border-white/15">
                   <UserPlus className="h-3.5 w-3.5" />
                 </span>
-                <span className="truncate font-medium">{t(locale, "joinWorkspace")}</span>
+                <span className="truncate">{t(locale, "joinWorkspace")}</span>
               </button>
             )}
           />
@@ -240,49 +249,130 @@ function SortableSidebarCategory({
       <Link
         href={withWorkspace(`/app/items?category=${category.id}`, workspaceId || null)}
         title={collapsed ? category.name : undefined}
-        className={cn(
-          "group relative flex items-center gap-1.5 rounded-lg px-1.5 py-1.5 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white",
-          active && "bg-white/[0.08] text-white",
-          collapsed && "justify-center px-0",
-        )}
+        className={sidebarRowClass(active, collapsed)}
       >
+        <CategoryIcon category={category} />
+        {!collapsed ? <span className="min-w-0 flex-1 truncate">{category.name}</span> : null}
         {!collapsed ? (
-          <button {...attributes} {...listeners} className="ml-1 cursor-grab text-zinc-700 transition group-hover:text-zinc-400" type="button">
+          <button {...attributes} {...listeners} className="-mr-1 cursor-grab p-0.5 text-zinc-700 opacity-0 transition hover:text-zinc-400 group-hover:opacity-100" type="button" aria-label="Reorder">
             <GripVertical className="h-3.5 w-3.5" />
           </button>
         ) : null}
-        <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md" style={{ backgroundColor: `${category.color}25`, color: category.color }}>
-          <AppIcon name={category.icon} className="h-3.5 w-3.5" />
-        </span>
-        {!collapsed ? <span className="truncate font-medium">{category.name}</span> : null}
       </Link>
     </div>
   );
 }
 
-function ProfileMenuLink({
-  href,
-  icon,
-  label,
-  accent,
-  children,
-}: {
-  href: string;
-  icon: React.ReactNode;
-  label: string;
-  accent: string;
-  children?: React.ReactNode;
-}) {
+function CategoryIcon({ category }: { category: Pick<Category, "color" | "icon"> }) {
   return (
-    <DropdownMenuItem asChild className="gap-3 rounded-xl px-3 py-2.5">
-      <Link href={href}>
-        <span className={cn("grid h-8 w-8 place-items-center rounded-xl", accent)}>{icon}</span>
-        <span className="flex flex-1 items-center justify-between font-medium">
-          {label}
-          {children}
-        </span>
-      </Link>
-    </DropdownMenuItem>
+    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px]" style={{ backgroundColor: `${category.color}1f`, color: category.color }}>
+      <AppIcon name={category.icon} className="h-3 w-3" />
+    </span>
+  );
+}
+
+/** Two-option language switch; posts straight to the locale cookie action and comes back to the same page. */
+function LanguageSwitch({ locale, next }: { locale: Locale; next: string }) {
+  return (
+    <form action={setLanguageAction} className="flex items-center justify-between gap-3 px-2 py-1.5">
+      <input type="hidden" name="next" value={next} />
+      <span className="flex items-center gap-2.5 text-[13px] text-zinc-300">
+        <Languages className="h-4 w-4 text-zinc-500" />
+        {t(locale, "language")}
+      </span>
+      <span className="inline-flex rounded-md border border-white/[0.08] bg-white/[0.02] p-0.5">
+        {(["en", "ru"] as const).map((option) => (
+          <button
+            key={option}
+            type="submit"
+            name="locale"
+            value={option}
+            aria-pressed={locale === option}
+            className={cn(
+              "rounded-[4px] px-2 py-0.5 text-[11px] font-semibold uppercase transition",
+              locale === option ? "bg-white/[0.1] text-zinc-50" : "text-zinc-500 hover:text-zinc-200",
+            )}
+          >
+            {option}
+          </button>
+        ))}
+      </span>
+    </form>
+  );
+}
+
+function ProfileMenu({
+  user,
+  locale,
+  collapsed,
+  workspaceId,
+  currentHref,
+}: {
+  user: User;
+  locale: Locale;
+  collapsed: boolean;
+  workspaceId: number | null;
+  currentHref: string;
+}) {
+  const isAdmin = user.role === "admin" || user.role === "superadmin";
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          title={t(locale, "profile")}
+          className={cn(
+            "group flex h-11 w-full min-w-0 items-center gap-2.5 rounded-lg pl-1.5 pr-2 text-left transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:bg-white/[0.05]",
+            collapsed && "mx-auto h-9 w-9 justify-center p-0",
+          )}
+        >
+          <UserAvatar name={user.username} className={cn("h-8 w-8", collapsed && "h-7 w-7")} />
+          {!collapsed ? (
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium leading-4 text-zinc-100">{user.username}</span>
+                <span className="block truncate text-[11px] capitalize leading-4 text-zinc-500">{user.role}</span>
+              </span>
+              <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-zinc-600 transition group-hover:text-zinc-400" />
+            </>
+          ) : null}
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent side={collapsed ? "right" : "top"} align={collapsed ? "end" : "start"} sideOffset={6} className="w-64">
+        <div className="flex items-center gap-2.5 px-2 py-2">
+          <UserAvatar name={user.username} className="h-8 w-8" />
+          <span className="min-w-0">
+            <span className="block truncate text-[13px] font-medium text-zinc-100">{user.username}</span>
+            <span className="block text-[11px] capitalize text-zinc-500">{user.role}</span>
+          </span>
+        </div>
+        <DropdownMenuSeparator />
+        {isAdmin ? (
+          <DropdownMenuItem asChild className="gap-2.5">
+            <Link href={withWorkspace("/app/admin", workspaceId)}>
+              <Shield className="h-4 w-4 text-zinc-500" />
+              {t(locale, "admin")}
+            </Link>
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem asChild className="gap-2.5">
+          <Link href={withWorkspace("/app/settings", workspaceId)}>
+            <Settings className="h-4 w-4 text-zinc-500" />
+            {t(locale, "settings")}
+          </Link>
+        </DropdownMenuItem>
+        <LanguageSwitch locale={locale} next={currentHref} />
+        <DropdownMenuSeparator />
+        <form action={logoutAction}>
+          <DropdownMenuItem asChild onSelect={(event) => event.preventDefault()} className="w-full gap-2.5 text-red-200/90 data-[highlighted]:bg-red-500/10 data-[highlighted]:text-red-100">
+            <button type="submit">
+              <LogOut className="h-4 w-4" />
+              {t(locale, "logout")}
+            </button>
+          </DropdownMenuItem>
+        </form>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -314,21 +404,22 @@ export function AppShell({
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId) || workspaces[0];
   const workspaceCategories = items.filter((category) => category.workspaceId === currentWorkspace?.id);
   const primaryNav: SidebarNavItem[] = [
-    { href: "/app", label: t(locale, "dashboard"), icon: "LayoutDashboard", accent: "text-violet-200 bg-violet-500/10" },
-    { href: "/app/items", label: t(locale, "entries"), icon: "WalletCards", accent: "text-emerald-200 bg-emerald-500/10" },
-    { href: "/app/invoices", label: t(locale, "invoices"), icon: "FileText", accent: "text-sky-200 bg-sky-500/10" },
-    { href: "/app/archive", label: t(locale, "archived"), icon: "Archive", accent: "text-zinc-300 bg-zinc-500/10" },
+    { href: "/app", label: t(locale, "dashboard"), icon: "LayoutDashboard", accent: "text-violet-300" },
+    { href: "/app/items", label: t(locale, "entries"), icon: "WalletCards", accent: "text-emerald-300" },
+    { href: "/app/invoices", label: t(locale, "invoices"), icon: "FileText", accent: "text-sky-300" },
+    { href: "/app/archive", label: t(locale, "archived"), icon: "Archive", accent: "text-zinc-300" },
   ];
   const workspaceNav: SidebarNavItem[] = [
-    { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-200 bg-amber-500/10" },
+    { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-300" },
   ];
   const extraNav: SidebarNavItem[] = [
-    { href: "/app/telegram", label: t(locale, "telegramRoutes"), icon: "MessageCircle", accent: "text-cyan-200 bg-cyan-500/10" },
-    { href: "/app/import", label: t(locale, "importData"), icon: "FileUp", accent: "text-fuchsia-200 bg-fuchsia-500/10" },
+    { href: "/app/telegram", label: t(locale, "telegramRoutes"), icon: "MessageCircle", accent: "text-cyan-300" },
+    { href: "/app/import", label: t(locale, "importData"), icon: "FileUp", accent: "text-fuchsia-300" },
   ];
   const workspaceItems = [...workspaceNav];
   const extraItems = [...extraNav];
   const ids = useMemo(() => workspaceCategories.map((item) => item.id), [workspaceCategories]);
+  const currentHref = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
   const isActive = (href: string) => (href === "/app" ? pathname === href : pathname === href || pathname.startsWith(`${href}/`));
 
   useEffect(() => {
@@ -392,7 +483,7 @@ export function AppShell({
   return (
     <CaptureProvider workspaceId={currentWorkspace?.id || null} locale={locale}>
     <div className="flex min-h-screen bg-background">
-      <div className="fixed left-0 right-0 top-0 z-40 border-b border-border bg-background/90 px-3 py-2 backdrop-blur md:hidden">
+      <div className="fixed left-0 right-0 top-0 z-40 border-b border-white/[0.06] bg-background/90 px-3 py-2 backdrop-blur md:hidden">
         <div className="flex items-center justify-between">
           <Link href="/app" className="flex items-center gap-2 text-white">
             <span className="grid h-7 w-7 place-items-center">
@@ -403,7 +494,7 @@ export function AppShell({
           <div className="flex items-center gap-2">
             <Link href={withWorkspace("/app/notifications", currentWorkspace?.id || null)} aria-label={t(locale, "notifications")} className="relative rounded-md p-2 text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60">
               <Bell className="h-4 w-4" />
-              {unreadCount ? <span className="absolute -right-1 -top-1 rounded-full bg-red-500 px-1.5 text-[10px] font-semibold text-white">{unreadCount}</span> : null}
+              {unreadCount ? <span className="absolute -right-0.5 -top-0.5 rounded-[4px] bg-red-500/90 px-1 text-[10px] font-semibold leading-4 text-white">{unreadCount}</span> : null}
             </Link>
             <Button ref={mobileTriggerRef} type="button" variant="ghost" size="icon" onClick={() => setMobileOpen(true)} aria-label={t(locale, "openSidebarMenu")}>
               <Menu className="h-5 w-5" />
@@ -415,7 +506,7 @@ export function AppShell({
       {mobileOpen ? (
         <div className="fixed inset-0 z-50 md:hidden">
           <button type="button" className="absolute inset-0 bg-black/70" aria-label={t(locale, "closeSidebarMenu")} onClick={() => setMobileOpen(false)} />
-          <aside ref={mobileAsideRef} role="dialog" aria-modal="true" aria-label={t(locale, "navigation")} className="absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col border-r border-border bg-surface p-3 shadow-overlay">
+          <aside ref={mobileAsideRef} role="dialog" aria-modal="true" aria-label={t(locale, "navigation")} className="absolute left-0 top-0 flex h-full w-72 max-w-[85vw] flex-col border-r border-white/[0.06] bg-surface-muted p-3 shadow-overlay">
             <div className="mb-3 flex items-center justify-between">
               <p className="text-sm font-semibold text-foreground">{t(locale, "navigation")}</p>
               <Button ref={mobileCloseRef} type="button" variant="ghost" size="icon" onClick={() => setMobileOpen(false)} aria-label={t(locale, "closeSidebarMenu")}>
@@ -450,56 +541,29 @@ export function AppShell({
                 ))}
               </SidebarSection>
               <SidebarSection title={t(locale, "categories")} collapsed={false}>
-                <div className="space-y-1">
+                {workspaceCategories.map((category) => (
                   <Link
-                    href={withWorkspace("/app/categories", currentWorkspace?.id || null)}
+                    key={category.id}
+                    href={withWorkspace(`/app/items?category=${category.id}`, currentWorkspace?.id || null)}
                     onClick={() => setMobileOpen(false)}
-                    className={cn(
-                      "group relative flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white",
-                      pathname === "/app/categories" && "bg-white/[0.08] text-white",
-                    )}
+                    className={sidebarRowClass(pathname === "/app/items" && activeCategoryId === String(category.id), false)}
                   >
-                    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-violet-500/10 text-violet-200">
-                      <AppIcon name="Tags" className="h-3.5 w-3.5" />
-                    </span>
-                    <span className="truncate font-medium">{t(locale, "manageCategories")}</span>
+                    <CategoryIcon category={category} />
+                    <span className="truncate">{category.name}</span>
                   </Link>
-                  {workspaceCategories.map((category) => (
-                    <Link
-                      key={category.id}
-                      href={withWorkspace(`/app/items?category=${category.id}`, currentWorkspace?.id || null)}
-                      onClick={() => setMobileOpen(false)}
-                      className={cn(
-                        "group relative flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white",
-                        pathname === "/app/items" && activeCategoryId === String(category.id) && "bg-white/[0.08] text-white",
-                      )}
-                    >
-                      <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md" style={{ backgroundColor: `${category.color}25`, color: category.color }}>
-                        <AppIcon name={category.icon} className="h-3.5 w-3.5" />
-                      </span>
-                      <span className="truncate font-medium">{category.name}</span>
-                    </Link>
-                  ))}
-                </div>
+                ))}
+                <Link
+                  href={withWorkspace("/app/categories", currentWorkspace?.id || null)}
+                  onClick={() => setMobileOpen(false)}
+                  className={cn(sidebarRowClass(pathname === "/app/categories", false), "text-zinc-500")}
+                >
+                  <Tags className="h-4 w-4 shrink-0 opacity-70" />
+                  <span className="truncate">{t(locale, "manageCategories")}</span>
+                </Link>
               </SidebarSection>
             </div>
-            <div className="mt-3 space-y-1 border-t border-white/10 pt-3">
-              {(user.role === "admin" || user.role === "superadmin") ? (
-                <Link href={withWorkspace("/app/admin", currentWorkspace?.id || null)} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-zinc-300 hover:bg-white/10">
-                  <Shield className="h-4 w-4" />
-                  {t(locale, "admin")}
-                </Link>
-              ) : null}
-              <Link href={withWorkspace("/app/settings", currentWorkspace?.id || null)} onClick={() => setMobileOpen(false)} className="flex items-center gap-2 rounded-lg px-2 py-1.5 text-[13px] text-zinc-300 hover:bg-white/10">
-                <Settings className="h-4 w-4" />
-                {t(locale, "settings")}
-              </Link>
-              <form action={logoutAction}>
-                <button type="submit" className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[13px] text-red-200 hover:bg-red-500/10">
-                  <LogOut className="h-4 w-4" />
-                  {t(locale, "logout")}
-                </button>
-              </form>
+            <div className="mt-3 border-t border-white/[0.06] pt-2">
+              <ProfileMenu user={user} locale={locale} collapsed={false} workspaceId={currentWorkspace?.id || null} currentHref={currentHref} />
             </div>
           </aside>
         </div>
@@ -507,35 +571,43 @@ export function AppShell({
 
       <aside
         className={cn(
-          "sticky top-0 hidden h-screen shrink-0 border-r border-border bg-surface-muted p-3 transition-[width] duration-200 md:flex md:flex-col",
-          collapsed ? "w-16" : "w-60",
+          "sticky top-0 hidden h-screen shrink-0 border-r border-white/[0.06] bg-surface-muted transition-[width] duration-200 md:flex md:flex-col",
+          collapsed ? "w-[60px]" : "w-60",
         )}
       >
-        <Link href="/app" className={cn("mb-4 flex items-center gap-2.5", collapsed && "justify-center")}>
-          <span className={cn("grid h-9 w-9 shrink-0 place-items-center", collapsed && "h-8 w-8")}>
-            <BrandLogo className={cn("h-6 w-6 object-contain", collapsed && "h-5 w-5")} />
-          </span>
+        <div className={cn("flex h-14 shrink-0 items-center gap-2 px-3", collapsed && "justify-center px-0")}>
           {!collapsed ? (
-            <div className="min-w-0">
-              <p className="text-sm font-bold text-white">MC Tracker</p>
-              <p className="truncate text-[11px] text-zinc-500">{user.username} · {user.role}</p>
-            </div>
+            <Link href={withWorkspace("/app", currentWorkspace?.id || null)} className="flex min-w-0 flex-1 items-center gap-2 rounded-md px-1 py-1 text-zinc-100">
+              <BrandLogo className="h-5 w-5 shrink-0 object-contain" />
+              <span className="truncate text-sm font-semibold tracking-tight">MC Tracker</span>
+            </Link>
           ) : null}
-        </Link>
+          <button
+            type="button"
+            onClick={toggleCollapsed}
+            title={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
+            aria-expanded={!collapsed}
+            aria-label={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30"
+          >
+            {collapsed ? <PanelLeftOpen className="h-4 w-4" /> : <PanelLeftClose className="h-4 w-4" />}
+          </button>
+        </div>
 
-        <div className={cn("min-h-0 flex-1 overflow-y-auto", collapsed ? "pr-0" : "pr-1")}>
-          <nav aria-label={t(locale, "primaryNavigation")} className="space-y-3.5">
-            <SidebarSection title={t(locale, "currentWorkspace")} collapsed={collapsed}>
-              <WorkspaceSelect
-                workspaces={workspaces}
-                currentWorkspaceId={currentWorkspace?.id}
-                pathname={pathname}
-                searchParams={searchParams}
-                collapsed={collapsed}
-                locale={locale}
-              />
-            </SidebarSection>
-            {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
+        <div className="space-y-2 px-3 pb-3">
+          <WorkspaceSelect
+            workspaces={workspaces}
+            currentWorkspaceId={currentWorkspace?.id}
+            pathname={pathname}
+            searchParams={searchParams}
+            collapsed={collapsed}
+            locale={locale}
+          />
+          {currentWorkspace?.accessRole !== "viewer" ? <QuickCaptureButton collapsed={collapsed} locale={locale} /> : null}
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-y-auto px-3 pb-3">
+          <nav aria-label={t(locale, "primaryNavigation")} className="space-y-4">
             <SidebarSection title={t(locale, "main")} collapsed={collapsed}>
               {primaryNav.map((item) => (
                 <SidebarNavLink key={item.href} item={item} active={isActive(item.href) && !activeCategoryId} collapsed={collapsed} workspaceId={currentWorkspace?.id} />
@@ -549,120 +621,53 @@ export function AppShell({
               <Link
                 href={withWorkspace("/app/notifications", currentWorkspace?.id || null)}
                 title={collapsed ? t(locale, "notifications") : undefined}
-                className={cn(
-                  "group flex items-center gap-2.5 rounded-lg px-2 py-1.5 text-[13px] text-zinc-300 transition hover:bg-white/[0.07] hover:text-white",
-                  pathname === "/app/notifications" && "bg-white/[0.09] text-white shadow-sm shadow-black/20",
-                  collapsed && "justify-center px-0",
-                )}
+                className={sidebarRowClass(pathname === "/app/notifications", collapsed)}
               >
-                <span className="relative grid h-7 w-7 shrink-0 place-items-center rounded-md bg-violet-500/10 text-violet-200 transition group-hover:scale-105">
-                  <Bell className="h-3.5 w-3.5" />
-                  {collapsed && unreadCount ? (
-                    <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-semibold leading-none text-white">
-                      {unreadCount}
-                    </span>
-                  ) : null}
+                <span className="relative shrink-0">
+                  <Bell className="h-4 w-4 text-zinc-300 opacity-70 transition group-hover:opacity-100" />
+                  {collapsed && unreadCount ? <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-400" /> : null}
                 </span>
-                {!collapsed ? <span className="flex-1 truncate font-medium">{t(locale, "notifications")}</span> : null}
-                {!collapsed && unreadCount ? <Badge variant="destructive" className="px-2 py-0.5">{unreadCount}</Badge> : null}
+                {!collapsed ? <span className="flex-1 truncate">{t(locale, "notifications")}</span> : null}
+                {!collapsed && unreadCount ? (
+                  <span className="rounded-[4px] bg-red-500/15 px-1.5 text-[11px] font-semibold leading-[18px] text-red-200 tabular-nums">{unreadCount}</span>
+                ) : null}
               </Link>
             </SidebarSection>
+
             <SidebarSection title={t(locale, "utilities")} collapsed={collapsed}>
               {extraItems.map((item) => (
                 <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} workspaceId={currentWorkspace?.id} />
               ))}
             </SidebarSection>
-          </nav>
 
-          <div className="mt-4">
             <SidebarSection title={t(locale, "categories")} collapsed={collapsed}>
+              <DndContext id="sidebar-categories" onDragEnd={handleDragEnd}>
+                <SortableContext items={ids} strategy={verticalListSortingStrategy}>
+                  {workspaceCategories.map((category) => (
+                    <SortableSidebarCategory
+                      key={category.id}
+                      category={category}
+                      collapsed={collapsed}
+                      workspaceId={currentWorkspace?.id}
+                      active={pathname === "/app/items" && activeCategoryId === String(category.id)}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
               <Link
                 href={withWorkspace("/app/categories", currentWorkspace?.id || null)}
                 title={collapsed ? t(locale, "manageCategories") : undefined}
-                className={cn(
-                  "group relative flex items-center gap-2 rounded-lg px-1.5 py-1.5 text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-white",
-                  pathname === "/app/categories" && "bg-white/[0.08] text-white",
-                  collapsed && "justify-center px-0",
-                )}
+                className={cn(sidebarRowClass(pathname === "/app/categories", collapsed), "text-zinc-500")}
               >
-                <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md bg-violet-500/10 text-violet-200">
-                  <AppIcon name="Tags" className="h-3.5 w-3.5" />
-                </span>
-                {!collapsed ? <span className="truncate font-medium">{t(locale, "manageCategories")}</span> : null}
+                <Tags className="h-4 w-4 shrink-0 opacity-70" />
+                {!collapsed ? <span className="truncate">{t(locale, "manageCategories")}</span> : null}
               </Link>
-              <DndContext id="sidebar-categories" onDragEnd={handleDragEnd}>
-                <SortableContext items={ids} strategy={verticalListSortingStrategy}>
-                  <div className="space-y-1">
-                    {workspaceCategories.map((category) => (
-                      <SortableSidebarCategory
-                        key={category.id}
-                        category={category}
-                        collapsed={collapsed}
-                        workspaceId={currentWorkspace?.id}
-                        active={pathname === "/app/items" && activeCategoryId === String(category.id)}
-                      />
-                    ))}
-                  </div>
-                </SortableContext>
-              </DndContext>
             </SidebarSection>
-          </div>
+          </nav>
         </div>
 
-        <div
-          className={cn(
-            "mt-3 border-t border-white/10 pt-3",
-            collapsed ? "flex flex-col items-center gap-1.5" : "flex items-center gap-1.5",
-          )}
-        >
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={toggleCollapsed}
-            title={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
-            aria-expanded={!collapsed}
-            aria-label={collapsed ? (locale === "ru" ? "Развернуть меню" : "Expand sidebar") : t(locale, "collapseSidebar")}
-          >
-            {collapsed ? <ChevronsRight className="h-4 w-4" /> : <ChevronsLeft className="h-4 w-4" />}
-          </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="secondary" className={cn("min-w-0 flex-1", collapsed && "h-8 w-8 flex-none px-0")} title={t(locale, "profile")}>
-                <UserRound className="h-4 w-4" />
-                {!collapsed ? <span className="truncate">{user.username}</span> : null}
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-64 p-2">
-              <DropdownMenuLabel className="rounded-xl bg-white/[0.04] p-3">
-                <span className="flex items-center gap-3">
-                  <span className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-500/15 text-violet-200">
-                    <UserRound className="h-5 w-5" />
-                  </span>
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-semibold text-white">{user.username}</span>
-                    <span className="block text-xs font-normal text-zinc-500">{user.role}</span>
-                  </span>
-                </span>
-              </DropdownMenuLabel>
-              <DropdownMenuSeparator />
-              {(user.role === "admin" || user.role === "superadmin") ? (
-                <ProfileMenuLink href={withWorkspace("/app/admin", currentWorkspace?.id || null)} icon={<Shield className="h-4 w-4" />} label={t(locale, "admin")} accent="bg-red-500/10 text-red-200" />
-              ) : null}
-              <ProfileMenuLink href={withWorkspace("/app/settings", currentWorkspace?.id || null)} icon={<Settings className="h-4 w-4" />} label={t(locale, "settings")} accent="bg-sky-500/10 text-sky-200" />
-              <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={(event) => event.preventDefault()} className="rounded-xl p-0">
-                <form action={logoutAction} className="w-full">
-                  <button className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm text-red-200 transition hover:bg-red-500/10" type="submit">
-                    <span className="grid h-8 w-8 place-items-center rounded-xl bg-red-500/10 text-red-200">
-                      <LogOut className="h-4 w-4" />
-                    </span>
-                    <span className="font-medium">{t(locale, "logout")}</span>
-                  </button>
-                </form>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+        <div className="shrink-0 border-t border-white/[0.06] p-2">
+          <ProfileMenu user={user} locale={locale} collapsed={collapsed} workspaceId={currentWorkspace?.id || null} currentHref={currentHref} />
         </div>
       </aside>
       <main id="main-content" className="min-w-0 flex-1 px-3 py-16 sm:px-5 md:px-6 md:py-6 xl:px-8">{children}</main>

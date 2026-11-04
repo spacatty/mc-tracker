@@ -60,7 +60,7 @@ function FieldEditor({
   const colorValue = field.color || "#c4b5fd";
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
       <input type="hidden" name="field_id" value={field.id} />
       <input type="hidden" name="field_type" value={field.type} />
       <div className="grid gap-3 lg:grid-cols-[1.2fr_160px_96px_auto]">
@@ -170,11 +170,11 @@ function NotificationPicker({
               toggle(channel.id);
             }
           }}
-          className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-3 text-left transition hover:border-violet-300/40 hover:bg-white/[0.04]"
+          className="flex items-start gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3 text-left transition hover:border-violet-300/40 hover:bg-white/[0.04]"
         >
           <span
             className={`mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-md border transition ${
-              selected.has(channel.id) ? "border-violet-400 bg-violet-500 text-white" : "border-white/15 bg-black/40"
+              selected.has(channel.id) ? "border-zinc-100 bg-zinc-100 text-zinc-900" : "border-white/15 bg-black/40"
             }`}
           >
             {selected.has(channel.id) ? <Check className="h-4 w-4" /> : null}
@@ -305,20 +305,20 @@ export function CategoryManager({
 
   return (
     <div className="space-y-6">
-      <section className="rounded-3xl border border-white/10 bg-white/[0.03] p-5">
+      <section className="rounded-xl border border-white/[0.08] bg-surface p-5">
         <div className="mb-5 flex items-center gap-3">
           <span className="grid h-10 w-10 place-items-center rounded-2xl bg-violet-500/15 text-violet-200">
             <AppIcon name="Sparkles" className="h-5 w-5" />
           </span>
           <div>
-            <h2 className="text-lg font-semibold text-white">{t(locale, "createCategory")}</h2>
+            <h2 className="text-[15px] font-semibold text-white">{t(locale, "createCategory")}</h2>
             <p className="text-sm text-zinc-500">{locale === "ru" ? "Добавьте шаблон с полями и маршрутами уведомлений." : "Add a clean template with custom display fields and notification routes."}</p>
           </div>
         </div>
         <CategoryForm channels={channels} workspaceId={workspaceId} locale={locale} />
       </section>
 
-      <div className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
+      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
         <div className="flex flex-col gap-3 border-b border-white/10 p-4 md:flex-row md:items-center md:justify-between">
           <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t(locale, "searchCategories")} className="md:max-w-md" />
           <div className="flex gap-2">

@@ -24,9 +24,9 @@ export function DatabaseTester({ locale = "en" }: { locale?: Locale }) {
   }
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
+    <div className="rounded-xl border border-white/[0.08] bg-surface p-5">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-white">External database connection test</h2>
+        <h2 className="text-[15px] font-semibold text-white">External database connection test</h2>
         <p className="text-sm text-zinc-400">
           {locale === "ru"
             ? "По умолчанию используется SQLite. Здесь можно проверить PostgreSQL/MySQL URL без переключения текущего хранилища."

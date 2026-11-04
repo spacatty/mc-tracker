@@ -6,6 +6,7 @@ import { requireUser } from "@/lib/auth";
 import { listNotificationChannelsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function TelegramRoutesPage({ searchParams }: { searchParams: Promise<{ workspace?: string }> }) {
   const user = await requireUser();
@@ -17,15 +18,13 @@ export default async function TelegramRoutesPage({ searchParams }: { searchParam
 
   return (
     <div className="space-y-6">
-      <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-violet-500/10 via-sky-500/5 to-cyan-500/10 p-6">
-        <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-violet-300">{t(locale, "telegramRouteInstances")}</h1>
-      </header>
+      <PageHeader title={t(locale, "telegramRoutes")} />
 
-      <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-        <div className="border-b border-white/10 bg-black/20 p-5">
+      <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
+        <div className="border-b border-white/[0.06] px-5 py-4">
           <div className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
             <div>
-              <h2 className="text-lg font-semibold text-white">{t(locale, "telegramRouteInstances")}</h2>
+              <h2 className="text-[15px] font-semibold text-white">{t(locale, "telegramRouteInstances")}</h2>
               <p className="mt-1 text-sm text-zinc-400">
                 {locale === "ru"
                   ? "Создавайте отдельный экземпляр для каждого топика супергруппы."
@@ -36,9 +35,9 @@ export default async function TelegramRoutesPage({ searchParams }: { searchParam
           </div>
         </div>
         <div className="p-5">
-          <form action={saveTelegramChannelAction} className="rounded-2xl border border-violet-400/20 bg-violet-500/10 p-5">
+          <form action={saveTelegramChannelAction} className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-5">
             <input type="hidden" name="workspaceId" value={workspace.id} />
-            <h3 className="text-sm font-semibold text-violet-100">{t(locale, "addTelegramRouteInstance")}</h3>
+            <h3 className="text-sm font-semibold text-zinc-100">{t(locale, "addTelegramRouteInstance")}</h3>
             <div className="mt-4 grid gap-3 md:grid-cols-2">
               <label className="space-y-2 text-xs font-medium text-zinc-300">
                 <span className="block">{t(locale, "routeTitle")}</span>

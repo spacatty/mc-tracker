@@ -62,7 +62,7 @@ export function InvoiceForm({
     <form action={createInvoiceAction} className="overflow-hidden rounded-lg border border-border bg-surface shadow-surface">
       <input type="hidden" name="workspaceId" value={workspaceId} />
       <div className="border-b border-border bg-surface-muted p-5">
-        <h2 className="text-lg font-semibold text-white">{t(locale, "recordPayment")}</h2>
+        <h2 className="text-[15px] font-semibold text-white">{t(locale, "recordPayment")}</h2>
         <p className="mt-1 text-sm text-muted-foreground">{t(locale, "recordPaymentDescription")}</p>
       </div>
       <div className="divide-y divide-border">

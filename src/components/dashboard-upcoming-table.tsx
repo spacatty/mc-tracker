@@ -125,7 +125,7 @@ export function DashboardUpcomingTable({
     <>
       <div className="space-y-3 p-3 md:hidden">
         {items.map((item) => (
-          <article key={item.id} className="overflow-hidden rounded-lg border border-border bg-surface-muted">
+          <article key={item.id} className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02]">
             <div className="p-3">
               <div className="flex items-start gap-2">
                 {disclosure(item)}
@@ -137,7 +137,7 @@ export function DashboardUpcomingTable({
               </div>
               <div className="mt-3 flex items-end justify-between gap-3 pl-8">
                 <div>
-                  <Badge className="gap-2" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}20`, color: item.categoryColor || "#c4b5fd" }}>
+                  <Badge className="gap-1.5" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}18`, color: item.categoryColor || "#c4b5fd" }}>
                     <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
                     {item.categoryName || t(locale, "uncategorized")}
                   </Badge>
@@ -153,10 +153,10 @@ export function DashboardUpcomingTable({
       </div>
 
       <div className="hidden md:block">
-        <Table className="border-0">
+        <Table bare>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-10 px-2"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
+              <TableHead className="w-11 pr-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
               <TableHead>{tx(locale, "Name", "Название")}</TableHead>
               <TableHead>{tx(locale, "Payment date", "Дата оплаты")}</TableHead>
               <TableHead>{t(locale, "category")}</TableHead>
@@ -170,14 +170,14 @@ export function DashboardUpcomingTable({
             {items.map((item) => (
               <Fragment key={item.id}>
                 <TableRow className="group">
-                  <TableCell className="w-10 px-2">{disclosure(item)}</TableCell>
+                  <TableCell className="w-11 py-2 pr-0">{disclosure(item)}</TableCell>
                   <TableCell className="font-medium text-white">{item.name}</TableCell>
                   <TableCell className="whitespace-nowrap text-zinc-300">
                     {relativeDays(item.daysUntilPayment, locale)} <span className="text-zinc-500">({displayDate(item.nextPaymentAt)})</span>
                   </TableCell>
                   <TableCell>
-                    <Badge className="gap-2" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}25`, color: item.categoryColor || "#c4b5fd" }}>
-                      <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
+                    <Badge className="gap-1.5" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}18`, color: item.categoryColor || "#c4b5fd" }}>
+                      <AppIcon name={item.categoryIcon} className="h-3 w-3" />
                       {item.categoryName || t(locale, "uncategorized")}
                     </Badge>
                   </TableCell>
@@ -192,7 +192,8 @@ export function DashboardUpcomingTable({
                   </TableCell>
                   <TableCell className="text-zinc-300">{item.accountName || "—"}</TableCell>
                   <TableCell className="text-right font-semibold text-white">{formatMoney(item.amount, item.currency)}</TableCell>
-                  <TableCell>
+                  <TableCell className="py-2">
+                    <div className="flex justify-end">
                     <DashboardUpcomingActions
                       workspaceId={item.workspaceId || workspaceId}
                       itemId={item.id}
@@ -200,11 +201,12 @@ export function DashboardUpcomingTable({
                       amountLabel={formatMoney(item.amount, item.currency)}
                       locale={locale}
                     />
+                    </div>
                   </TableCell>
                 </TableRow>
                 {expanded.has(item.id) ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="bg-surface-muted px-4 py-3">{details(item)}</TableCell>
+                    <TableCell colSpan={8} className="bg-white/[0.015] py-3 pl-16">{details(item)}</TableCell>
                   </TableRow>
                 ) : null}
               </Fragment>

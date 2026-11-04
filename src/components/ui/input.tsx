@@ -6,7 +6,7 @@ export const Input = React.forwardRef<HTMLInputElement, React.InputHTMLAttribute
     <input
       type={type}
       className={cn(
-        "flex h-10 w-full rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-subtle-foreground hover:border-border-strong focus:border-border-strong focus:ring-2 focus:ring-focus-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex h-9 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-subtle-foreground hover:border-white/15 focus:border-white/20 focus:ring-2 focus:ring-violet-400/25 disabled:cursor-not-allowed disabled:opacity-50",
         type === "color" && "h-10 cursor-pointer rounded-full p-1",
         className,
       )}
@@ -21,7 +21,7 @@ export const Textarea = React.forwardRef<HTMLTextAreaElement, React.TextareaHTML
   ({ className, ...props }, ref) => (
     <textarea
       className={cn(
-        "flex min-h-24 w-full resize-y rounded-md border border-border bg-surface-muted px-3 py-2 text-sm text-foreground shadow-sm outline-none transition-colors placeholder:text-subtle-foreground hover:border-border-strong focus:border-border-strong focus:ring-2 focus:ring-focus-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+        "flex min-h-24 w-full resize-y rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-foreground outline-none transition-colors placeholder:text-subtle-foreground hover:border-white/15 focus:border-white/20 focus:ring-2 focus:ring-violet-400/25 disabled:cursor-not-allowed disabled:opacity-50",
         className,
       )}
       ref={ref}

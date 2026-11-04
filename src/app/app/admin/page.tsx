@@ -5,6 +5,7 @@ import { listUsers } from "@/lib/db";
 import { Button } from "@/components/ui/button";
 import { SelectInput } from "@/components/ui/hidden-input";
 import { Input } from "@/components/ui/input";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function AdminPage() {
   const actor = await requireUser();
@@ -12,21 +13,17 @@ export default async function AdminPage() {
 
   if (actor.role === "user") {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-8">
-        <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-red-300">Admin</h1>
-      </div>
+      <PageHeader title="Admin" />
     );
   }
 
   return (
     <div className="space-y-6">
-      <header className="rounded-3xl border border-white/10 bg-gradient-to-br from-red-500/10 via-violet-500/5 to-sky-500/10 p-6">
-        <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-red-300">Users and recovery</h1>
-      </header>
+      <PageHeader title="Admin" description="Users and recovery" />
 
-      <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-        <div className="border-b border-white/10 bg-black/20 p-5">
-          <h2 className="text-lg font-semibold text-white">Create user</h2>
+      <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
+        <div className="border-b border-white/[0.06] px-5 py-4">
+          <h2 className="text-[15px] font-semibold text-white">Create user</h2>
           <p className="mt-1 text-sm text-zinc-500">Create an account with role and credentials in a single step.</p>
         </div>
         <form action={createUserAction} className="grid gap-3 p-5 md:grid-cols-2">
@@ -50,7 +47,7 @@ export default async function AdminPage() {
             />
           </label>
           <div className="flex items-end justify-end">
-            <Button variant="destructive">Create user</Button>
+            <Button>Create user</Button>
           </div>
         </form>
       </section>

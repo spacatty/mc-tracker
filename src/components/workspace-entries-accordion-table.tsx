@@ -55,7 +55,7 @@ export function WorkspaceEntriesAccordionTable({
   );
 
   return (
-    <Accordion type="single" collapsible className="rounded-2xl border border-white/10 bg-black/20 px-4">
+    <Accordion type="single" collapsible className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-4">
       <AccordionItem value="workspace-entries" className="border-b-0">
         <AccordionTrigger className="py-3 text-sm">
           {locale === "ru" ? `Записей в пространстве: ${entries.length}` : `Entries already in workspace (${entries.length})`}

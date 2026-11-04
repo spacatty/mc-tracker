@@ -8,8 +8,8 @@ export default async function InvitePage({ params }: { params: Promise<{ token: 
   const invite = getWorkspaceInvite(token);
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#701a75_0,#07070b_48%)] px-6">
-      <div className="w-full max-w-md rounded-3xl border border-white/10 bg-black/45 p-8 shadow-2xl shadow-fuchsia-950/30">
+    <main className="grid min-h-screen place-items-center bg-background px-6">
+      <div className="w-full max-w-md rounded-xl border border-white/10 bg-[#101013] p-7 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
         {invite ? (
           <form action={acceptInviteAction} className="mt-5 space-y-4">
             <input type="hidden" name="token" value={token} />

@@ -18,8 +18,8 @@ export function TotpSetup({ enabled, locale = "en" }: { enabled: boolean; locale
   const [isPending, startTransition] = useTransition();
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-5">
-      <h2 className="text-lg font-semibold text-white">Google Authenticator 2FA</h2>
+    <div className="rounded-xl border border-white/[0.08] bg-surface p-5">
+      <h2 className="text-[15px] font-semibold text-white">Google Authenticator 2FA</h2>
       <p className="mt-1 text-sm text-zinc-400">
         {enabled
           ? (locale === "ru" ? "2FA включена для вашего аккаунта." : "2FA is enabled for your account.")

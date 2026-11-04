@@ -17,7 +17,7 @@ export function MarkdownNotes({ defaultValue = "" }: { defaultValue?: string }) 
         placeholder="Markdown supported. Keep secrets only if this instance is trusted."
         className="min-h-56 font-mono"
       />
-      <div className="prose prose-invert min-h-56 max-w-none rounded-2xl border border-white/10 bg-white/[0.03] p-4 text-sm">
+      <div className="prose prose-invert min-h-56 max-w-none rounded-xl border border-white/[0.08] bg-surface p-4 text-sm">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>{value || "_Preview appears here while you type._"}</ReactMarkdown>
       </div>
     </div>

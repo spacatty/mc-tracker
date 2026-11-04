@@ -7,6 +7,7 @@ import { requireUser } from "@/lib/auth";
 import { listCategoriesForWorkspace, listItemsForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ add?: string; category?: string; workspace?: string; entry?: string }> }) {
   const user = await requireUser();
@@ -27,12 +28,11 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-col justify-between gap-4 md:flex-row md:items-end">
-        <div>
-          <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-sky-300">{selectedCategory ? `${selectedCategory.name} ${locale === "ru" ? "записи" : "entries"}` : locale === "ru" ? "Все ресурсы" : "All tracked resources"}</h1>
-        </div>
-        {workspace.accessRole !== "viewer" ? (
-          <div className="flex flex-wrap gap-2">
+      <PageHeader
+        title={selectedCategory ? selectedCategory.name : t(locale, "entries")}
+        description={selectedCategory ? (locale === "ru" ? "Записи категории" : "Entries in this category") : locale === "ru" ? "Все ресурсы" : "All tracked resources"}
+        actions={workspace.accessRole !== "viewer" ? (
+          <>
             <Button asChild variant="ghost" size="sm" className="gap-2">
               <Link href={importHref}>
                 <FileUp className="h-4 w-4" />
@@ -40,9 +40,9 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
               </Link>
             </Button>
             <OpenCaptureButton label={t(locale, "createEntry")} />
-          </div>
+          </>
         ) : null}
-      </header>
+      />
 
       <EntriesWorkspace
         tableKey={entriesStateKey}

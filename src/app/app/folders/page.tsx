@@ -54,16 +54,14 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
 
   return (
     <div className="space-y-7">
-      <header className="flex flex-col justify-between gap-3 md:flex-row md:items-center">
+      <header className="flex flex-col justify-between gap-3 border-b border-border pb-4 sm:flex-row sm:items-end">
+        <h1 className="text-xl font-semibold tracking-tight text-foreground sm:text-2xl">{t(locale, "shareAndSpace")}</h1>
         <div>
-          <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-fuchsia-300">{t(locale, "shareAndSpace")}</h1>
-        </div>
-        <div className="w-full rounded-xl border border-white/10 bg-black/20 p-1 md:w-auto md:max-w-full">
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <CreateWorkspaceDialog
               locale={locale}
               trigger={(
-                <Button className="h-8 border border-fuchsia-300/20 bg-fuchsia-500/12 px-2.5 text-xs text-fuchsia-100 hover:bg-fuchsia-500/24">
+                <Button size="sm">
                   <Plus className="h-3.5 w-3.5" />
                   {t(locale, "createWorkspace")}
                 </Button>
@@ -72,10 +70,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
             <JoinWorkspaceDialog
               locale={locale}
               trigger={(
-                <Button
-                  variant="secondary"
-                  className="h-8 border border-sky-300/20 bg-sky-500/10 px-2.5 text-xs text-sky-100 hover:bg-sky-500/20"
-                >
+                <Button variant="secondary" size="sm">
                   <UserPlus2 className="h-3.5 w-3.5" />
                   {t(locale, "joinWorkspace")}
                 </Button>
@@ -133,7 +128,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
                 </TabsList>
                 <TabsContent value="overview">
                   <div className="grid gap-3 lg:grid-cols-2">
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-300">{t(locale, "entriesInWorkspace")}</h3>
                       <div className="flex flex-wrap gap-2">
                         {items.slice(0, 8).map((item) => (
@@ -142,7 +137,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
                         {!items.length ? <p className="text-sm text-zinc-500">{t(locale, "noEntriesYet")}</p> : null}
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
                       <h3 className="mb-3 text-sm font-semibold text-zinc-300">{t(locale, "members")}</h3>
                       <div className="flex flex-wrap gap-2">
                         {members.map((member) => <Badge key={member.username} variant="secondary">{member.username}: {roleLabel(locale, member.role)}</Badge>)}
@@ -161,7 +156,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
                         locale={locale}
                       />
                     </div>
-                    <div className="rounded-2xl border border-white/10 bg-black/20 p-4 xl:col-span-2">
+                    <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 xl:col-span-2">
                       <h3 className="mb-1 text-sm font-semibold text-zinc-200">{t(locale, "moveCopyEntriesBetweenWorkspaces")}</h3>
                       <p className="mb-3 text-xs text-zinc-500">{locale === "ru" ? "Выберите исходное пространство, найдите записи и сохраните изменения." : "Pick source workspace, fuzzy-search entries, then save changes."}</p>
                       <WorkspaceEntryTransferPicker
@@ -185,13 +180,13 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
                 {isOwner ? (
                   <TabsContent value="config">
                     <div className="grid gap-3">
-                      <form action={updateWorkspaceAction} className="grid gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 md:grid-cols-[120px_1fr_auto]">
+                      <form action={updateWorkspaceAction} className="grid gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-4 md:grid-cols-[120px_1fr_auto]">
                         <input type="hidden" name="workspaceId" value={workspace.id} />
                         <EmojiPickerInput name="emoji" defaultValue={workspace.emoji} />
                         <Input name="name" defaultValue={workspace.name} />
-                        <Button className="border border-emerald-300/25 bg-emerald-500/15 text-emerald-100 hover:bg-emerald-500/25">{t(locale, "saveWorkspace")}</Button>
+                        <Button>{t(locale, "saveWorkspace")}</Button>
                       </form>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
                         <h3 className="mb-3 text-sm font-semibold text-zinc-300">{t(locale, "currentMembers")}</h3>
                         <div className="space-y-2">
                           {members.map((member) => (
@@ -214,7 +209,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
                                         { value: "editor", label: roleLabel(locale, "editor") },
                                       ]}
                                     />
-                                    <Button size="sm" className="border border-sky-300/30 bg-sky-500/20 text-sky-100 hover:bg-sky-500/30">
+                                    <Button size="sm" variant="secondary">
                                       <ShieldCheck className="h-3.5 w-3.5" />
                                       {t(locale, "saveRole")}
                                     </Button>
@@ -234,7 +229,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
                           {!members.length ? <p className="text-sm text-zinc-500">{t(locale, "noSharedMembersYet")}</p> : null}
                         </div>
                       </div>
-                      <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+                      <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
                         <h3 className="mb-3 text-sm font-semibold text-zinc-300">{locale === "ru" ? "Активные ссылки-приглашения" : "Active invite links"}</h3>
                         <WorkspaceInviteLinks workspaceId={workspace.id} invites={invites} isOwner={isOwner} locale={locale} />
                       </div>
@@ -250,7 +245,7 @@ export default async function FoldersPage({ searchParams }: { searchParams: Prom
             </section>
           );
         })}
-        {!workspaces.length ? <p className="rounded-2xl border border-white/10 bg-white/[0.03] p-8 text-center text-zinc-500">{t(locale, "noWorkspacesYet")}</p> : null}
+        {!workspaces.length ? <p className="rounded-xl border border-white/[0.08] bg-surface p-8 text-center text-zinc-500">{t(locale, "noWorkspacesYet")}</p> : null}
       </div>
     </div>
   );

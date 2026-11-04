@@ -159,14 +159,14 @@ export function ArchivedEntriesTable({
 
   if (!items.length) {
     return (
-      <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-12 text-center">
+      <div className="rounded-xl border border-white/[0.08] bg-surface p-12 text-center">
         <p className="text-zinc-500">{t(locale, "noArchivedEntries")}</p>
       </div>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-180px)] min-h-[520px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+    <div className="flex h-[calc(100vh-180px)] min-h-[520px] flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
       <div className="border-b border-white/10 p-4">
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
@@ -183,7 +183,7 @@ export function ArchivedEntriesTable({
       </div>
       <div className="min-h-0 flex-1 overflow-auto">
         <Table className="min-w-[1120px]">
-          <TableHeader className="sticky top-0 z-20 bg-[#0b0b10]/95 backdrop-blur-md">
+          <TableHeader className="sticky top-0 z-20 bg-[#101013]/95 backdrop-blur-md">
             <TableRow className="border-b border-white/10 bg-white/[0.02]">
               <TableHead className="w-12">
                 <Checkbox
@@ -208,7 +208,7 @@ export function ArchivedEntriesTable({
                 <TableRow
                   key={item.id}
                   className={cn(
-                    "group border-white/5 bg-[#0b0b10] transition-colors duration-150 even:bg-[#0d0d12] hover:bg-[#15151d]",
+                    "group border-white/5 bg-[#101013] transition-colors duration-150 even:bg-[#0d0d12] hover:bg-[#15151d]",
                     selected && "bg-[#171329] shadow-[inset_0_0_0_1px_rgba(167,139,250,0.38)] even:bg-[#171329]",
                   )}
                 >
@@ -296,7 +296,7 @@ export function ArchivedEntriesTable({
                 </Dialog.Trigger>
                 <Dialog.Portal>
                   <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[#0b0b10] p-6 shadow-2xl shadow-black/50">
+                  <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-[#101013] p-6 shadow-2xl shadow-black/50">
                     <div className="flex gap-4">
                       <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-red-500/10 text-red-200">
                         <AlertTriangle className="h-5 w-5" />

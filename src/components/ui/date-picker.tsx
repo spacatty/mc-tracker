@@ -71,9 +71,9 @@ export function DatePickerInput({
         </PopoverTrigger>
         <PopoverContent
           align="start"
-          className="w-auto overflow-hidden rounded-3xl border-violet-400/20 bg-[#09090f]/95 p-0 shadow-2xl shadow-violet-950/30 backdrop-blur-xl"
+          className="w-auto overflow-hidden rounded-xl p-0"
         >
-          <div className="border-b border-white/10 bg-gradient-to-r from-violet-500/15 via-sky-500/10 to-fuchsia-500/15 px-4 py-3">
+          <div className="border-b border-white/[0.06] px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-[0.25em] text-violet-200">{locale === "ru" ? "Выберите дату" : "Pick date"}</p>
             <p className="mt-1 text-sm text-zinc-400">{selected ? format(selected, "EEEE, dd MMMM yyyy") : locale === "ru" ? "Выберите дату оплаты или окончания" : "Choose billing or expiry date"}</p>
           </div>
@@ -101,13 +101,13 @@ export function DatePickerInput({
               weekday: "grid h-8 place-items-center rounded-lg text-[0.7rem] font-semibold uppercase tracking-wider text-zinc-500",
               weeks: "space-y-1",
               week: "grid grid-cols-7 gap-1",
-              day: "group relative grid h-10 w-10 place-items-center rounded-xl text-sm text-zinc-200 transition",
+              day: "group relative grid h-9 w-9 place-items-center rounded-md text-sm text-zinc-200 transition",
               day_button:
-                "grid h-10 w-10 place-items-center rounded-xl transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50",
+                "grid h-9 w-9 place-items-center rounded-md transition hover:bg-white/10 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/50",
               selected:
-                "rounded-xl bg-gradient-to-br from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-950/50 [&>button]:bg-transparent [&>button]:font-bold [&>button]:hover:bg-transparent",
+                "rounded-md bg-zinc-100 text-zinc-900 [&>button]:bg-transparent [&>button]:font-bold [&>button]:hover:bg-transparent",
               today:
-                "rounded-xl text-sky-200 ring-1 ring-sky-400/30 before:absolute before:bottom-1 before:h-1 before:w-1 before:rounded-full before:bg-sky-300",
+                "rounded-md text-sky-200 ring-1 ring-sky-400/30 before:absolute before:bottom-1 before:h-1 before:w-1 before:rounded-full before:bg-sky-300",
               outside: "text-zinc-700 opacity-60 [&>button]:hover:text-zinc-500",
               disabled: "text-zinc-800 opacity-40",
               hidden: "invisible",

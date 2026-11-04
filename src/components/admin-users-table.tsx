@@ -20,9 +20,9 @@ export function AdminUsersTable({
 
   return (
     <>
-      <section className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+      <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
         <div className="border-b border-white/10 p-5">
-          <h2 className="text-lg font-semibold text-white">Users table</h2>
+          <h2 className="text-[15px] font-semibold text-white">Users table</h2>
           <p className="mt-1 text-sm text-zinc-500">Edit users from a single actions dialog.</p>
         </div>
         <Table>

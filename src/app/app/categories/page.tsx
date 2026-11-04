@@ -7,6 +7,8 @@ import {
   resolveWorkspaceForUser,
 } from "@/lib/db";
 import { getLocale } from "@/lib/i18n-server";
+import { t } from "@/lib/i18n";
+import { PageHeader } from "@/components/ui/page-header";
 
 export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ workspace?: string }> }) {
   const user = await requireUser();
@@ -21,9 +23,10 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-sm font-semibold uppercase tracking-[0.3em] text-violet-300">{locale === "ru" ? "Шаблоны, поля и напоминания" : "Templates, fields, and reminders"}</h1>
-      </header>
+      <PageHeader
+        title={t(locale, "categories")}
+        description={locale === "ru" ? "Шаблоны, поля и напоминания" : "Templates, fields, and reminders"}
+      />
       <CategoryManager workspaceId={workspace.id} categories={categories} channels={channels} selectedByCategory={selectedByCategory} locale={locale} />
     </div>
   );

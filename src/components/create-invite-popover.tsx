@@ -12,7 +12,7 @@ export function CreateInvitePopover({ workspaceId, locale = "en" }: { workspaceI
   return (
     <Popover>
       <PopoverTrigger asChild>
-        <Button size="sm" variant="outline" className="h-8 rounded-full border-violet-300/35 bg-transparent px-2.5 text-xs text-violet-100 hover:bg-violet-500/12">
+        <Button size="sm" variant="accent">
           <Link2 className="h-3.5 w-3.5" />
           {t(locale, "createInvite")}
         </Button>
@@ -32,7 +32,7 @@ export function CreateInvitePopover({ workspaceId, locale = "en" }: { workspaceI
               { value: "editor", label: "editor" },
             ]}
           />
-          <Button className="w-full border border-violet-300/30 bg-violet-500/20 text-violet-100 hover:bg-violet-500/30">
+          <Button className="w-full">
             <UserPlus2 className="h-4 w-4" />
             {locale === "ru" ? "Сгенерировать ссылку" : "Generate link"}
           </Button>

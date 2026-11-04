@@ -21,7 +21,7 @@ export function CreateWorkspaceDialog({
     <Dialog.Root>
       <Dialog.Trigger asChild>
         {trigger || (
-          <Button className="bg-fuchsia-500/20 text-fuchsia-100 hover:bg-fuchsia-500/30">
+          <Button>
             <Plus className="h-4 w-4" />
             {t(locale, "createWorkspace")}
           </Button>
@@ -29,8 +29,8 @@ export function CreateWorkspaceDialog({
       </Dialog.Trigger>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-3xl border border-white/10 bg-[#0b0b10] shadow-2xl shadow-black/50">
-          <div className="flex items-start justify-between gap-4 border-b border-white/10 bg-gradient-to-r from-fuchsia-500/10 via-violet-500/10 to-transparent p-5">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-xl -translate-x-1/2 -translate-y-1/2 overflow-hidden rounded-xl border border-white/10 bg-[#101013] shadow-2xl shadow-black/50">
+          <div className="flex items-start justify-between gap-4 border-b border-white/10 bg-white/[0.015] p-5">
             <div>
               <Dialog.Title className="text-lg font-semibold text-white">{t(locale, "createWorkspace")}</Dialog.Title>
               <Dialog.Description className="mt-1 text-sm text-zinc-500">
@@ -53,7 +53,7 @@ export function CreateWorkspaceDialog({
               <Dialog.Close asChild>
                 <Button type="button" variant="secondary">{locale === "ru" ? "Отмена" : "Cancel"}</Button>
               </Dialog.Close>
-              <Button type="submit" className="bg-fuchsia-500/20 text-fuchsia-100 hover:bg-fuchsia-500/30">
+              <Button type="submit">
                 {t(locale, "createWorkspace")}
               </Button>
             </div>

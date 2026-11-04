@@ -367,7 +367,7 @@ export function EntryInspector({
             // Clicking another row in the table switches entries instead of closing.
             if (target?.closest("[data-entry-row]") || target?.closest("[data-radix-popper-content-wrapper]") || target?.closest("[data-sonner-toaster]")) event.preventDefault();
           }}
-          className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[460px] flex-col border-l border-white/10 bg-[#0b0b10]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
+          className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[460px] flex-col border-l border-white/10 bg-[#101013]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
         >
 
           {/* Top bar */}

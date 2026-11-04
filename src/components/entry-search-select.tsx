@@ -48,7 +48,7 @@ export function EntrySearchSelect({
   }, [categoryFilter, entries, query]);
 
   return (
-    <div className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-3">
+    <div className="space-y-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
       <input type="hidden" name="itemId" value={value} />
       <div className="grid gap-3 md:grid-cols-[240px_1fr]">
         <Select value={categoryFilter || "all"} onValueChange={(next) => setCategoryFilter(next === "all" ? "" : next)}>

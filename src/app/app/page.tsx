@@ -19,10 +19,10 @@ import { formatMoney } from "@/lib/utils";
 
 function StatCard({ label, value, hint, accent, icon }: { label: string; value: string; hint: string; accent: string; icon: ReactNode }) {
   return (
-    <Surface className="relative overflow-hidden px-4 py-3.5">
+    <Surface className="relative overflow-hidden px-5 py-4">
       <div className="relative flex items-center justify-between gap-3">
         <p className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-subtle-foreground">
-          <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-border bg-surface-muted" style={{ color: `${accent}cc` }}>{icon}</span>
+          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/[0.04]" style={{ color: `${accent}cc` }}>{icon}</span>
           <span className="truncate">{label}</span>
         </p>
       </div>
@@ -61,16 +61,16 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
           </Button>
         )}
       >
-          <div className="mt-3 inline-flex items-center rounded-md border border-border bg-surface-muted p-1">
+          <div className="mt-3 inline-flex items-center rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
             <Link
               href={globalHref}
-              className={`rounded-sm px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${scope === "global" ? "bg-surface-raised text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded-md px-3 py-1 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${scope === "global" ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {t(locale, "global")}
             </Link>
             <Link
               href={workspaceHref}
-              className={`rounded-sm px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${scope === "workspace" ? "bg-surface-raised text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+              className={`rounded-md px-3 py-1 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${scope === "workspace" ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
             >
               {t(locale, "workspace")}
             </Link>
@@ -78,9 +78,9 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
       </PageHeader>
 
       <Surface className="overflow-hidden" role="region" aria-labelledby="upcoming-dates-title">
-        <div className="border-b border-border p-5">
-          <h2 id="upcoming-dates-title" className="text-xl font-semibold text-white">{locale === "ru" ? "Ближайшие даты" : "Upcoming dates"}</h2>
-          <p className="mt-1 text-sm text-zinc-500">
+        <div className="border-b border-white/[0.06] px-5 py-4">
+          <h2 id="upcoming-dates-title" className="text-[15px] font-semibold text-white">{locale === "ru" ? "Ближайшие даты" : "Upcoming dates"}</h2>
+          <p className="mt-0.5 text-xs text-zinc-500">
             {scope === "global"
               ? (locale === "ru" ? "Предстоящие платежи по всем пространствам в ближайшие 2 недели." : "Upcoming payments across all your workspaces in the next 2 weeks.")
               : (locale === "ru" ? "Предстоящие платежи для выбранного пространства в ближайшие 2 недели." : "Upcoming payments for the selected workspace in the next 2 weeks.")}

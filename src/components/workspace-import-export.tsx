@@ -164,9 +164,9 @@ export function WorkspaceImportExport({
   }
 
   return (
-    <section className="overflow-hidden rounded-3xl border border-white/10 bg-white/[0.03]">
-      <div className="border-b border-white/10 bg-black/20 p-5">
-        <h2 className="text-lg font-semibold text-white">{t(locale, "workspaceImportExport")}</h2>
+    <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
+      <div className="border-b border-white/[0.06] px-5 py-4">
+        <h2 className="text-[15px] font-semibold text-white">{t(locale, "workspaceImportExport")}</h2>
         <p className="mt-1 text-sm text-zinc-400">
           {locale === "ru"
             ? "Экспортируйте данные пространства для переноса между инстансами. Участники и приглашения не экспортируются."
@@ -281,7 +281,7 @@ export function WorkspaceImportExport({
       <Dialog.Root open={Boolean(selectedSkippedEntry)} onOpenChange={(open) => { if (!open) setSelectedSkippedEntry(null); }}>
         <Dialog.Portal>
           <Dialog.Overlay className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm" />
-          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-white/10 bg-[#0b0b10] p-6 shadow-2xl shadow-black/50">
+          <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[calc(100vw-2rem)] max-w-md -translate-x-1/2 -translate-y-1/2 rounded-xl border border-white/10 bg-[#101013] p-6 shadow-2xl shadow-black/50">
             <div className="flex items-start justify-between gap-4">
               <div>
                 <Dialog.Title className="text-base font-semibold text-white">

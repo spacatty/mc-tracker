@@ -41,12 +41,12 @@ function PieCard({
   emptyLabel: string;
 }) {
   return (
-    <div className="rounded-lg border border-border bg-surface p-5 shadow-surface">
+    <div className="rounded-xl border border-white/[0.08] bg-surface p-5">
       <div className="mb-4">
-        <h2 className="text-lg font-semibold text-white">{title}</h2>
+        <h2 className="text-[15px] font-semibold text-white">{title}</h2>
         <p className="mt-1 text-xs text-zinc-500">{subtitle}</p>
       </div>
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_180px]">
+      <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_200px]">
         <ChartSlot>
           <ResponsiveContainer width="100%" height={CHART_HEIGHT} minWidth={0} minHeight={CHART_HEIGHT}>
             <PieChart>

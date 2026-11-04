@@ -50,7 +50,7 @@ export function RichNotesEditor({
   ];
 
   return (
-    <div className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+    <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
       <input type="hidden" name="notes" value={html} />
       <div className="flex flex-wrap items-center gap-2 border-b border-white/10 bg-black/30 p-2">
         {tools.map((tool) => {

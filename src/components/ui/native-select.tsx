@@ -25,7 +25,7 @@ export function NativeSelect({
         aria-label={ariaLabel}
         aria-invalid={invalid || undefined}
         className={cn(
-          "h-full w-full appearance-none rounded-md border border-border bg-surface-muted py-1.5 pl-2.5 pr-8 text-sm text-foreground outline-none focus:border-border-strong focus:ring-2 focus:ring-focus-ring/50",
+          "h-full w-full appearance-none rounded-lg border border-white/10 bg-white/[0.03] py-1.5 pl-2.5 pr-8 text-sm text-foreground outline-none hover:border-white/15 focus:border-white/20 focus:ring-2 focus:ring-violet-400/25",
           invalid && "border-red-400/70 focus:ring-red-400/30",
         )}
       >
