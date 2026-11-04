@@ -577,7 +577,7 @@ export function AppShell({
       <aside
         className={cn(
           "sticky top-0 hidden h-screen shrink-0 border-r border-white/[0.06] bg-surface-muted transition-[width] duration-200 md:flex md:flex-col",
-          collapsed ? "w-[60px]" : "w-60",
+          collapsed ? "w-[60px]" : "w-52",
         )}
       >
         <div className={cn("flex shrink-0 items-center gap-1 px-2 pb-2 pt-3", collapsed && "flex-col")}>
