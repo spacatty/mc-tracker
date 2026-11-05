@@ -9,6 +9,8 @@ import type { Locale } from "@/lib/i18n";
 import { Button } from "./ui/button";
 import { DatePickerInput } from "./ui/date-picker";
 import { QuickLoginButton } from "./vault/quick-login";
+import { Tooltip, iconActionClass } from "./ui/tooltip";
+import { cn } from "@/lib/utils";
 
 function tx(locale: Locale, en: string, ru: string) {
   return locale === "ru" ? ru : en;
@@ -43,32 +45,22 @@ export function DashboardUpcomingActions({
   }
 
   return (
-    <div className="flex justify-end gap-1.5">
+    <div className="flex justify-end gap-1">
       <QuickLoginButton workspaceId={workspaceId} itemId={itemId} locale={locale} />
-      <Button
-        asChild
-        variant="secondary"
-        size="sm"
-        className="h-7 gap-1.5 border-sky-400/20 bg-sky-500/10 px-2 text-[11px] text-sky-100 hover:border-sky-300/35 hover:bg-sky-500/20"
-      >
+      <Tooltip label={tx(locale, "Quick edit", "Изменить")}>
         {/* Opens the entry in the Entries page inspector, the same editor used there. */}
-        <Link href={`/app/items?workspace=${workspaceId}&entry=${itemId}`} title={tx(locale, "Edit", "Изменить")}>
+        <Link href={`/app/items?workspace=${workspaceId}&entry=${itemId}`} className={cn(iconActionClass, "hover:border-sky-400/30 hover:bg-sky-500/15")}>
           <Pencil className="h-3.5 w-3.5" />
-          {tx(locale, "Quick edit", "Изменить")}
         </Link>
-      </Button>
+      </Tooltip>
       <Dialog.Root open={open} onOpenChange={setOpen}>
-        <Dialog.Trigger asChild>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            className="h-7 gap-1.5 border-emerald-400/20 bg-emerald-500/10 px-2 text-[11px] text-emerald-100 hover:border-emerald-300/35 hover:bg-emerald-500/20"
-          >
-            <WalletCards className="h-3.5 w-3.5" />
-            {tx(locale, "Quick Pay", "Оплатить")}
-          </Button>
-        </Dialog.Trigger>
+        <Tooltip label={tx(locale, "Quick pay", "Оплатить")}>
+          <Dialog.Trigger asChild>
+            <button type="button" className={cn(iconActionClass, "hover:border-emerald-400/30 hover:bg-emerald-500/15")}>
+              <WalletCards className="h-3.5 w-3.5" />
+            </button>
+          </Dialog.Trigger>
+        </Tooltip>
         <Dialog.Portal>
           <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
           <Dialog.Content className="capture-panel-in fixed inset-x-0 top-[16vh] z-50 mx-auto w-[calc(100vw-1.5rem)] max-w-md rounded-xl border border-white/10 bg-[#101013] p-5 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">

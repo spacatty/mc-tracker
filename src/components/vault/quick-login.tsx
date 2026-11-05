@@ -10,6 +10,7 @@ import { cn } from "@/lib/utils";
 import type { QuickLoginInfo } from "@/lib/vault/types";
 import { Kbd } from "../capture/shared";
 import { Button } from "../ui/button";
+import { Tooltip, iconActionClass } from "../ui/tooltip";
 import { Input } from "../ui/input";
 import { FieldLabel, SecretRow, SetupTwoFactorNotice, TwoFactorPrompt, VaultDialog, copyText, hostOf, tx, useCredentialReveal } from "./shared";
 
@@ -31,40 +32,35 @@ export function QuickLoginButton({
   className?: string;
 }) {
   const [open, setOpen] = useState(false);
+  const label = tx(locale, "Quick login", "Быстрый вход");
   const trigger =
-    variant === "icon" ? (
+    variant === "row" ? (
       <button
         type="button"
-        onClick={(event) => event.stopPropagation()}
-        title={tx(locale, "Quick login", "Быстрый вход")}
-        aria-label={tx(locale, "Quick login", "Быстрый вход")}
-        className={cn("rounded-md p-1.5 text-zinc-500 transition hover:bg-violet-500/15 hover:text-violet-200", className)}
-      >
-        <KeyRound className="h-3.5 w-3.5" />
-      </button>
-    ) : variant === "row" ? (
-      <button
-        type="button"
+        onClick={() => setOpen(true)}
         className={cn("inline-flex items-center gap-1.5 rounded-md border border-violet-400/20 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-500/20", className)}
       >
         <KeyRound className="h-3.5 w-3.5" />
-        {tx(locale, "Quick login", "Быстрый вход")}
+        {label}
       </button>
     ) : (
-      <Button
+      <button
         type="button"
-        variant="secondary"
-        size="sm"
-        onClick={(event) => event.stopPropagation()}
-        className={cn("h-7 gap-1.5 border-violet-400/20 bg-violet-500/10 px-2 text-[11px] text-violet-100 hover:border-violet-300/35 hover:bg-violet-500/20", className)}
+        onClick={(event) => {
+          event.stopPropagation();
+          setOpen(true);
+        }}
+        className={cn(iconActionClass, "hover:border-violet-400/30 hover:bg-violet-500/15", variant === "icon" && "border-transparent bg-transparent", className)}
       >
         <KeyRound className="h-3.5 w-3.5" />
-        {tx(locale, "Login", "Вход")}
-      </Button>
+      </button>
     );
 
   return (
-    <QuickLoginDialog open={open} onOpenChange={setOpen} workspaceId={workspaceId} itemId={itemId} locale={locale} trigger={trigger} />
+    <>
+      {variant === "row" ? trigger : <Tooltip label={label}>{trigger}</Tooltip>}
+      <QuickLoginDialog open={open} onOpenChange={setOpen} workspaceId={workspaceId} itemId={itemId} locale={locale} />
+    </>
   );
 }
 

@@ -1100,7 +1100,7 @@ export function EntriesTable({
                     <td className="sticky right-0 z-20 w-px whitespace-nowrap bg-surface px-2 text-right group-hover:bg-surface-raised">
                       <div className="flex justify-end gap-0.5">
                         {!editMode && row.id && (row.accountName || row.vendorName || row.vendorUrl) ? (
-                          <QuickLoginButton workspaceId={workspaceId} itemId={row.id} locale={locale} variant="icon" className="h-7 w-7 p-0 grid place-items-center" />
+                          <QuickLoginButton workspaceId={workspaceId} itemId={row.id} locale={locale} variant="icon" />
                         ) : null}
                         {!editMode && onOpenEntry && row.id ? (
                           <Button
