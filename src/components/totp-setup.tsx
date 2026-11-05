@@ -13,7 +13,15 @@ type Setup = {
   otpAuthUrl: string;
 };
 
-export function TotpSetup({ enabled, locale = "en" }: { enabled: boolean; locale?: Locale }) {
+export function TotpSetup({
+  enabled,
+  locale = "en",
+  usedFor = { login: true, credentials: false },
+}: {
+  enabled: boolean;
+  locale?: Locale;
+  usedFor?: { login: boolean; credentials: boolean };
+}) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -24,6 +32,12 @@ export function TotpSetup({ enabled, locale = "en" }: { enabled: boolean; locale
         {enabled
           ? (locale === "ru" ? "2FA включена для вашего аккаунта." : "2FA is enabled for your account.")
           : (locale === "ru" ? "Сканируйте QR-код в Google Authenticator и подтвердите один код." : "Scan a QR code with Google Authenticator and verify one code.")}
+        {" "}
+        {usedFor.login && usedFor.credentials
+          ? (locale === "ru" ? "Код запрашивается при входе и перед показом учётных данных." : "The code is asked at sign-in and before credentials are shown.")
+          : usedFor.credentials
+            ? (locale === "ru" ? "Код запрашивается перед показом учётных данных." : "The code is asked before credentials are shown.")
+            : (locale === "ru" ? "Код запрашивается при входе." : "The code is asked at sign-in.")}
       </p>
       {!enabled ? (
         <div className="mt-4 space-y-4">

@@ -47,10 +47,20 @@ Open [http://localhost:4271](http://localhost:4271) (the default port). On the f
 - **Inspector**: click an entry in the table to open it in a side panel. Click any value to change it (saved right away),
   mark it paid, duplicate, archive or delete it, and move through entries with `J`/`K`.
 
+- **Vendors and accounts**: the Vendors page keeps each service's name and login URL; the Accounts page keeps the
+  login, password and notes for each account, encrypted at rest (AES-256-GCM). "Pull from entries" creates both from
+  the vendor and account names already on entries. An entry links to a vendor and account by those names, and its
+  **Quick login** (key icon in the Entries table, "Login" on the dashboard, "Quick login" in the inspector) shows the
+  login URL and credentials with copy-and-open buttons, lets you save credentials right there, and can record today's
+  payment. Only workspace owners and editors can see credentials.
+
 ## Environment Variables
 
 - `AUTH_SECRET`: required in production for signing session cookies.
 - `CRON_SECRET`: required in production for `/api/cron/notifications`; send it as the `x-cron-secret` header.
+- `CREDENTIALS_SECRET`: optional key for encrypting saved account credentials. Defaults to `AUTH_SECRET`. Keep it stable, since changing it makes stored credentials unreadable.
+- `TWO_FACTOR_LOGIN`: `true` turns on Google Authenticator sign-in: users can set it up in Settings, and those who did are asked for a code when they sign in. Off by default.
+- `TWO_FACTOR_CREDENTIALS`: `true` asks for an authenticator code before account credentials are shown; one code unlocks them for `TWO_FACTOR_CREDENTIALS_TTL_MINUTES` (default 5, `0` asks every time). Off by default.
 - `SQLITE_PATH`: optional SQLite database path. Defaults to `data/mc-tracker.sqlite`.
 - `AI_API_KEY` (or legacy `OPENROUTER_API_KEY`): optional; enables Premium AI parsing of free-form text on the Import page. CSV/TSV/JSON import works without it. A superadmin can also set the key and model on the Admin page; those saved values win over the environment.
 - `AI_MODEL` (or legacy `OPENROUTER_MODEL`): defaults to `deepseek/deepseek-v4.1-flash`. Any OpenRouter model that supports structured outputs works.

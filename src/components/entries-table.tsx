@@ -43,6 +43,7 @@ import type {
   PaymentItem,
   VendorSuggestion,
 } from "@/lib/types";
+import { QuickLoginButton } from "./vault/quick-login";
 import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
 import { TableStyleSelect } from "./table-style";
 import { AppIcon } from "./icons";
@@ -1098,6 +1099,9 @@ export function EntriesTable({
                     )}
                     <td className="sticky right-0 z-20 w-px whitespace-nowrap bg-surface px-2 text-right group-hover:bg-surface-raised">
                       <div className="flex justify-end gap-0.5">
+                        {!editMode && row.id && (row.accountName || row.vendorName || row.vendorUrl) ? (
+                          <QuickLoginButton workspaceId={workspaceId} itemId={row.id} locale={locale} variant="icon" className="h-7 w-7 p-0 grid place-items-center" />
+                        ) : null}
                         {!editMode && onOpenEntry && row.id ? (
                           <Button
                             type="button"

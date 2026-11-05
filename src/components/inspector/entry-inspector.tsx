@@ -15,10 +15,12 @@ import {
   Terminal,
   Trash2,
   X,
+  KeyRound,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
+import { QuickLoginDialog } from "../vault/quick-login";
 import {
   archiveItemAction,
   deleteItemAction,
@@ -201,6 +203,7 @@ export function EntryInspector({
   const [saveError, setSaveError] = useState("");
   const [history, setHistory] = useState<{ key: string; rows: HistoryRow[] } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [quickLoginOpen, setQuickLoginOpen] = useState(false);
   const [isSaving, startSaving] = useTransition();
   const [isActing, startActing] = useTransition();
   const historyRows = history && history.key === itemKey ? history.rows : null;
@@ -470,6 +473,8 @@ export function EntryInspector({
             {editable ? (
               <div className="mt-3 flex flex-wrap gap-1.5">
                 <ActionButton onClick={markPaid} disabled={isActing} tone="emerald" icon={<CircleCheckBig className="h-4 w-4" />}>{tx(locale, "Mark paid", "Оплачено")}</ActionButton>
+                <ActionButton onClick={() => setQuickLoginOpen(true)} icon={<KeyRound className="h-4 w-4" />}>{tx(locale, "Quick login", "Быстрый вход")}</ActionButton>
+                <QuickLoginDialog open={quickLoginOpen} onOpenChange={setQuickLoginOpen} workspaceId={workspaceId} itemId={item.id} locale={locale} />
                 <ActionButton onClick={() => openCapture({ text: rowToLine({ ...rowFromEntry(entryRef(entry)), name: `${entry.name} copy` }, { categories, defaultCategoryId: null }) })} icon={<CopyPlus className="h-4 w-4" />}>{tx(locale, "Duplicate", "Дублировать")}</ActionButton>
                 <ActionButton onClick={() => openCapture({ text: rowToLine({ ...rowFromEntry(entryRef(entry)), action: "edit", targetItemId: entry.id }, { categories, defaultCategoryId: null }) })} icon={<Terminal className="h-4 w-4" />}>{tx(locale, "Edit as text", "Как текст")}</ActionButton>
                 <ActionButton onClick={archive} disabled={isActing} icon={<Archive className="h-4 w-4" />}>{tx(locale, "Archive", "В архив")}</ActionButton>

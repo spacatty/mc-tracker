@@ -8,6 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isSetupComplete } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
+import { loginTwoFactorEnabled } from "@/lib/vault/two-factor";
 
 export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
   if (!isSetupComplete()) redirect("/setup");
@@ -33,7 +34,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
           ) : null}
           <Input name="username" autoComplete="username" placeholder={t(locale, "username")} />
           <Input name="password" type="password" autoComplete="current-password" placeholder={t(locale, "password")} />
-          <Input name="token" inputMode="numeric" placeholder={`${t(locale, "authenticatorCode")} (${locale === "ru" ? "необязательно" : "optional"})`} />
+          {loginTwoFactorEnabled() ? <Input name="token" inputMode="numeric" autoComplete="one-time-code" placeholder={`${t(locale, "authenticatorCode")} (${locale === "ru" ? "необязательно" : "optional"})`} /> : null}
           <Button className="!mt-4 w-full">{t(locale, "signIn")}</Button>
         </div>
 

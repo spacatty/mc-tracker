@@ -7,6 +7,7 @@ import { getUserDashboardPrefs } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
 import { PageHeader } from "@/components/ui/page-header";
+import { credentialTwoFactorEnabled, loginTwoFactorEnabled, twoFactorSetupAvailable } from "@/lib/vault/two-factor";
 
 export default async function SettingsPage() {
   const user = await requireUser();
@@ -58,7 +59,9 @@ export default async function SettingsPage() {
         </div>
       </section>
 
-      <TotpSetup enabled={user.totpEnabled} locale={locale} />
+      {twoFactorSetupAvailable() ? (
+        <TotpSetup enabled={user.totpEnabled} locale={locale} usedFor={{ login: loginTwoFactorEnabled(), credentials: credentialTwoFactorEnabled() }} />
+      ) : null}
     </div>
   );
 }

@@ -8,6 +8,7 @@ import { generateSecret, generateURI, verify } from "otplib";
 import QRCode from "qrcode";
 import { getUserAuthByUsername, getUserById, isSetupComplete } from "./db";
 import type { User, UserRole } from "./types";
+import { loginTwoFactorEnabled } from "./vault/two-factor";
 
 const cookieName = "mc_tracker_session";
 
@@ -30,7 +31,9 @@ export async function signIn(username: string, password: string, token?: string)
     throw new Error("Invalid username or password.");
   }
 
-  if (row.totp_enabled) {
+  // The code is asked at sign-in only when TWO_FACTOR_LOGIN is on; with it off an authenticator
+  // is used just for revealing credentials (TWO_FACTOR_CREDENTIALS).
+  if (row.totp_enabled && loginTwoFactorEnabled()) {
     const result = await verify({ token: String(token || ""), secret: String(row.totp_secret || ""), epochTolerance: 30 });
     const valid = result.valid;
     if (!valid) {

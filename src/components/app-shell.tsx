@@ -427,6 +427,8 @@ export function AppShell({
     { href: "/app/items", label: t(locale, "entries"), icon: "WalletCards", accent: "text-emerald-300" },
     { href: "/app/invoices", label: t(locale, "invoices"), icon: "FileText", accent: "text-sky-300" },
     { href: "/app/archive", label: t(locale, "archived"), icon: "Archive", accent: "text-zinc-300" },
+    { href: "/app/vendors", label: locale === "ru" ? "Поставщики" : "Vendors", icon: "Building2", accent: "text-sky-300" },
+    { href: "/app/accounts", label: locale === "ru" ? "Аккаунты" : "Accounts", icon: "KeyRound", accent: "text-violet-300" },
   ];
   const workspaceNav: SidebarNavItem[] = [
     { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-300" },

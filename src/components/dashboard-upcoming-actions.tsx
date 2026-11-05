@@ -8,6 +8,7 @@ import { payEntryAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { Button } from "./ui/button";
 import { DatePickerInput } from "./ui/date-picker";
+import { QuickLoginButton } from "./vault/quick-login";
 
 function tx(locale: Locale, en: string, ru: string) {
   return locale === "ru" ? ru : en;
@@ -43,6 +44,7 @@ export function DashboardUpcomingActions({
 
   return (
     <div className="flex justify-end gap-1.5">
+      <QuickLoginButton workspaceId={workspaceId} itemId={itemId} locale={locale} />
       <Button
         asChild
         variant="secondary"

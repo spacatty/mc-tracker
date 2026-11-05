@@ -389,7 +389,7 @@ function bootstrapWorkspaces(db: Database.Database) {
   });
 }
 
-function getDb() {
+export function getDb() {
   fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 
   const globalForDb = globalThis as typeof globalThis & {
