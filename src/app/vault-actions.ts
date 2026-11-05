@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { requireUser, verifyTotp } from "@/lib/auth";
-import { getUserAuthByUsername, getWorkspaceRole, payEntryForWorkspace } from "@/lib/db";
+import { getUserAuthByUsername, getWorkspaceRole } from "@/lib/db";
 import {
   deleteAccountForWorkspace,
   deleteVendorForWorkspace,
@@ -221,16 +221,3 @@ export async function saveEntryCredentialsAction(input: {
   }
 }
 
-/**
- * Records today's payment from the Quick login panel. Unlike payEntryAction it does not revalidate,
- * because that would re-mount the open panel; the panel refreshes the page when it closes.
- */
-export async function quickLoginPayAction(workspaceId: number, itemId: number): Promise<Result> {
-  const user = await requireUser();
-  try {
-    payEntryForWorkspace(itemId, workspaceId, user.id, new Date().toISOString().slice(0, 10));
-    return { ok: true };
-  } catch (error) {
-    return failure(error);
-  }
-}

@@ -1,11 +1,10 @@
 "use client";
 
-import { ArrowUpRight, KeyRound, Loader2, Pencil, WalletCards } from "lucide-react";
+import { ArrowUpRight, KeyRound, Loader2, Pencil } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState, useTransition } from "react";
-import { toast } from "sonner";
-import { getQuickLoginAction, quickLoginPayAction, saveEntryCredentialsAction } from "@/app/vault-actions";
+import { getQuickLoginAction, saveEntryCredentialsAction } from "@/app/vault-actions";
 import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { QuickLoginInfo } from "@/lib/vault/types";
@@ -98,8 +97,6 @@ function QuickLoginBody({ workspaceId, itemId, locale }: { workspaceId: number; 
   const [loadError, setLoadError] = useState("");
   const [editing, setEditing] = useState(false);
   const { state, reveal } = useCredentialReveal(workspaceId);
-  const [isPaying, startPay] = useTransition();
-  const [paid, setPaid] = useState(false);
   // Refreshing the page re-mounts the entries table (and this dialog with it), so wait until the dialog closes.
   const needsRefresh = useRef(false);
   useEffect(() => () => {
@@ -146,31 +143,9 @@ function QuickLoginBody({ workspaceId, itemId, locale }: { workspaceId: number; 
     window.open(info.url, "_blank", "noopener,noreferrer");
   }
 
-  function recordPayment() {
-    startPay(async () => {
-      const result = await quickLoginPayAction(workspaceId, itemId);
-      if (!result.ok) return void toast.error(result.error);
-      setPaid(true);
-      toast.success(tx(locale, `Payment recorded for ${info?.itemName || "entry"}`, `Оплата записана: ${info?.itemName || ""}`));
-      needsRefresh.current = true;
-    });
-  }
-
   const footer =
         info ? (
           <div className="-mx-5 -mb-4 mt-5 flex items-center gap-2 border-t border-white/[0.06] px-5 py-3">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              onClick={recordPayment}
-              disabled={isPaying || paid}
-              className="border-emerald-400/20 bg-emerald-500/10 text-emerald-100 hover:border-emerald-300/35 hover:bg-emerald-500/20"
-              title={tx(locale, "Record a payment dated today and move the next due date", "Записать оплату сегодняшним числом")}
-            >
-              {isPaying ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <WalletCards className="h-3.5 w-3.5" />}
-              {paid ? tx(locale, "Paid today", "Оплачено") : tx(locale, "Mark paid today", "Оплачено сегодня")}
-            </Button>
             <Link
               href={`/app/accounts?workspace=${workspaceId}`}
               className="ml-auto text-xs text-zinc-500 transition hover:text-zinc-200"

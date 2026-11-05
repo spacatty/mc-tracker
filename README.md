@@ -51,8 +51,7 @@ Open [http://localhost:4271](http://localhost:4271) (the default port). On the f
   login, password and notes for each account, encrypted at rest (AES-256-GCM). "Pull from entries" creates both from
   the vendor and account names already on entries. An entry links to a vendor and account by those names, and its
   **Quick login** (key icon in the Entries table, "Login" on the dashboard, "Quick login" in the inspector) shows the
-  login URL and credentials with copy-and-open buttons, lets you save credentials right there, and can record today's
-  payment. Only workspace owners and editors can see credentials.
+  login URL and credentials with copy-and-open buttons and lets you save credentials right there. Only workspace owners and editors can see credentials.
 
 ## Environment Variables
 
