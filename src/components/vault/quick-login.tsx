@@ -50,7 +50,7 @@ export function QuickLoginButton({
           event.stopPropagation();
           setOpen(true);
         }}
-        className={cn(iconActionClass, "hover:border-violet-400/30 hover:bg-violet-500/15", variant === "icon" && "border-transparent bg-transparent", className)}
+        className={cn(iconActionClass, "border-violet-400/20 bg-violet-500/10 text-violet-200 hover:border-violet-300/35 hover:bg-violet-500/20", variant === "icon" && "border-transparent bg-transparent text-violet-300", className)}
       >
         <KeyRound className="h-3.5 w-3.5" />
       </button>

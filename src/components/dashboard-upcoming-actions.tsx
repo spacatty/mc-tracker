@@ -49,14 +49,14 @@ export function DashboardUpcomingActions({
       <QuickLoginButton workspaceId={workspaceId} itemId={itemId} locale={locale} />
       <Tooltip label={tx(locale, "Quick edit", "Изменить")}>
         {/* Opens the entry in the Entries page inspector, the same editor used there. */}
-        <Link href={`/app/items?workspace=${workspaceId}&entry=${itemId}`} className={cn(iconActionClass, "hover:border-sky-400/30 hover:bg-sky-500/15")}>
+        <Link href={`/app/items?workspace=${workspaceId}&entry=${itemId}`} className={cn(iconActionClass, "border-sky-400/20 bg-sky-500/10 text-sky-200 hover:border-sky-300/35 hover:bg-sky-500/20")}>
           <Pencil className="h-3.5 w-3.5" />
         </Link>
       </Tooltip>
       <Dialog.Root open={open} onOpenChange={setOpen}>
         <Tooltip label={tx(locale, "Quick pay", "Оплатить")}>
           <Dialog.Trigger asChild>
-            <button type="button" className={cn(iconActionClass, "hover:border-emerald-400/30 hover:bg-emerald-500/15")}>
+            <button type="button" className={cn(iconActionClass, "border-emerald-400/20 bg-emerald-500/10 text-emerald-200 hover:border-emerald-300/35 hover:bg-emerald-500/20")}>
               <WalletCards className="h-3.5 w-3.5" />
             </button>
           </Dialog.Trigger>
