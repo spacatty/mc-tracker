@@ -100,7 +100,7 @@ function SidebarNavLink({
       title={collapsed ? item.label : undefined}
       className={sidebarRowClass(active, collapsed)}
     >
-      <AppIcon name={item.icon} className={cn("h-4 w-4 shrink-0 opacity-70 transition group-hover:opacity-100", item.accent, active && "opacity-100")} />
+      <AppIcon name={item.icon} className={cn("h-4 w-4 shrink-0 text-zinc-500 transition group-hover:text-zinc-200", item.accent, active && "text-zinc-100")} />
       {!collapsed ? <span className="truncate">{item.label}</span> : null}
     </Link>
   );
@@ -423,19 +423,22 @@ export function AppShell({
   const currentWorkspace = workspaces.find((workspace) => workspace.id === currentWorkspaceId) || workspaces[0];
   const workspaceCategories = items.filter((category) => category.workspaceId === currentWorkspace?.id);
   const primaryNav: SidebarNavItem[] = [
-    { href: "/app", label: t(locale, "dashboard"), icon: "LayoutDashboard", accent: "text-violet-300" },
-    { href: "/app/items", label: t(locale, "entries"), icon: "WalletCards", accent: "text-emerald-300" },
-    { href: "/app/invoices", label: t(locale, "invoices"), icon: "FileText", accent: "text-sky-300" },
-    { href: "/app/archive", label: t(locale, "archived"), icon: "Archive", accent: "text-zinc-300" },
-    { href: "/app/vendors", label: locale === "ru" ? "Поставщики" : "Vendors", icon: "Building2", accent: "text-sky-300" },
-    { href: "/app/accounts", label: locale === "ru" ? "Аккаунты" : "Accounts", icon: "KeyRound", accent: "text-violet-300" },
+    { href: "/app", label: t(locale, "dashboard"), icon: "LayoutDashboard", accent: "" },
+    { href: "/app/items", label: t(locale, "entries"), icon: "WalletCards", accent: "" },
+    { href: "/app/invoices", label: t(locale, "invoices"), icon: "FileText", accent: "" },
+    { href: "/app/archive", label: t(locale, "archived"), icon: "Archive", accent: "" },
   ];
+  const vaultNav: SidebarNavItem[] = [
+    { href: "/app/vendors", label: locale === "ru" ? "Поставщики" : "Vendors", icon: "Building2", accent: "" },
+    { href: "/app/accounts", label: locale === "ru" ? "Аккаунты" : "Accounts", icon: "KeyRound", accent: "" },
+  ];
+  const vaultTitle = locale === "ru" ? "Доступы" : "Vault";
   const workspaceNav: SidebarNavItem[] = [
-    { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "text-amber-300" },
+    { href: "/app/folders", label: t(locale, "shareAndSpace"), icon: "Share2", accent: "" },
   ];
   const extraNav: SidebarNavItem[] = [
-    { href: "/app/telegram", label: t(locale, "telegramRoutes"), icon: "MessageCircle", accent: "text-cyan-300" },
-    { href: "/app/import", label: t(locale, "importData"), icon: "FileUp", accent: "text-fuchsia-300" },
+    { href: "/app/telegram", label: t(locale, "telegramRoutes"), icon: "MessageCircle", accent: "" },
+    { href: "/app/import", label: t(locale, "importData"), icon: "FileUp", accent: "" },
   ];
   const workspaceItems = [...workspaceNav];
   const extraItems = [...extraNav];
@@ -510,10 +513,10 @@ export function AppShell({
         ...primaryNav,
         ...workspaceItems,
         ...extraItems,
-        { href: "/app/notifications", label: t(locale, "notifications"), icon: "Bell", accent: "text-zinc-300" },
-        { href: "/app/categories", label: t(locale, "manageCategories"), icon: "Tags", accent: "text-zinc-300" },
-        { href: "/app/settings", label: t(locale, "settings"), icon: "Settings", accent: "text-zinc-300" },
-        ...(user.role === "admin" || user.role === "superadmin" ? [{ href: "/app/admin", label: t(locale, "admin"), icon: "Shield", accent: "text-zinc-300" }] : []),
+        { href: "/app/notifications", label: t(locale, "notifications"), icon: "Bell", accent: "" },
+        { href: "/app/categories", label: t(locale, "manageCategories"), icon: "Tags", accent: "" },
+        { href: "/app/settings", label: t(locale, "settings"), icon: "Settings", accent: "" },
+        ...(user.role === "admin" || user.role === "superadmin" ? [{ href: "/app/admin", label: t(locale, "admin"), icon: "Shield", accent: "" }] : []),
       ]}
       workspaces={workspaces}
       categories={items}
@@ -568,6 +571,11 @@ export function AppShell({
               <SidebarSection title={t(locale, "main")} collapsed={false}>
                 {primaryNav.map((item) => (
                   <SidebarNavLink key={item.href} item={item} active={isActive(item.href) && !activeCategoryId} collapsed={false} workspaceId={currentWorkspace?.id} onClick={() => setMobileOpen(false)} />
+                ))}
+              </SidebarSection>
+              <SidebarSection title={vaultTitle} collapsed={false}>
+                {vaultNav.map((item) => (
+                  <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={false} workspaceId={currentWorkspace?.id} onClick={() => setMobileOpen(false)} />
                 ))}
               </SidebarSection>
               <SidebarSection title={t(locale, "workspaceTools")} collapsed={false}>
@@ -644,6 +652,12 @@ export function AppShell({
               ))}
             </SidebarSection>
 
+            <SidebarSection title={vaultTitle} collapsed={collapsed}>
+              {vaultNav.map((item) => (
+                <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} workspaceId={currentWorkspace?.id} />
+              ))}
+            </SidebarSection>
+
             <SidebarSection title={t(locale, "workspaceTools")} collapsed={collapsed}>
               {workspaceItems.map((item) => (
                 <SidebarNavLink key={item.href} item={item} active={isActive(item.href)} collapsed={collapsed} workspaceId={currentWorkspace?.id} />
@@ -660,7 +674,7 @@ export function AppShell({
                 className={sidebarRowClass(pathname === "/app/notifications", collapsed)}
               >
                 <span className="relative shrink-0">
-                  <Bell className="h-4 w-4 text-zinc-300 opacity-70 transition group-hover:opacity-100" />
+                  <Bell className="h-4 w-4 text-zinc-500 transition group-hover:text-zinc-200" />
                   {collapsed && unreadCount ? <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-400" /> : null}
                 </span>
                 {!collapsed ? <span className="flex-1 truncate">{t(locale, "notifications")}</span> : null}
