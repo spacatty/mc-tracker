@@ -70,6 +70,8 @@ export type PaymentItem = {
   accountId?: number | null;
   notes: string;
   customFields: Record<string, unknown>;
+  /** Server IP or domain from the category's IP/Domain field, when known. */
+  host?: string;
   ownerId: number | null;
   archivedAt: string | null;
   createdAt: string;
@@ -187,6 +189,9 @@ export type WebsiteNotification = {
   categoryId: number | null;
   createdAt: string;
   readAt: string | null;
+  /** Name and IP/domain of the linked entry, when it still exists. */
+  itemName?: string;
+  itemHost?: string;
 };
 
 export type VendorSuggestion = {

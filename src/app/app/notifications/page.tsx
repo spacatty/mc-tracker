@@ -1,30 +1,17 @@
-import Link from "next/link";
-import { Archive, Check, CheckCheck, Inbox, Trash2 } from "lucide-react";
+import { Archive, CheckCheck, Inbox, Trash2 } from "lucide-react";
 import {
   deleteAllNotificationsAction,
-  deleteNotificationAction,
   deleteReadNotificationsAction,
   markAllNotificationsReadAction,
-  markNotificationReadAction,
 } from "@/app/actions";
+import { NotificationsList } from "@/components/notifications-list";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page-header";
 import { Surface } from "@/components/ui/surface";
 import { requireUser } from "@/lib/auth";
 import { listWebsiteNotificationsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
-import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
-import type { WebsiteNotification } from "@/lib/types";
-
-function formatTimestamp(value: string) {
-  return new Date(value).toLocaleString(undefined, {
-    day: "2-digit",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
 
 function CleanupForm({
   action,
@@ -40,54 +27,6 @@ function CleanupForm({
       <input type="hidden" name="workspaceId" value={workspaceId} />
       {children}
     </form>
-  );
-}
-
-function NotificationRow({ notification, workspaceId, locale }: { notification: WebsiteNotification; workspaceId: number; locale: Locale }) {
-  const href = notification.itemId ? `/app/items/${notification.itemId}?workspace=${workspaceId}` : null;
-  const unread = !notification.readAt;
-  const title = <span className={unread ? "font-medium text-zinc-100" : "text-zinc-400"}>{notification.title}</span>;
-  return (
-    <li className="group flex items-center gap-3 px-5 py-2.5 transition hover:bg-white/[0.02]">
-      <span className={unread ? "h-1.5 w-1.5 shrink-0 rounded-full bg-violet-400" : "h-1.5 w-1.5 shrink-0 rounded-full bg-white/10"} aria-hidden="true" />
-      <div className="min-w-0 flex-1 text-[13px] leading-5">
-        <p className="truncate">
-          {href ? <Link href={href} className="hover:underline hover:decoration-white/30 hover:underline-offset-4">{title}</Link> : title}
-          {notification.body ? <span className="text-zinc-500"> · {notification.body}</span> : null}
-        </p>
-      </div>
-      <time dateTime={notification.createdAt} className="shrink-0 text-[11px] tabular-nums text-zinc-600">{formatTimestamp(notification.createdAt)}</time>
-      <div className="flex w-[58px] shrink-0 items-center justify-end gap-0.5 opacity-100 transition md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100">
-        {unread ? (
-          <form action={markNotificationReadAction}>
-            <input type="hidden" name="id" value={notification.id} />
-            <input type="hidden" name="workspaceId" value={workspaceId} />
-            <button type="submit" title={t(locale, "resolve")} aria-label={`${t(locale, "resolve")}: ${notification.title}`} className="grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-100">
-              <Check className="h-3.5 w-3.5" />
-            </button>
-          </form>
-        ) : null}
-        <form action={deleteNotificationAction}>
-          <input type="hidden" name="id" value={notification.id} />
-          <input type="hidden" name="workspaceId" value={workspaceId} />
-          <button type="submit" title={t(locale, "remove")} aria-label={`${t(locale, "remove")}: ${notification.title}`} className="grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-red-500/10 hover:text-red-200">
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
-        </form>
-      </div>
-    </li>
-  );
-}
-
-function NotificationGroup({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
-  return (
-    <section>
-      <h2 className="flex items-center gap-2 border-b border-white/[0.06] bg-white/[0.015] px-5 py-2 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
-        {title}
-        <span className="tabular-nums text-zinc-600">{count}</span>
-      </h2>
-      <ul className="divide-y divide-white/[0.04]">{children}</ul>
-    </section>
   );
 }
 
@@ -143,25 +82,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
         </Surface>
       ) : (
         <Surface className="overflow-hidden">
-          {unreadNotifications.length ? (
-            <NotificationGroup title={t(locale, "needsAction")} count={unreadNotifications.length}>
-              {unreadNotifications.map((notification) => (
-                <NotificationRow key={notification.id} notification={notification} workspaceId={workspace.id} locale={locale} />
-              ))}
-            </NotificationGroup>
-          ) : (
-            <p className="flex items-center gap-2 border-b border-white/[0.06] px-5 py-3 text-[13px] text-zinc-400">
-              <CheckCheck className="h-4 w-4 text-emerald-300/80" />
-              {t(locale, "allCaughtUp")}
-            </p>
-          )}
-          {readNotifications.length ? (
-            <NotificationGroup title={t(locale, "readArchive")} count={readNotifications.length}>
-              {readNotifications.map((notification) => (
-                <NotificationRow key={notification.id} notification={notification} workspaceId={workspace.id} locale={locale} />
-              ))}
-            </NotificationGroup>
-          ) : null}
+          <NotificationsList notifications={notifications} workspaceId={workspace.id} locale={locale} />
         </Surface>
       )}
     </div>

@@ -6,6 +6,7 @@ import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { PaymentItem } from "@/lib/types";
 import { displayDate, formatMoney, periodLabel } from "@/lib/utils";
+import { titleWithHost } from "@/lib/item-host";
 import { AppIcon } from "./icons";
 import { DashboardUpcomingActions } from "./dashboard-upcoming-actions";
 import { Badge } from "./ui/badge";
@@ -53,6 +54,17 @@ function billingLabel(item: UpcomingItem, locale: Locale) {
   return label;
 }
 
+/** Entry name with its server IP or domain muted after it, e.g. "Main Offer (sample.com)". */
+function ItemTitle({ item }: { item: UpcomingItem }) {
+  const full = titleWithHost(item.name, item.host);
+  if (full === item.name) return <>{item.name}</>;
+  return (
+    <>
+      {item.name} <span className="font-normal text-zinc-400">({item.host})</span>
+    </>
+  );
+}
+
 function DetailValue({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div className="min-w-0">
@@ -89,7 +101,7 @@ export function DashboardUpcomingTable({
       if (whenFilter === "overdue" && item.daysUntilPayment >= 0) return false;
       if (whenFilter === "week" && (item.daysUntilPayment < 0 || item.daysUntilPayment > 7)) return false;
       if (!needle) return true;
-      return [item.name, item.vendorName, item.accountName, item.categoryName, item.vendorUrl].some((value) => String(value || "").toLowerCase().includes(needle));
+      return [titleWithHost(item.name, item.host), item.host, item.vendorName, item.accountName, item.categoryName, item.vendorUrl].some((value) => String(value || "").toLowerCase().includes(needle));
     });
   }, [categoryFilter, items, query, whenFilter]);
   const filtering = Boolean(query.trim()) || categoryFilter !== "all" || whenFilter !== "all";
@@ -155,7 +167,7 @@ export function DashboardUpcomingTable({
           <Input
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            placeholder={tx(locale, "Search name, vendor, account…", "Поиск по названию, вендору, аккаунту…")}
+            placeholder={tx(locale, "Search name, IP, domain, vendor…", "Поиск по названию, IP, домену, вендору…")}
             aria-label={tx(locale, "Search upcoming payments", "Поиск по ближайшим платежам")}
             className="h-8 pl-8 text-[13px]"
           />
@@ -178,10 +190,10 @@ export function DashboardUpcomingTable({
               <div className="flex items-start gap-2">
                 {disclosure(item)}
                 <div className="min-w-0 flex-1">
-                  <h3 className="truncate font-semibold text-foreground">{item.name}</h3>
+                  <h3 className="truncate font-semibold text-foreground" title={titleWithHost(item.name, item.host)}><ItemTitle item={item} /></h3>
                   <p className="mt-1 text-xs text-muted-foreground">{item.vendorName || "—"} · {item.accountName || "—"}</p>
                 </div>
-                <DashboardUpcomingActions workspaceId={item.workspaceId || workspaceId} itemId={item.id} itemName={item.name} amountLabel={formatMoney(item.amount, item.currency)} locale={locale} />
+                <DashboardUpcomingActions workspaceId={item.workspaceId || workspaceId} itemId={item.id} itemName={titleWithHost(item.name, item.host)} amountLabel={formatMoney(item.amount, item.currency)} locale={locale} />
               </div>
               <div className="mt-3 flex items-end justify-between gap-3 pl-8">
                 <div>
@@ -220,7 +232,7 @@ export function DashboardUpcomingTable({
               <Fragment key={item.id}>
                 <TableRow className="group">
                   <TableCell className="w-12 px-0 py-2 text-center first:pl-0">{disclosure(item)}</TableCell>
-                  <TableCell className="font-medium text-white">{item.name}</TableCell>
+                  <TableCell className="font-medium text-white"><ItemTitle item={item} /></TableCell>
                   <TableCell className="whitespace-nowrap text-center text-zinc-300">
                     {relativeDays(item.daysUntilPayment, locale)} <span className="text-zinc-500">({displayDate(item.nextPaymentAt)})</span>
                   </TableCell>
@@ -246,7 +258,7 @@ export function DashboardUpcomingTable({
                     <DashboardUpcomingActions
                       workspaceId={item.workspaceId || workspaceId}
                       itemId={item.id}
-                      itemName={item.name}
+                      itemName={titleWithHost(item.name, item.host)}
                       amountLabel={formatMoney(item.amount, item.currency)}
                       locale={locale}
                     />

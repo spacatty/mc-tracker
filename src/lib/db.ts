@@ -28,6 +28,7 @@ import type {
 } from "./types";
 import { ensureSupportedCurrency } from "./currencies";
 import { addBillingPeriod, normalizeMonthlyAmount, nowIso, slugify } from "./utils";
+import { itemHost, titleWithHost } from "./item-host";
 import {
   buildEntrySignature,
   categoryKey,
@@ -202,7 +203,19 @@ function mapWebsiteNotification(row: DbRow): WebsiteNotification {
     categoryId: row.category_id === null ? null : Number(row.category_id),
     createdAt: String(row.created_at),
     readAt: row.read_at ? String(row.read_at) : null,
+    itemName: row.item_name ? String(row.item_name) : undefined,
+    itemHost: row.item_name
+      ? itemHost(parseJson<Record<string, unknown>>(row.item_custom_fields_json, {}), parseJson<CategoryField[]>(row.item_category_fields_json, [])) || undefined
+      : undefined,
   };
+}
+
+/** IP or domain of an entry, read from its category's IP/Domain field. */
+function hostForItem(item: Pick<PaymentItem, "categoryId" | "customFields">) {
+  const row = item.categoryId
+    ? (getDb().prepare("SELECT fields_json FROM categories WHERE id = ?").get(item.categoryId) as DbRow | undefined)
+    : undefined;
+  return itemHost(item.customFields, parseJson<CategoryField[]>(row?.fields_json, []));
 }
 
 function mapInvoice(row: DbRow): Invoice {
@@ -2371,9 +2384,9 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
       if (daysUntilPayment > 14) return null;
-      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment };
+      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item) };
     })
-    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number } => Boolean(item))
+    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string } => Boolean(item))
     .sort((a, b) => a.nextPaymentAt.localeCompare(b.nextPaymentAt));
 
   const dueMap = new Map<
@@ -2509,9 +2522,9 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
       if (daysUntilPayment > 14) return null;
-      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment };
+      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item) };
     })
-    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number } => Boolean(item))
+    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string } => Boolean(item))
     .sort((a, b) => a.nextPaymentAt.localeCompare(b.nextPaymentAt));
 
   const dueMap = new Map<
@@ -2641,9 +2654,9 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
       if (daysUntilPayment > 14) return null;
-      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment };
+      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item) };
     })
-    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number } => Boolean(item))
+    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string } => Boolean(item))
     .sort((a, b) => a.nextPaymentAt.localeCompare(b.nextPaymentAt));
 
   const dueMap = new Map<
@@ -3219,9 +3232,11 @@ export function listWebsiteNotificationsForWorkspace(workspaceId: number, userId
   requireWorkspaceViewer(workspaceId, userId);
   return (getDb()
     .prepare(
-      `SELECT notifications.*
+      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json
        FROM notifications
-       WHERE workspace_id = ?
+       LEFT JOIN items ON items.id = notifications.item_id
+       LEFT JOIN categories ON categories.id = items.category_id
+       WHERE notifications.workspace_id = ?
        ORDER BY notifications.created_at DESC
        LIMIT ?`,
     )
@@ -3240,9 +3255,11 @@ export function unreadWebsiteNotificationsForWorkspace(workspaceId: number, user
   requireWorkspaceViewer(workspaceId, userId);
   return (getDb()
     .prepare(
-      `SELECT notifications.*
+      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json
        FROM notifications
-       WHERE workspace_id = ? AND read_at IS NULL
+       LEFT JOIN items ON items.id = notifications.item_id
+       LEFT JOIN categories ON categories.id = items.category_id
+       WHERE notifications.workspace_id = ? AND notifications.read_at IS NULL
        ORDER BY notifications.created_at DESC
        LIMIT ?`,
     )
@@ -3450,11 +3467,12 @@ export async function runNotificationCron() {
       continue;
     }
 
+    const itemTitle = titleWithHost(item.name, hostForItem(item));
     const title = isOverdue
-        ? `Hey dude, ${item.name} is missing payment`
+        ? `Hey dude, ${itemTitle} is missing payment`
         : isDueToday
-          ? `${item.name} payment is due today`
-          : `${item.name} payment is due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
+          ? `${itemTitle} payment is due today`
+          : `${itemTitle} payment is due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
     const body = `${item.name} (${item.categoryName || "category"}) is due on ${target.toLocaleDateString("en-GB")}. Amount: ${item.amount} ${item.currency}.`;
 
     if (channel.type === "website") {
@@ -3474,7 +3492,7 @@ export async function runNotificationCron() {
           : `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
       const telegramMessage = [
         "🔔 <b>Payment reminder</b>",
-        `<b>${telegramValue(item.name)}</b> <i>(${telegramValue(item.categoryName || "category")})</i>`,
+        `<b>${telegramValue(itemTitle)}</b> <i>(${telegramValue(item.categoryName || "category")})</i>`,
         "",
         `📅 <b>Status:</b> ${escapeHtml(dueLabel)}`,
         `🗓 <b>Due date:</b> ${escapeHtml(target.toLocaleDateString("en-GB"))}`,
