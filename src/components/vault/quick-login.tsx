@@ -87,7 +87,12 @@ export function QuickLoginDialog({
   );
 }
 
-function QuickLoginBody({ workspaceId, itemId, locale }: { workspaceId: number; itemId: number; locale: Locale }) {
+/** The credentials part of Quick login on its own, for the entry drawer (which shows the vendor and URL itself). */
+export function EntryCredentials({ workspaceId, itemId, locale }: { workspaceId: number; itemId: number; locale: Locale }) {
+  return <QuickLoginBody workspaceId={workspaceId} itemId={itemId} locale={locale} embedded />;
+}
+
+function QuickLoginBody({ workspaceId, itemId, locale, embedded = false }: { workspaceId: number; itemId: number; locale: Locale; embedded?: boolean }) {
   const router = useRouter();
   const [info, setInfo] = useState<QuickLoginInfo | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -140,7 +145,7 @@ function QuickLoginBody({ workspaceId, itemId, locale }: { workspaceId: number; 
   }
 
   const footer =
-        info ? (
+        info && !embedded ? (
           <div className="-mx-5 -mb-4 mt-5 flex items-center gap-2 border-t border-white/[0.06] px-5 py-3">
             <Link
               href={`/app/accounts?workspace=${workspaceId}`}
@@ -153,14 +158,14 @@ function QuickLoginBody({ workspaceId, itemId, locale }: { workspaceId: number; 
 
   return (
     <>
-      {info ? <p className="-mt-1 mb-4 truncate text-xs text-zinc-500">{[info.itemName, info.vendorName, account?.name].filter(Boolean).join(" · ")}</p> : null}
+      {info && !embedded ? <p className="-mt-1 mb-4 truncate text-xs text-zinc-500">{[info.itemName, info.vendorName, account?.name].filter(Boolean).join(" · ")}</p> : null}
       {loadError ? <p className="text-sm text-red-300">{loadError}</p> : null}
       {!info && !loadError ? (
         <div className="flex h-24 items-center justify-center text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /></div>
       ) : null}
       {info ? (
         <div className="space-y-4">
-          <div>
+          <div hidden={embedded}>
             <FieldLabel>{tx(locale, "Login page", "Страница входа")}</FieldLabel>
             {info.url ? (
               <div className="flex items-center gap-2">

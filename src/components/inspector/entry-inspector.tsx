@@ -12,15 +12,17 @@ import {
   CopyPlus,
   History,
   Loader2,
+  MoreHorizontal,
   Terminal,
   Trash2,
   X,
   KeyRound,
 } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { toast } from "sonner";
-import { QuickLoginDialog } from "../vault/quick-login";
+import { EntryCredentials, QuickLoginDialog } from "../vault/quick-login";
 import {
   archiveItemAction,
   deleteItemAction,
@@ -48,6 +50,7 @@ import {
   urgencyTone,
 } from "../capture/shared";
 import { AppIcon } from "../icons";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 
 type HistoryRow = Awaited<ReturnType<typeof getEntryHistoryAction>>[number];
@@ -302,11 +305,15 @@ export function EntryInspector({
     });
   }
 
+  function duplicate() {
+    openCapture({ text: rowToLine({ ...rowFromEntry(entryRef(entry)), name: `${entry.name} copy` }, { categories, defaultCategoryId: null }) });
+  }
+
+  function editAsText() {
+    openCapture({ text: rowToLine({ ...rowFromEntry(entryRef(entry)), action: "edit", targetItemId: entry.id }, { categories, defaultCategoryId: null }) });
+  }
+
   function remove() {
-    if (!confirmDelete) {
-      setConfirmDelete(true);
-      return;
-    }
     startActing(async () => {
       await deleteItemAction(itemForm());
       onClose();
@@ -372,7 +379,7 @@ export function EntryInspector({
             // Clicking another row in the table switches entries instead of closing.
             if (target?.closest("[data-entry-row]") || target?.closest("[data-radix-popper-content-wrapper]") || target?.closest("[data-sonner-toaster]")) event.preventDefault();
           }}
-          className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[460px] flex-col border-l border-white/10 bg-[#101013]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
+          className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[680px] flex-col border-l border-white/10 bg-[#101013]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
         >
 
           {/* Top bar */}
@@ -384,6 +391,24 @@ export function EntryInspector({
             <span className="ml-auto flex items-center gap-1.5 text-xs text-zinc-500">
               {isSaving ? <><Loader2 className="h-3.5 w-3.5 animate-spin" />{tx(locale, "Saving", "Сохранение")}</> : savedTick ? <span key={savedTick} className="saved-pop flex items-center gap-1 text-emerald-300"><Check className="h-3.5 w-3.5" />{tx(locale, "Saved", "Сохранено")}</span> : null}
             </span>
+            {editable ? (
+              <DropdownMenu modal={false}>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" className="ml-1 rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200 data-[state=open]:bg-white/[0.06] data-[state=open]:text-zinc-200" aria-label={tx(locale, "More actions", "Другие действия")}>
+                    <MoreHorizontal className="h-4 w-4" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="min-w-52 bg-[#18181c]">
+                  <DropdownMenuItem className="gap-2.5" onSelect={duplicate}><CopyPlus className="h-3.5 w-3.5 text-zinc-500" />{tx(locale, "Duplicate", "Дублировать")}</DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2.5" onSelect={editAsText}><Terminal className="h-3.5 w-3.5 text-zinc-500" />{tx(locale, "Edit as text", "Изменить как текст")}</DropdownMenuItem>
+                  <DropdownMenuItem className="gap-2.5" disabled={isActing} onSelect={archive}><Archive className="h-3.5 w-3.5 text-zinc-500" />{tx(locale, "Archive", "В архив")}</DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem className="gap-2.5 text-red-300 data-[highlighted]:bg-red-500/10 data-[highlighted]:text-red-200" disabled={isActing} onSelect={() => setConfirmDelete(true)}>
+                    <Trash2 className="h-3.5 w-3.5" />{tx(locale, "Delete…", "Удалить…")}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             <Dialog.Close className="ml-1 rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Close", "Закрыть")}><X className="h-4 w-4" /></Dialog.Close>
           </div>
 
@@ -471,42 +496,24 @@ export function EntryInspector({
 
             {/* Actions */}
             {editable ? (
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                <ActionButton onClick={markPaid} disabled={isActing} tone="emerald" icon={<CircleCheckBig className="h-4 w-4" />}>{tx(locale, "Mark paid", "Оплачено")}</ActionButton>
-                <ActionButton onClick={() => setQuickLoginOpen(true)} icon={<KeyRound className="h-4 w-4" />}>{tx(locale, "Quick login", "Быстрый вход")}</ActionButton>
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <ActionButton onClick={markPaid} disabled={isActing} tone="primary" icon={isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheckBig className="h-4 w-4" />}>{tx(locale, "Mark paid", "Отметить оплату")}</ActionButton>
+                <ActionButton onClick={() => setQuickLoginOpen(true)} icon={<KeyRound className="h-4 w-4 text-violet-300" />}>{tx(locale, "Quick login", "Быстрый вход")}</ActionButton>
                 <QuickLoginDialog open={quickLoginOpen} onOpenChange={setQuickLoginOpen} workspaceId={workspaceId} itemId={item.id} locale={locale} />
-                <ActionButton onClick={() => openCapture({ text: rowToLine({ ...rowFromEntry(entryRef(entry)), name: `${entry.name} copy` }, { categories, defaultCategoryId: null }) })} icon={<CopyPlus className="h-4 w-4" />}>{tx(locale, "Duplicate", "Дублировать")}</ActionButton>
-                <ActionButton onClick={() => openCapture({ text: rowToLine({ ...rowFromEntry(entryRef(entry)), action: "edit", targetItemId: entry.id }, { categories, defaultCategoryId: null }) })} icon={<Terminal className="h-4 w-4" />}>{tx(locale, "Edit as text", "Как текст")}</ActionButton>
-                <ActionButton onClick={archive} disabled={isActing} icon={<Archive className="h-4 w-4" />}>{tx(locale, "Archive", "В архив")}</ActionButton>
-                <ActionButton onClick={remove} disabled={isActing} tone={confirmDelete ? "red" : "default"} icon={<Trash2 className="h-4 w-4" />}>{confirmDelete ? tx(locale, "Click to confirm", "Точно удалить?") : tx(locale, "Delete", "Удалить")}</ActionButton>
+              </div>
+            ) : null}
+            {confirmDelete ? (
+              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-400/25 bg-red-500/[0.07] px-3 py-2.5">
+                <p className="mr-auto text-sm text-red-100">{tx(locale, `Delete “${entry.name}” and its payment history? This can’t be undone.`, `Удалить «${entry.name}» вместе с историей платежей? Это необратимо.`)}</p>
+                <button type="button" onClick={() => setConfirmDelete(false)} className="h-8 rounded-md px-3 text-xs font-medium text-zinc-300 transition hover:bg-white/[0.06]">{tx(locale, "Cancel", "Отмена")}</button>
+                <button type="button" onClick={remove} disabled={isActing} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-red-600 px-3 text-xs font-semibold text-white transition hover:bg-red-500 disabled:opacity-50">
+                  {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}{tx(locale, "Delete", "Удалить")}
+                </button>
               </div>
             ) : null}
 
-            {/* Properties */}
-            <Section title={tx(locale, "Properties", "Свойства")}>
-              <PropertyRow label={tx(locale, "Vendor", "Поставщик")} editable={editable} locale={locale} editor={(close) => (
-                <>
-                  <CommitInput value={entry.vendorName} list="inspector-vendors" onCommit={(vendorName) => { const known = vendorSuggestions.find((vendor) => vendor.vendorName === vendorName); save({ vendorName, vendorUrl: entry.vendorUrl || known?.vendorUrl || "" }); close(); }} onCancel={close} />
-                  <datalist id="inspector-vendors">{vendorNames.map((name) => <option key={name} value={name} />)}</datalist>
-                </>
-              )}>
-                {entry.vendorName || empty}
-              </PropertyRow>
-              <PropertyRow label={tx(locale, "Account", "Аккаунт")} editable={editable} locale={locale} copyValue={entry.accountName || undefined} editor={(close) => (
-                <CommitInput value={entry.accountName} onCommit={(accountName) => { save({ accountName }); close(); }} onCancel={close} />
-              )}>
-                {entry.accountName || empty}
-              </PropertyRow>
-              <PropertyRow label={tx(locale, "Panel URL", "Ссылка")} editable={editable} locale={locale} editor={(close) => (
-                <CommitInput type="url" value={entry.vendorUrl} placeholder="https://" onCommit={(vendorUrl) => { save({ vendorUrl }); close(); }} onCancel={close} />
-              )}>
-                {entry.vendorUrl ? (
-                  <span className="inline-flex max-w-full items-center gap-1 text-sky-300">
-                    <span className="truncate">{entry.vendorUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
-                    <a href={entry.vendorUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="shrink-0 rounded p-0.5 hover:bg-sky-500/15"><ArrowUpRight className="h-3.5 w-3.5" /></a>
-                  </span>
-                ) : empty}
-              </PropertyRow>
+            {/* Billing */}
+            <Section title={tx(locale, "Billing", "Оплата")}>
               <PropertyRow label={tx(locale, "Billing", "Оплата")} editable={editable} locale={locale} editor={(close) => (
                 <InlinePeriod value={periodValue} locale={locale} onSave={(next) => {
                   save({
@@ -532,6 +539,51 @@ export function EntryInspector({
                   {end ? <>{shortDate(end, locale, true)} <span className={cn("ml-1 text-xs", urgencyTone(daysLeft))}>{daysLeft !== null ? relativeDays(daysLeft, locale) : ""}</span></> : empty}
                 </PropertyRow>
               ) : null}
+            </Section>
+
+            {/* Vendor and account: the same records as on the Vendors and Accounts pages */}
+            <Section title={tx(locale, "Vendor & account", "Поставщик и аккаунт")}>
+              <PropertyRow label={tx(locale, "Vendor", "Поставщик")} editable={editable} locale={locale} editor={(close) => (
+                <>
+                  <CommitInput value={entry.vendorName} list="inspector-vendors" onCommit={(vendorName) => { const known = vendorSuggestions.find((vendor) => vendor.vendorName === vendorName); save({ vendorName, vendorUrl: entry.vendorUrl || known?.vendorUrl || "" }); close(); }} onCancel={close} />
+                  <datalist id="inspector-vendors">{vendorNames.map((name) => <option key={name} value={name} />)}</datalist>
+                </>
+              )}>
+                {entry.vendorName ? (
+                  <span className="inline-flex max-w-full items-center gap-1.5">
+                    <span className="truncate">{entry.vendorName}</span>
+                    {entry.vendorId ? (
+                      <Link href={`/app/vendors?workspace=${workspaceId}`} onClick={(event) => event.stopPropagation()} className="shrink-0 rounded px-1 text-[11px] text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200">
+                        {tx(locale, "Vendors", "Поставщики")}
+                      </Link>
+                    ) : null}
+                  </span>
+                ) : empty}
+              </PropertyRow>
+              <PropertyRow label={tx(locale, "Account", "Аккаунт")} editable={editable} locale={locale} copyValue={entry.accountName || undefined} editor={(close) => (
+                <CommitInput value={entry.accountName} onCommit={(accountName) => { save({ accountName }); close(); }} onCancel={close} />
+              )}>
+                {entry.accountName || empty}
+              </PropertyRow>
+              <PropertyRow label={tx(locale, "Login URL", "Ссылка входа")} editable={editable} locale={locale} editor={(close) => (
+                <CommitInput type="url" value={entry.vendorUrl} placeholder="https://" onCommit={(vendorUrl) => { save({ vendorUrl }); close(); }} onCancel={close} />
+              )}>
+                {entry.vendorUrl ? (
+                  <span className="inline-flex max-w-full items-center gap-1 text-sky-300">
+                    <span className="truncate">{entry.vendorUrl.replace(/^https?:\/\//, "").replace(/\/$/, "")}</span>
+                    <a href={entry.vendorUrl} target="_blank" rel="noreferrer" onClick={(event) => event.stopPropagation()} className="shrink-0 rounded p-0.5 hover:bg-sky-500/15"><ArrowUpRight className="h-3.5 w-3.5" /></a>
+                  </span>
+                ) : empty}
+              </PropertyRow>
+              {entry.accountName ? (
+                <div className="mt-3 px-2">
+                  <EntryCredentials key={`${entry.id}:${item.updatedAt}`} workspaceId={workspaceId} itemId={entry.id} locale={locale} />
+                </div>
+              ) : null}
+            </Section>
+
+            {/* Item details */}
+            <Section title={tx(locale, "Item details", "О записи")}>
               {category?.fields.map((field) => (
                 <PropertyRow
                   key={field.id}
@@ -544,6 +596,9 @@ export function EntryInspector({
                   {fieldDisplay(field)}
                 </PropertyRow>
               ))}
+              <PropertyRow label={tx(locale, "Created", "Создана")} editable={false} locale={locale}>{shortDate(entry.createdAt.slice(0, 10), locale, true)}</PropertyRow>
+              <PropertyRow label={tx(locale, "Last changed", "Изменена")} editable={false} locale={locale}>{shortDate(entry.updatedAt.slice(0, 10), locale, true)}</PropertyRow>
+              <PropertyRow label="ID" editable={false} locale={locale} copyValue={String(entry.id)}><span className="font-mono text-xs text-zinc-400">#{entry.id}</span></PropertyRow>
             </Section>
 
             {/* Notes */}
@@ -605,17 +660,16 @@ function Section({ title, children, icon }: { title: string; children: ReactNode
   );
 }
 
-function ActionButton({ children, icon, onClick, disabled, tone = "default" }: { children: ReactNode; icon: ReactNode; onClick: () => void; disabled?: boolean; tone?: "default" | "emerald" | "red" }) {
+function ActionButton({ children, icon, onClick, disabled, tone = "default" }: { children: ReactNode; icon: ReactNode; onClick: () => void; disabled?: boolean; tone?: "default" | "primary" }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        "inline-flex h-8 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition active:scale-[0.97] disabled:opacity-50",
-        tone === "emerald" && "border-emerald-400/25 bg-emerald-500/10 text-emerald-100 hover:bg-emerald-500/20",
-        tone === "red" && "border-red-400/40 bg-red-500/15 text-red-100 hover:bg-red-500/25",
-        tone === "default" && "border-white/10 bg-white/[0.03] text-zinc-300 hover:bg-white/[0.07] hover:text-white",
+        "inline-flex h-9 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-medium transition active:scale-[0.97] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/50",
+        tone === "primary" && "border-emerald-400/30 bg-emerald-500/20 text-emerald-50 hover:border-emerald-300/45 hover:bg-emerald-500/30",
+        tone === "default" && "border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] hover:text-white",
       )}
     >
       {icon}
