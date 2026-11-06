@@ -141,7 +141,7 @@ function PropertyRow({
 }) {
   const [editing, setEditing] = useState(false);
   return (
-    <div className="group grid min-h-10 grid-cols-[8.5rem_1fr] items-center gap-2 rounded-lg px-2 transition hover:bg-white/[0.03]">
+    <div className="group grid min-h-10 grid-cols-[7rem_1fr] items-center gap-2 rounded-lg px-2 transition hover:bg-white/[0.03] sm:grid-cols-[8.5rem_1fr]">
       <span className="truncate text-[13px] text-zinc-500">{label}</span>
       <div className="flex min-w-0 items-center gap-1">
         {editing && editor ? (
@@ -536,7 +536,7 @@ export function EntryInspector({
                 <PropertyRow label={tx(locale, "Renews on", "Продление")} editable={editable} locale={locale} editor={(close) => (
                   <CommitInput type="date" selectOnFocus={false} value={end || ""} onCommit={(value) => { save({ billingEndAt: value || null }); close(); }} onCancel={close} />
                 )}>
-                  {end ? <>{shortDate(end, locale, true)} <span className={cn("ml-1 text-xs", urgencyTone(daysLeft))}>{daysLeft !== null ? relativeDays(daysLeft, locale) : ""}</span></> : empty}
+                  {end ? <>{shortDate(end, locale, true)} <span className={cn("ml-1 hidden text-xs sm:inline", urgencyTone(daysLeft))}>{daysLeft !== null ? relativeDays(daysLeft, locale) : ""}</span></> : empty}
                 </PropertyRow>
               ) : null}
             </Section>
