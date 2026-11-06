@@ -45,6 +45,7 @@ import type {
 } from "@/lib/types";
 import { QuickLoginButton } from "./vault/quick-login";
 import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
+import { itemHost } from "@/lib/item-host";
 import { TableStyleSelect } from "./table-style";
 import { AppIcon } from "./icons";
 import { Badge } from "./ui/badge";
@@ -65,6 +66,12 @@ const PERIODS: BillingPeriod[] = ["7d", "1m", "3m", "1y", "custom"];
 
 function tx(locale: Locale, en: string, ru: string) {
   return locale === "ru" ? ru : en;
+}
+
+/** The entry's server IP or domain as a small grey tag after its name; nothing when the name already holds it. */
+function HostTag({ name, host }: { name: string; host: string }) {
+  if (!host || name.toLowerCase().includes(host.toLowerCase())) return null;
+  return <span className="ml-1.5 inline-block max-w-40 truncate rounded bg-white/[0.05] px-1.5 align-middle font-mono text-[11px] font-normal leading-[18px] text-zinc-400">{host}</span>;
 }
 
 function fuzzyMatch(value: string, query: string) {
@@ -435,7 +442,7 @@ export function EntriesTable({
         const searchable = `${row.name} ${row.vendorName || ""} ${row.vendorUrl || ""} ${row.accountName || ""} ${category?.name || ""} ${Object.values(row.customFields || {}).join(" ")}`;
         return fuzzyMatch(searchable, query);
       })
-      .filter((row) => fuzzyMatch(row.name, nameFilter))
+      .filter((row) => fuzzyMatch(`${row.name} ${itemHost(row.customFields, categories.find((candidate) => candidate.id === row.categoryId)?.fields)}`, nameFilter))
       .filter((row) => fuzzyMatch(row.accountName || "", accountFilter))
       .filter((row) => fuzzyMatch(`${row.vendorName || ""} ${row.vendorUrl || ""}`, vendorFilter))
       .sort((a, b) => {
@@ -1088,7 +1095,7 @@ export function EntriesTable({
                     ) : (
                       <>
                         <td className="sticky left-14 z-20 min-w-56 bg-surface px-3 group-hover:bg-surface-raised">
-                          <p className="font-semibold text-foreground">{row.name}</p>
+                          <p className="font-semibold text-foreground">{row.name}<HostTag name={row.name} host={itemHost(row.customFields, category?.fields)} /></p>
                           {row.notes ? <p className="mt-1 max-w-64 truncate text-xs text-subtle-foreground">{row.notes.replace(/<[^>]+>/g, "")}</p> : null}
                         </td>
                         {visibleFields.map((field) => <td key={field.id} className={cn("px-3 text-muted-foreground", field.bold && "font-semibold text-foreground")} style={{ color: field.color || undefined }}>{field.type === "checkbox" ? (row.customFields?.[field.id] ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет")) : String(row.customFields?.[field.id] ?? "—")}</td>)}
@@ -1199,7 +1206,7 @@ export function EntriesTable({
               <div className="flex items-start justify-between gap-3 border-b border-border p-3">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="truncate font-semibold text-foreground">{row.name || tx(locale, "Untitled row", "Строка без названия")}</h3>
+                    <h3 className="truncate font-semibold text-foreground">{row.name || tx(locale, "Untitled row", "Строка без названия")}{!editMode ? <HostTag name={row.name} host={itemHost(row.customFields, category?.fields)} /> : null}</h3>
                     {!row.id ? <Badge>{tx(locale, "New", "Новая")}</Badge> : dirtyKeys.has(row.rowKey) ? <Badge>{tx(locale, "Changed", "Изменена")}</Badge> : null}
                     {rowHasError(row.rowKey) ? <Badge variant="destructive">{tx(locale, "Error", "Ошибка")}</Badge> : null}
                   </div>
