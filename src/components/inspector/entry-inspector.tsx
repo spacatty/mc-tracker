@@ -141,32 +141,34 @@ function PropertyRow({
 }) {
   const [editing, setEditing] = useState(false);
   return (
-    <div className="group min-w-0 rounded-lg px-2.5 py-2 transition hover:bg-white/[0.03]">
-      <div className="flex min-h-5 items-center gap-1">
-        <span className="truncate text-[11.5px] text-zinc-500">{label}</span>
-        {copyValue && !editing ? (
-          <button
-            type="button"
-            onClick={() => { void navigator.clipboard.writeText(copyValue); toast(tx(locale, "Copied", "Скопировано")); }}
-            className="ml-auto rounded p-0.5 text-zinc-600 opacity-0 transition hover:bg-white/[0.06] hover:text-zinc-200 focus-visible:opacity-100 group-hover:opacity-100"
-            aria-label={tx(locale, "Copy", "Копировать")}
-          >
-            <Copy className="h-3 w-3" />
-          </button>
-        ) : null}
+    <div className="group grid min-h-10 grid-cols-[8.5rem_1fr] items-center gap-2 rounded-lg px-2 transition hover:bg-white/[0.03]">
+      <span className="truncate text-[13px] text-zinc-500">{label}</span>
+      <div className="flex min-w-0 items-center gap-1">
+        {editing && editor ? (
+          <div className="w-full py-1">{editor(() => setEditing(false))}</div>
+        ) : (
+          <>
+            <button
+              type="button"
+              disabled={!editable || !editor}
+              onClick={() => setEditing(true)}
+              className={cn("min-w-0 flex-1 truncate rounded-md px-1.5 py-1 text-left text-sm text-zinc-100 transition", editable && editor && "hover:bg-white/[0.06]")}
+            >
+              {children}
+            </button>
+            {copyValue ? (
+              <button
+                type="button"
+                onClick={() => { void navigator.clipboard.writeText(copyValue); toast(tx(locale, "Copied", "Скопировано")); }}
+                className="rounded-md p-1 text-zinc-600 opacity-0 transition hover:bg-white/[0.06] hover:text-zinc-200 group-hover:opacity-100"
+                aria-label={tx(locale, "Copy", "Копировать")}
+              >
+                <Copy className="h-3.5 w-3.5" />
+              </button>
+            ) : null}
+          </>
+        )}
       </div>
-      {editing && editor ? (
-        <div className="pt-1">{editor(() => setEditing(false))}</div>
-      ) : (
-        <button
-          type="button"
-          disabled={!editable || !editor}
-          onClick={() => setEditing(true)}
-          className={cn("-mx-1 block w-[calc(100%+0.5rem)] truncate rounded-md px-1 py-0.5 text-left text-sm text-zinc-100 transition", editable && editor && "hover:bg-white/[0.06]")}
-        >
-          {children}
-        </button>
-      )}
     </div>
   );
 }
@@ -377,7 +379,7 @@ export function EntryInspector({
             // Clicking another row in the table switches entries instead of closing.
             if (target?.closest("[data-entry-row]") || target?.closest("[data-radix-popper-content-wrapper]") || target?.closest("[data-sonner-toaster]")) event.preventDefault();
           }}
-          className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[680px] flex-col border-l border-white/10 bg-[#101013]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
+          className="inspector-in fixed bottom-0 right-0 top-0 z-40 flex w-full max-w-[460px] flex-col border-l border-white/10 bg-[#101013]/95 shadow-[-30px_0_80px_-20px_rgba(0,0,0,0.7)] outline-none backdrop-blur-xl"
         >
 
           {/* Top bar */}
@@ -445,10 +447,10 @@ export function EntryInspector({
             {saveError ? <p className="mt-2 text-sm text-red-300">{saveError}</p> : null}
 
             {/* Hero stats */}
-            <div className={cn("mt-5 grid grid-cols-2 gap-2.5", editable && "sm:grid-cols-[1fr_1fr_auto]")}>
+            <div className="mt-5 grid grid-cols-2 gap-2.5">
               <Popover>
                 <PopoverTrigger asChild>
-                  <button type="button" disabled={!editable} className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition hover:border-white/15 hover:bg-white/[0.05]">
+                  <button type="button" disabled={!editable} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition hover:border-white/15 hover:bg-white/[0.05]">
                     <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{tx(locale, "Price", "Цена")}</p>
                     <p className="mt-1.5 text-2xl font-semibold tabular-nums text-white">{formatMoney(entry.amount, entry.currency)}</p>
                     <p className="text-xs text-zinc-500">
@@ -473,7 +475,7 @@ export function EntryInspector({
                   />
                 </PopoverContent>
               </Popover>
-              <div className="flex items-center gap-3 rounded-xl border border-white/[0.08] bg-white/[0.03] p-4">
+              <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
                 {entry.paymentType === "recurring" && end ? (
                   <>
                     <RenewalRing progress={progress} tone={urgencyTone(daysLeft)} />
@@ -490,14 +492,16 @@ export function EntryInspector({
                   </div>
                 )}
               </div>
-              {editable ? (
-                <div className="col-span-2 flex gap-2 sm:col-span-1 sm:flex-col sm:justify-center">
-                  <ActionButton onClick={markPaid} disabled={isActing} tone="primary" icon={isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheckBig className="h-4 w-4" />}>{tx(locale, "Mark paid", "Отметить оплату")}</ActionButton>
-                  <ActionButton onClick={() => setQuickLoginOpen(true)} icon={<KeyRound className="h-4 w-4 text-violet-300" />}>{tx(locale, "Quick login", "Быстрый вход")}</ActionButton>
-                </div>
-              ) : null}
             </div>
-            <QuickLoginDialog open={quickLoginOpen} onOpenChange={setQuickLoginOpen} workspaceId={workspaceId} itemId={item.id} locale={locale} />
+
+            {/* Actions */}
+            {editable ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <ActionButton onClick={markPaid} disabled={isActing} tone="primary" icon={isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheckBig className="h-4 w-4" />}>{tx(locale, "Mark paid", "Отметить оплату")}</ActionButton>
+                <ActionButton onClick={() => setQuickLoginOpen(true)} icon={<KeyRound className="h-4 w-4 text-violet-300" />}>{tx(locale, "Quick login", "Быстрый вход")}</ActionButton>
+                <QuickLoginDialog open={quickLoginOpen} onOpenChange={setQuickLoginOpen} workspaceId={workspaceId} itemId={item.id} locale={locale} />
+              </div>
+            ) : null}
             {confirmDelete ? (
               <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-400/25 bg-red-500/[0.07] px-3 py-2.5">
                 <p className="mr-auto text-sm text-red-100">{tx(locale, `Delete “${entry.name}” and its payment history? This can’t be undone.`, `Удалить «${entry.name}» вместе с историей платежей? Это необратимо.`)}</p>
@@ -508,10 +512,21 @@ export function EntryInspector({
               </div>
             ) : null}
 
-            <div className="grid gap-x-6 sm:grid-cols-2">
-            {/* Billing (period and price are edited from the Price card above) */}
+            {/* Billing */}
             <Section title={tx(locale, "Billing", "Оплата")}>
-              <div className="grid grid-cols-2">
+              <PropertyRow label={tx(locale, "Billing", "Оплата")} editable={editable} locale={locale} editor={(close) => (
+                <InlinePeriod value={periodValue} locale={locale} onSave={(next) => {
+                  save({
+                    paymentType: next.paymentType,
+                    period: next.paymentType === "recurring" ? next.period : null,
+                    customPeriodDays: next.period === "custom" ? next.customDays : null,
+                    billingEndAt: next.paymentType === "recurring" && start ? addPeriodIso(start, next) : entry.billingEndAt,
+                  });
+                  close();
+                }} onCancel={close} />
+              )}>
+                {billingSentence(entry.paymentType, entry.period, customDays, locale)}
+              </PropertyRow>
               <PropertyRow label={entry.paymentType === "recurring" ? tx(locale, "Period started", "Начало периода") : tx(locale, "Paid on", "Дата оплаты")} editable={editable} locale={locale} editor={(close) => (
                 <CommitInput type="date" selectOnFocus={false} value={start || ""} onCommit={(value) => { save({ billingStartAt: value || null, billingEndAt: entry.paymentType === "recurring" && value ? addPeriodIso(value, periodValue) : entry.billingEndAt }); close(); }} onCancel={close} />
               )}>
@@ -521,15 +536,13 @@ export function EntryInspector({
                 <PropertyRow label={tx(locale, "Renews on", "Продление")} editable={editable} locale={locale} editor={(close) => (
                   <CommitInput type="date" selectOnFocus={false} value={end || ""} onCommit={(value) => { save({ billingEndAt: value || null }); close(); }} onCancel={close} />
                 )}>
-                  {end ? shortDate(end, locale, true) : empty}
+                  {end ? <>{shortDate(end, locale, true)} <span className={cn("ml-1 text-xs", urgencyTone(daysLeft))}>{daysLeft !== null ? relativeDays(daysLeft, locale) : ""}</span></> : empty}
                 </PropertyRow>
               ) : null}
-              </div>
             </Section>
 
             {/* Vendor and account: the same records as on the Vendors and Accounts pages */}
             <Section title={tx(locale, "Vendor & account", "Поставщик и аккаунт")}>
-              <div className="grid grid-cols-2">
               <PropertyRow label={tx(locale, "Vendor", "Поставщик")} editable={editable} locale={locale} editor={(close) => (
                 <>
                   <CommitInput value={entry.vendorName} list="inspector-vendors" onCommit={(vendorName) => { const known = vendorSuggestions.find((vendor) => vendor.vendorName === vendorName); save({ vendorName, vendorUrl: entry.vendorUrl || known?.vendorUrl || "" }); close(); }} onCancel={close} />
@@ -569,18 +582,15 @@ export function EntryInspector({
                   </span>
                 ) : empty}
               </PropertyRow>
-              </div>
               {entry.accountName ? (
-                <div className="mt-2 px-2.5">
+                <div className="mt-3 px-2">
                   <EntryCredentials key={`${entry.id}:${item.updatedAt}`} workspaceId={workspaceId} itemId={entry.id} locale={locale} />
                 </div>
               ) : null}
             </Section>
-            </div>
 
             {/* Item details */}
             <Section title={tx(locale, "Item details", "О записи")}>
-              <div className="grid grid-cols-2 sm:grid-cols-4">
               {category?.fields.map((field) => (
                 <PropertyRow
                   key={field.id}
@@ -596,7 +606,6 @@ export function EntryInspector({
               <PropertyRow label={tx(locale, "Created", "Создана")} editable={false} locale={locale}>{shortDate(entry.createdAt.slice(0, 10), locale, true)}</PropertyRow>
               <PropertyRow label={tx(locale, "Last changed", "Изменена")} editable={false} locale={locale}>{shortDate(entry.updatedAt.slice(0, 10), locale, true)}</PropertyRow>
               <PropertyRow label="ID" editable={false} locale={locale} copyValue={String(entry.id)}><span className="font-mono text-xs text-zinc-400">#{entry.id}</span></PropertyRow>
-              </div>
             </Section>
 
             {/* Notes */}
@@ -612,7 +621,6 @@ export function EntryInspector({
               />
             </Section>
 
-            <div className="grid gap-x-6 sm:grid-cols-2">
             {/* History */}
             <Section title={tx(locale, "Payments", "Платежи")} icon={<History className="h-3.5 w-3.5" />}>
               {historyRows === null ? (
@@ -643,7 +651,6 @@ export function EntryInspector({
                 <span className="ml-2 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-600 group-hover:text-violet-300"><Copy className="h-3 w-3" />{tx(locale, "copy", "копировать")}</span>
               </button>
             </Section>
-            </div>
           </div>
         </Dialog.Content>
       </Dialog.Portal>
@@ -654,7 +661,7 @@ export function EntryInspector({
 function Section({ title, children, icon }: { title: string; children: ReactNode; icon?: ReactNode }) {
   return (
     <section className="mt-7">
-      <p className="mb-1 flex items-center gap-1.5 px-2.5 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">{icon}{title}</p>
+      <p className="mb-2 flex items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">{icon}{title}</p>
       {children}
     </section>
   );
@@ -675,6 +682,21 @@ function ActionButton({ children, icon, onClick, disabled, tone = "default" }: {
       {icon}
       {children}
     </button>
+  );
+}
+
+function InlinePeriod({ value, locale, onSave, onCancel }: { value: PeriodValue; locale: Locale; onSave: (value: PeriodValue) => void; onCancel: () => void }) {
+  const [draft, setDraft] = useState(value);
+  return (
+    <div className="space-y-2">
+      <PeriodPicker value={draft} onChange={(next) => { setDraft(next); if (next.period !== "custom") onSave(next); }} locale={locale} />
+      {draft.period === "custom" ? (
+        <div className="flex gap-1">
+          <button type="button" className="h-7 flex-1 rounded-md bg-violet-500/25 text-xs text-violet-50" onClick={() => onSave(draft)}>{tx(locale, "Done", "Готово")}</button>
+          <button type="button" className="h-7 rounded-md px-2 text-xs text-zinc-400" onClick={onCancel}>{tx(locale, "Cancel", "Отмена")}</button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
