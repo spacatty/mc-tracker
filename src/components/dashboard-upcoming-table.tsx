@@ -1,14 +1,16 @@
 "use client";
 
-import { Fragment, useMemo, useState } from "react";
-import { ChevronDown, ChevronUp, ExternalLink, Search } from "lucide-react";
+import { Fragment, useCallback, useMemo, useState, type MouseEvent } from "react";
+import { ChevronDown, ChevronUp, Copy, ExternalLink, Search } from "lucide-react";
+import { toast } from "sonner";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
-import type { PaymentItem } from "@/lib/types";
+import type { Category, PaymentItem, VendorSuggestion } from "@/lib/types";
 import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
 import { titleWithHost } from "@/lib/item-host";
 import { AppIcon } from "./icons";
 import { DashboardUpcomingActions } from "./dashboard-upcoming-actions";
+import { EntryInspector } from "./inspector/entry-inspector";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { NativeSelect } from "./ui/native-select";
@@ -80,17 +82,64 @@ function Amount({ item, displayCurrency }: { item: UpcomingItem; displayCurrency
   );
 }
 
+/** What the entry drawer needs for each workspace an upcoming entry belongs to. */
+export type UpcomingWorkspaceContext = { categories: Category[]; vendorSuggestions: VendorSuggestion[]; readOnly: boolean };
+
+/** Copies text, falling back to a hidden textarea where the Clipboard API is blocked (some embedded browsers). */
+async function copyToClipboard(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const area = document.createElement("textarea");
+    area.value = value;
+    area.setAttribute("readonly", "");
+    area.style.position = "fixed";
+    area.style.opacity = "0";
+    document.body.appendChild(area);
+    area.select();
+    const ok = document.execCommand("copy");
+    area.remove();
+    return ok;
+  }
+}
+
+/** The IP or domain under a name: click copies it (without opening the drawer); a clipboard icon shows on hover. */
+function CopyHost({ value, kind, locale }: { value: string; kind: "IP" | "domain"; locale: Locale }) {
+  return (
+    <button
+      type="button"
+      onClick={(event) => {
+        event.stopPropagation();
+        void copyToClipboard(value).then((ok) =>
+          ok
+            ? toast(kind === "IP" ? tx(locale, "IP copied", "IP скопирован") : tx(locale, "Domain copied", "Домен скопирован"))
+            : toast.error(tx(locale, "Could not copy", "Не удалось скопировать")),
+        );
+      }}
+      title={tx(locale, `Copy ${kind}`, `Копировать ${kind === "IP" ? "IP" : "домен"}`)}
+      className="group/copy mt-0.5 inline-flex max-w-full items-center gap-1 rounded px-1 -mx-1 font-mono text-[11.5px] text-zinc-500 transition hover:bg-white/[0.05] hover:text-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+    >
+      <span className="truncate">{value}</span>
+      <Copy className="h-3 w-3 shrink-0 opacity-0 transition group-hover/copy:opacity-100 group-focus-visible/copy:opacity-100" />
+    </button>
+  );
+}
+
 export function DashboardUpcomingTable({
   items,
   workspaceId,
   displayCurrency,
+  contexts,
   locale,
 }: {
   items: UpcomingItem[];
   workspaceId: number;
   displayCurrency: string;
+  contexts: Record<number, UpcomingWorkspaceContext>;
   locale: Locale;
 }) {
+  const [openId, setOpenId] = useState<number | null>(null);
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
   const [query, setQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
@@ -113,6 +162,19 @@ export function DashboardUpcomingTable({
     });
   }, [categoryFilter, items, query, whenFilter]);
   const filtering = Boolean(query.trim()) || categoryFilter !== "all" || whenFilter !== "all";
+  const openItem = openId ? items.find((item) => item.id === openId) || null : null;
+  const openIndex = openItem ? visible.findIndex((item) => item.id === openItem.id) : -1;
+  const openContext = openItem ? contexts[openItem.workspaceId || workspaceId] : undefined;
+  const navigate = useCallback((direction: 1 | -1) => {
+    if (!visible.length) return;
+    const nextIndex = openIndex < 0 ? 0 : (openIndex + direction + visible.length) % visible.length;
+    setOpenId(visible[nextIndex].id);
+  }, [openIndex, visible]);
+  const hostKindFor = (item: UpcomingItem): "IP" | "domain" => (/^(\d{1,3}\.){3}\d{1,3}/.test(item.host || "") ? "IP" : "domain");
+  const openFromName = (event: MouseEvent, item: UpcomingItem) => {
+    if ((event.target as HTMLElement).closest("button, a")) return;
+    setOpenId(item.id);
+  };
   const emptyText = filtering
     ? tx(locale, "Nothing matches these filters.", "Ничего не найдено по фильтрам.")
     : tx(locale, "No payments due in the next 2 weeks.", "Платежей в ближайшие 2 недели нет.");
@@ -193,15 +255,15 @@ export function DashboardUpcomingTable({
       </div>
       <div className="space-y-2 p-3 md:hidden">
         {visible.map((item) => (
-          <article key={item.id} className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02]">
+          <article key={item.id} data-entry-row className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02]">
             <div className="flex items-start gap-2 p-3">
               {disclosure(item)}
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 cursor-pointer" onClick={(event) => openFromName(event, item)}>
                 <h3 className="flex min-w-0 items-center gap-1.5 font-semibold text-foreground">
                   <span className="shrink-0" style={{ color: item.categoryColor || undefined }}><AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" /></span>
                   <span className="truncate">{item.name}</span>
                 </h3>
-                {hostLine(item) ? <p className="mt-0.5 font-mono text-[11.5px] text-zinc-500">{hostLine(item)}</p> : null}
+                {hostLine(item) ? <div><CopyHost value={hostLine(item)} kind={hostKindFor(item)} locale={locale} /></div> : null}
                 <p className={cn("mt-1.5 text-xs", item.daysUntilPayment < 0 ? "text-red-300" : "text-zinc-400")}>
                   {relativeDays(item.daysUntilPayment, locale)} <span className="text-zinc-500">· {displayDate(item.nextPaymentAt)}</span>
                 </p>
@@ -224,32 +286,32 @@ export function DashboardUpcomingTable({
           <colgroup>
             <col className="w-11" />
             <col />
-            <col className="w-[9.5rem]" />
-            <col className="w-[22%]" />
+            <col className="w-[8.75rem]" />
+            <col className="w-[18%]" />
+            <col className="w-[7.75rem]" />
             <col className="w-[7.5rem]" />
-            <col className="w-[6.5rem]" />
           </colgroup>
           <TableHeader>
             <TableRow>
               <TableHead className="px-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
               <TableHead>{tx(locale, "Name", "Название")}</TableHead>
               <TableHead>{tx(locale, "Due", "Срок")}</TableHead>
-              <TableHead>{tx(locale, "Vendor · account", "Поставщик · аккаунт")}</TableHead>
+              <TableHead title={tx(locale, "Vendor, with the account under it", "Поставщик, под ним аккаунт")}>{tx(locale, "Vendor", "Поставщик")}</TableHead>
               <TableHead className="text-right">{t(locale, "amount")}</TableHead>
-              <TableHead><span className="sr-only">{t(locale, "actions")}</span></TableHead>
+              <TableHead className="pl-3 text-right">{t(locale, "actions")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.map((item) => (
               <Fragment key={item.id}>
-                <TableRow className="group">
+                <TableRow className={cn("group", openId === item.id && "bg-white/[0.03]")} data-entry-row>
                   <TableCell className="px-0 py-2 text-center">{disclosure(item)}</TableCell>
-                  <TableCell className="py-2.5" title={item.categoryName || undefined}>
+                  <TableCell className="cursor-pointer py-2.5 transition hover:bg-white/[0.03]" title={item.categoryName || undefined} onClick={(event) => openFromName(event, item)}>
                     <span className="flex min-w-0 items-center gap-2 font-medium text-white">
                       <span className="shrink-0" style={{ color: item.categoryColor || undefined }}><AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" /></span>
-                      <span className="truncate">{item.name}</span>
+                      <span className="truncate group-hover:underline group-hover:decoration-zinc-600 group-hover:underline-offset-4">{item.name}</span>
                     </span>
-                    {hostLine(item) ? <span className="mt-0.5 block truncate pl-[22px] font-mono text-[11.5px] text-zinc-500">{hostLine(item)}</span> : null}
+                    {hostLine(item) ? <span className="block pl-[22px]"><CopyHost value={hostLine(item)} kind={hostKindFor(item)} locale={locale} /></span> : null}
                   </TableCell>
                   <TableCell className="py-2.5">
                     <span className={cn("block truncate", item.daysUntilPayment < 0 ? "text-red-300" : "text-zinc-200")}>{relativeDays(item.daysUntilPayment, locale)}</span>
@@ -266,7 +328,7 @@ export function DashboardUpcomingTable({
                     {item.accountName ? <span className="mt-0.5 block truncate text-[11.5px] text-zinc-500" title={item.accountName}>{item.accountName}</span> : null}
                   </TableCell>
                   <TableCell className="py-2.5 text-right"><Amount item={item} displayCurrency={displayCurrency} /></TableCell>
-                  <TableCell className="py-2">
+                  <TableCell className="py-2 pl-3">
                     <div className="flex justify-end">
                       <DashboardUpcomingActions
                         workspaceId={item.workspaceId || workspaceId}
@@ -291,6 +353,21 @@ export function DashboardUpcomingTable({
           </TableBody>
         </table>
       </div>
+
+      {openItem && openContext ? (
+        <EntryInspector
+          key={openItem.id}
+          item={openItem}
+          categories={openContext.categories}
+          vendorSuggestions={openContext.vendorSuggestions}
+          workspaceId={openItem.workspaceId || workspaceId}
+          readOnly={openContext.readOnly}
+          locale={locale}
+          position={openIndex >= 0 ? { index: openIndex, total: visible.length } : null}
+          onClose={() => setOpenId(null)}
+          onNavigate={navigate}
+        />
+      ) : null}
     </>
   );
 }

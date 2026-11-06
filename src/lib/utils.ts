@@ -14,26 +14,26 @@ export function slugify(value: string) {
     .replace(/^_+|_+$/g, "");
 }
 
+// Currencies written the way their own users write them: the symbol after the number, space-grouped ("1 884,48 ₽").
+const SYMBOL_AFTER_LOCALES: Record<string, string> = { RUB: "ru-RU", UAH: "uk-UA", BYN: "be-BY", KZT: "kk-KZ" };
+
+function moneyParts(amount: number, currency: string) {
+  const formatter = new Intl.NumberFormat(SYMBOL_AFTER_LOCALES[currency] || "en-US", {
+    style: "currency",
+    currency,
+    currencyDisplay: "narrowSymbol",
+    maximumFractionDigits: 2,
+  });
+  // "$25.00", "€25.00", "CHF 25.00", "25,00 ₽".
+  return formatter.format(Number.isFinite(amount) ? amount : 0);
+}
+
 export function formatMoney(amount: number, currency = "USD") {
   const safeCurrency = String(currency || "USD").trim().toUpperCase();
   try {
-    const formatter = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: /^[A-Z]{3}$/.test(safeCurrency) ? safeCurrency : "USD",
-      currencyDisplay: "narrowSymbol",
-      maximumFractionDigits: 2,
-    });
-    const parts = formatter.formatToParts(Number.isFinite(amount) ? amount : 0);
-    return parts.map((part) => (part.type === "currency" ? `${part.value} ` : part.value)).join("").trim();
+    return moneyParts(amount, /^[A-Z]{3}$/.test(safeCurrency) ? safeCurrency : "USD");
   } catch {
-    const formatter = new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      currencyDisplay: "narrowSymbol",
-      maximumFractionDigits: 2,
-    });
-    const parts = formatter.formatToParts(Number.isFinite(amount) ? amount : 0);
-    return parts.map((part) => (part.type === "currency" ? `${part.value} ` : part.value)).join("").trim();
+    return moneyParts(amount, "USD");
   }
 }
 

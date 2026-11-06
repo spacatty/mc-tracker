@@ -1,10 +1,10 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { DashboardUpcomingTable } from "@/components/dashboard-upcoming-table";
+import { DashboardUpcomingTable, type UpcomingWorkspaceContext } from "@/components/dashboard-upcoming-table";
 import { AppIcon } from "@/components/icons";
 import { Surface } from "@/components/ui/surface";
 import { requireUser } from "@/lib/auth";
-import { dashboardStatsForWorkspace, dashboardStatsGlobalForUser, getUserDashboardPrefs, resolveWorkspaceForUser } from "@/lib/db";
+import { dashboardStatsForWorkspace, dashboardStatsGlobalForUser, getUserDashboardPrefs, getWorkspaceRole, listCategoriesForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
 import { displayDate, formatMoney } from "@/lib/utils";
@@ -86,6 +86,15 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const globalHref = `/app?workspace=${workspace.id}&scope=global`;
   const workspaceHref = `/app?workspace=${workspace.id}&scope=workspace`;
   const currency = stats.displayCurrency;
+  // The entry drawer opens on the dashboard too, so it needs each listed workspace's categories and vendors.
+  const contexts: Record<number, UpcomingWorkspaceContext> = {};
+  for (const id of new Set(stats.upcoming.map((item) => item.workspaceId || workspace.id))) {
+    contexts[id] = {
+      categories: listCategoriesForWorkspace(id, user.id),
+      vendorSuggestions: listVendorSuggestionsForWorkspace(id, user.id),
+      readOnly: getWorkspaceRole(id, user.id) === "viewer",
+    };
+  }
 
   const dueIn30 = stats.upcomingDueByCategory.reduce((sum, row) => sum + row.month, 0);
   const next = stats.upcoming.find((item) => item.daysUntilPayment >= 0);
@@ -152,7 +161,7 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
             <h2 id="upcoming-dates-title" className="text-[15px] font-semibold text-white">{tx(locale, "Upcoming dates", "Ближайшие даты")}</h2>
             <span className="text-xs text-zinc-500">{tx(locale, "overdue and the next 2 weeks", "просроченные и 2 недели вперёд")}</span>
           </div>
-          <DashboardUpcomingTable items={stats.upcoming} workspaceId={workspace.id} displayCurrency={currency} locale={locale} />
+          <DashboardUpcomingTable items={stats.upcoming} workspaceId={workspace.id} displayCurrency={currency} contexts={contexts} locale={locale} />
         </Surface>
 
         {/* Below the 48px top bar, so it stays in view while the list scrolls. */}
