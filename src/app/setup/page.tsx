@@ -15,7 +15,7 @@ export default async function SetupPage() {
     <main className="grid min-h-screen place-items-center bg-background px-4 py-10">
       <form action={setupAction} className="w-full max-w-[380px] rounded-xl border border-white/10 bg-[#101013] p-7 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
         <div className="mb-6 flex items-center gap-2.5">
-          <BrandLogo className="h-6 w-6 object-contain" />
+          <BrandLogo className="h-6 w-6" />
           <h1 className="text-[15px] font-semibold text-zinc-100">{locale === "ru" ? "Создать superadmin" : "Create superadmin"}</h1>
         </div>
         <div className="space-y-2.5">

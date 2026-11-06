@@ -17,7 +17,7 @@ import { Kbd } from "./capture/shared";
 import { TableStyleSync } from "./table-style";
 import { CommandPalette, OPEN_PALETTE_EVENT } from "./command-palette";
 import { CaptureProvider } from "./capture/capture-provider";
-import { AppIcon, BrandLogo } from "./icons";
+import { AppIcon, BrandLogo, BrandWordmark } from "./icons";
 import { JoinWorkspaceDialog } from "./join-workspace-dialog";
 import { Button } from "./ui/button";
 import { Command as CommandPrimitive } from "cmdk";
@@ -530,9 +530,9 @@ export function AppShell({
         <div className="flex items-center justify-between">
           <Link href="/app" className="flex items-center gap-2 text-white">
             <span className="grid h-7 w-7 place-items-center">
-              <BrandLogo className="h-5 w-5 object-contain" />
+              <BrandLogo className="h-[22px] w-[22px]" />
             </span>
-            <span className="font-semibold">MC Tracker</span>
+            <BrandWordmark />
           </Link>
           <div className="flex items-center gap-2">
             <Link href={withWorkspace("/app/notifications", currentWorkspace?.id || null)} aria-label={t(locale, "notifications")} className="relative rounded-md p-2 text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60">
@@ -625,8 +625,8 @@ export function AppShell({
       >
         <div className={cn("flex h-12 shrink-0 items-center gap-2 px-3", collapsed && "flex-col justify-center gap-1 px-0 pt-2 h-auto")}>
           <Link href={withWorkspace("/app", currentWorkspace?.id || null)} className={cn("flex min-w-0 flex-1 items-center gap-2 rounded-md py-1 text-zinc-100", collapsed && "flex-none")} title="MC Tracker">
-            <BrandLogo className="h-5 w-5 shrink-0 object-contain" />
-            {!collapsed ? <span className="truncate text-sm font-semibold tracking-tight">MC Tracker</span> : null}
+            <BrandLogo className={cn("shrink-0", collapsed ? "h-[26px] w-[26px]" : "h-[22px] w-[22px]")} />
+            {!collapsed ? <BrandWordmark className="truncate" /> : null}
           </Link>
           <button
             type="button"
