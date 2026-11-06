@@ -560,16 +560,11 @@ export async function saveUserAdminChangesAction(formData: FormData) {
   revalidatePath("/app/admin");
 }
 
-export async function updateMyDisplayCurrencyAction(formData: FormData) {
+/** Settings → Preferences: display currency and dashboard options, saved together. */
+export async function updateMyPreferencesAction(formData: FormData) {
   const user = await requireUser();
   const nextCurrency = ensureSupportedCurrency(formData.get("displayCurrency")?.toString(), user.displayCurrency || "USD");
   updateUserDisplayCurrency(user.id, nextCurrency);
-  revalidatePath("/app/settings");
-  revalidatePath("/app");
-}
-
-export async function updateMyDashboardPrefsAction(formData: FormData) {
-  const user = await requireUser();
   setUserDashboardPrefs(user.id, { showTrend: formData.get("showTrend") === "on" });
   revalidatePath("/app/settings");
   revalidatePath("/app");
