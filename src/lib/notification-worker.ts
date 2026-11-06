@@ -9,6 +9,8 @@ declare global {
 
 export function startNotificationWorker() {
   if (globalThis.mcTrackerNotificationWorker) return;
+  // NOTIFICATION_WORKER=off keeps a test copy of the database from sending real reminders.
+  if (process.env.NOTIFICATION_WORKER?.trim().toLowerCase() === "off") return;
 
   async function tick() {
     if (globalThis.mcTrackerNotificationWorkerRunning) return;
