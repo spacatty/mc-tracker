@@ -1,53 +1,15 @@
 import "server-only";
 
-import type Database from "better-sqlite3";
-import { getDb, getItemForWorkspace, listItemsForWorkspace, requireWorkspaceEditor, requireWorkspaceViewer } from "@/lib/db";
+import { getDb, getItemForWorkspace, requireWorkspaceEditor, requireWorkspaceViewer } from "@/lib/db";
 import { nowIso } from "@/lib/utils";
 import { openSecret, sealSecret } from "./crypto";
 import type { AccountCredentials, VaultAccount, Vendor } from "./types";
 
 type Row = Record<string, unknown>;
 
-const globalForVault = globalThis as typeof globalThis & { mcTrackerVaultReady?: Database.Database };
+/** The vendors/accounts tables and their sync with entries are set up with the rest of the schema (see ./schema.ts). */
+const db = getDb;
 
-/** Vendors and accounts live in their own tables, created on first use. */
-function db() {
-  const database = getDb();
-  if (globalForVault.mcTrackerVaultReady !== database) {
-    database.exec(`
-      CREATE TABLE IF NOT EXISTS vendors (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-        name TEXT NOT NULL,
-        url TEXT NOT NULL DEFAULT '',
-        notes TEXT NOT NULL DEFAULT '',
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS vendors_workspace_name ON vendors(workspace_id, name COLLATE NOCASE);
-
-      CREATE TABLE IF NOT EXISTS vault_accounts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        workspace_id INTEGER NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-        vendor_id INTEGER REFERENCES vendors(id) ON DELETE SET NULL,
-        name TEXT NOT NULL,
-        login_url TEXT NOT NULL DEFAULT '',
-        -- login, password and notes, sealed together with AES-256-GCM (see vault/crypto.ts)
-        credentials_enc TEXT,
-        has_login INTEGER NOT NULL DEFAULT 0,
-        has_password INTEGER NOT NULL DEFAULT 0,
-        has_notes INTEGER NOT NULL DEFAULT 0,
-        created_at TEXT NOT NULL,
-        updated_at TEXT NOT NULL
-      );
-      CREATE INDEX IF NOT EXISTS vault_accounts_workspace ON vault_accounts(workspace_id);
-    `);
-    globalForVault.mcTrackerVaultReady = database;
-  }
-  return database;
-}
-
-const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
 export function normalizeUrl(value: string) {
   const text = value.trim();
@@ -98,29 +60,26 @@ function mapAccount(row: Row, entryCount: number): VaultAccount {
 const accountSelect = `SELECT vault_accounts.*, vendors.name AS vendor_name, vendors.url AS vendor_url
   FROM vault_accounts LEFT JOIN vendors ON vendors.id = vault_accounts.vendor_id`;
 
-type EntryRef = { vendorName: string; accountName: string };
-
-function entryRefs(workspaceId: number, userId: number): EntryRef[] {
-  return listItemsForWorkspace(workspaceId, userId).map((item) => ({ vendorName: item.vendorName || "", accountName: item.accountName || "" }));
-}
-
-function accountMatchesEntry(account: { name: string; vendorName: string }, entry: EntryRef) {
-  if (!entry.accountName || !same(account.name, entry.accountName)) return false;
-  return !account.vendorName || !entry.vendorName || same(account.vendorName, entry.vendorName);
+/** Active entries linked to each vendor or account, keyed by id. */
+function entryCounts(column: "vendor_id" | "account_id", workspaceId: number) {
+  const rows = db()
+    .prepare(`SELECT ${column} AS id, COUNT(*) AS count FROM items WHERE workspace_id = ? AND archived_at IS NULL AND ${column} IS NOT NULL GROUP BY ${column}`)
+    .all(workspaceId) as Row[];
+  return new Map(rows.map((row) => [Number(row.id), Number(row.count)]));
 }
 
 /* ------------------------------- Vendors ------------------------------- */
 
 export function listVendorsForWorkspace(workspaceId: number, userId: number): Vendor[] {
   requireWorkspaceViewer(workspaceId, userId);
-  const entries = entryRefs(workspaceId, userId);
+  const counts = entryCounts("vendor_id", workspaceId);
   const rows = db()
     .prepare(
       `SELECT vendors.*, (SELECT COUNT(*) FROM vault_accounts WHERE vault_accounts.vendor_id = vendors.id) AS account_count
        FROM vendors WHERE workspace_id = ? ORDER BY name COLLATE NOCASE`,
     )
     .all(workspaceId) as Row[];
-  return rows.map((row) => mapVendor(row, entries.filter((entry) => entry.vendorName && same(entry.vendorName, String(row.name))).length));
+  return rows.map((row) => mapVendor(row, counts.get(Number(row.id)) || 0));
 }
 
 export function saveVendorForWorkspace(
@@ -158,23 +117,15 @@ export function deleteVendorForWorkspace(id: number, workspaceId: number, userId
   db().prepare("DELETE FROM vendors WHERE id = ? AND workspace_id = ?").run(id, workspaceId);
 }
 
-function findVendorByName(workspaceId: number, name: string) {
-  if (!name.trim()) return undefined;
-  return db().prepare("SELECT * FROM vendors WHERE workspace_id = ? AND name = ? COLLATE NOCASE").get(workspaceId, name.trim()) as Row | undefined;
-}
-
 /* ------------------------------- Accounts ------------------------------ */
 
 export function listAccountsForWorkspace(workspaceId: number, userId: number): VaultAccount[] {
   requireWorkspaceViewer(workspaceId, userId);
-  const entries = entryRefs(workspaceId, userId);
+  const counts = entryCounts("account_id", workspaceId);
   const rows = db()
     .prepare(`${accountSelect} WHERE vault_accounts.workspace_id = ? ORDER BY vendors.name COLLATE NOCASE, vault_accounts.name COLLATE NOCASE`)
     .all(workspaceId) as Row[];
-  return rows.map((row) => {
-    const ref = { name: String(row.name || ""), vendorName: String(row.vendor_name || "") };
-    return mapAccount(row, entries.filter((entry) => accountMatchesEntry(ref, entry)).length);
-  });
+  return rows.map((row) => mapAccount(row, counts.get(Number(row.id)) || 0));
 }
 
 function getAccountRow(id: number, workspaceId: number) {
@@ -263,85 +214,28 @@ export function readAccountCredentials(id: number, workspaceId: number): Account
 
 /* ------------------------------ Entry links ---------------------------- */
 
-/** Finds the vendor and account an entry points at, by the names typed on the entry. */
+/** The vendor and account an entry is linked to. */
 export function resolveEntryLogin(itemId: number, workspaceId: number, userId: number) {
   const item = getItemForWorkspace(itemId, workspaceId, userId);
   if (!item) return null;
-  const vendorRow = findVendorByName(workspaceId, item.vendorName || "");
-  let accountRow: Row | undefined;
-  if (item.accountName?.trim()) {
-    const candidates = db()
-      .prepare(`${accountSelect} WHERE vault_accounts.workspace_id = ? AND vault_accounts.name = ? COLLATE NOCASE`)
-      .all(workspaceId, item.accountName.trim()) as Row[];
-    accountRow =
-      (vendorRow && candidates.find((row) => Number(row.vendor_id) === Number(vendorRow.id))) ||
-      candidates.find((row) => row.vendor_id == null) ||
-      (!vendorRow && candidates.length === 1 ? candidates[0] : undefined);
-  }
+  const vendorRow = item.vendorId ? (db().prepare("SELECT * FROM vendors WHERE id = ? AND workspace_id = ?").get(item.vendorId, workspaceId) as Row | undefined) : undefined;
+  const accountRow = item.accountId ? getAccountRow(item.accountId, workspaceId) : undefined;
   const account = accountRow ? mapAccount(accountRow, 0) : null;
   const url = account?.loginUrl || account?.vendorUrl || String(vendorRow?.url || "") || item.vendorUrl || "";
   return { item, vendorId: vendorRow ? Number(vendorRow.id) : null, account, url };
 }
 
-/** Fills in the account name on an entry that had none, so the entry finds its new account next time. */
-export function linkEntryToAccount(itemId: number, workspaceId: number, userId: number, accountName: string) {
+/**
+ * Links an entry to its vendor and to the named account, creating either when missing. Writing the names back
+ * makes the item triggers (./schema.ts) relink, which also restores links to records that were deleted earlier.
+ */
+export function relinkEntry(itemId: number, workspaceId: number, userId: number, accountName: string) {
   requireWorkspaceEditor(workspaceId, userId);
-  db()
-    .prepare("UPDATE items SET account_name = ?, updated_at = ? WHERE id = ? AND workspace_id = ? AND COALESCE(account_name, '') = ''")
-    .run(accountName.trim(), nowIso(), itemId, workspaceId);
-}
-
-/** Creates vendors and empty accounts for every vendor and account name already used on entries. */
-export function importVendorsFromEntries(workspaceId: number, userId: number) {
-  requireWorkspaceEditor(workspaceId, userId);
-  const items = listItemsForWorkspace(workspaceId, userId);
   const database = db();
-  let vendors = 0;
-  let accounts = 0;
-  const now = nowIso();
+  const row = database.prepare("SELECT vendor_name FROM items WHERE id = ? AND workspace_id = ?").get(itemId, workspaceId) as Row | undefined;
+  if (!row) throw new Error("Entry not found.");
   database.transaction(() => {
-    for (const item of items) {
-      const vendorName = (item.vendorName || "").trim();
-      let vendorId: number | null = null;
-      if (vendorName) {
-        const found = findVendorByName(workspaceId, vendorName);
-        if (found) {
-          vendorId = Number(found.id);
-          if (!found.url && item.vendorUrl) {
-            try {
-              database.prepare("UPDATE vendors SET url = ?, updated_at = ? WHERE id = ?").run(normalizeUrl(item.vendorUrl), now, vendorId);
-            } catch {
-              /* keep the vendor without a URL when the entry's URL is malformed */
-            }
-          }
-        } else {
-          let url = "";
-          try {
-            url = normalizeUrl(item.vendorUrl || "");
-          } catch {
-            url = "";
-          }
-          vendorId = Number(
-            database
-              .prepare("INSERT INTO vendors (workspace_id, name, url, notes, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?)")
-              .run(workspaceId, vendorName, url, now, now).lastInsertRowid,
-          );
-          vendors += 1;
-        }
-      }
-      const accountName = (item.accountName || "").trim();
-      if (accountName) {
-        const exists = database
-          .prepare("SELECT id FROM vault_accounts WHERE workspace_id = ? AND IFNULL(vendor_id, 0) = ? AND name = ? COLLATE NOCASE")
-          .get(workspaceId, vendorId || 0, accountName);
-        if (!exists) {
-          database
-            .prepare("INSERT INTO vault_accounts (workspace_id, vendor_id, name, login_url, created_at, updated_at) VALUES (?, ?, ?, '', ?, ?)")
-            .run(workspaceId, vendorId, accountName, now, now);
-          accounts += 1;
-        }
-      }
-    }
+    database.prepare("UPDATE items SET vendor_name = NULL, account_name = NULL WHERE id = ?").run(itemId);
+    database.prepare("UPDATE items SET vendor_name = ?, account_name = ?, updated_at = ? WHERE id = ?").run(row.vendor_name, accountName.trim(), nowIso(), itemId);
   })();
-  return { vendors, accounts };
 }

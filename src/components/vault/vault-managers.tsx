@@ -1,13 +1,12 @@
 "use client";
 
-import { ArrowUpRight, Building2, DownloadCloud, KeyRound, Loader2, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { ArrowUpRight, Building2, KeyRound, Loader2, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   deleteAccountAction,
   deleteVendorAction,
-  importVendorsFromEntriesAction,
   saveAccountAction,
   saveVendorAction,
 } from "@/app/vault-actions";
@@ -45,36 +44,8 @@ function Avatar({ text }: { text: string }) {
   );
 }
 
-function ImportFromEntriesButton({ workspaceId, locale }: { workspaceId: number; locale: Locale }) {
-  const router = useRouter();
-  const [pending, startTransition] = useTransition();
-  return (
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      disabled={pending}
-      title={tx(locale, "Create vendors and accounts from the names already used on entries", "Создать поставщиков и аккаунты из записей")}
-      onClick={() =>
-        startTransition(async () => {
-          const result = await importVendorsFromEntriesAction(workspaceId);
-          if (!result.ok) return void toast.error(result.error);
-          toast.success(
-            result.vendors || result.accounts
-              ? tx(locale, `Added ${result.vendors} vendors and ${result.accounts} accounts from entries`, `Добавлено: поставщиков ${result.vendors}, аккаунтов ${result.accounts}`)
-              : tx(locale, "Everything on your entries is already here", "Все поставщики и аккаунты уже добавлены"),
-          );
-          router.refresh();
-        })
-      }
-    >
-      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <DownloadCloud className="h-3.5 w-3.5" />}
-      {tx(locale, "Pull from entries", "Взять из записей")}
-    </Button>
-  );
-}
-
-function DeleteButton({ label, locale, onConfirm }: { label: string; locale: Locale; onConfirm: () => Promise<void> }) {
+/** Two-step delete. When entries use the record, the confirm step says how many will be unlinked (they keep their text). */
+function DeleteButton({ label, inUse = 0, locale, onConfirm }: { label: string; inUse?: number; locale: Locale; onConfirm: () => Promise<void> }) {
   const [armed, setArmed] = useState(false);
   const [pending, startTransition] = useTransition();
   return (
@@ -91,9 +62,25 @@ function DeleteButton({ label, locale, onConfirm }: { label: string; locale: Loc
         armed && "bg-red-500/15 px-2 text-[11px] font-medium text-red-200",
       )}
       aria-label={tx(locale, `Delete ${label}`, `Удалить ${label}`)}
-      title={armed ? undefined : tx(locale, "Delete", "Удалить")}
+      title={
+        armed
+          ? inUse
+            ? tx(locale, `${inUse} entries use ${label}. They keep the name but lose the link.`, `${label} используется в записях: ${inUse}. Они сохранят название, но потеряют связь.`)
+            : undefined
+          : tx(locale, "Delete", "Удалить")
+      }
     >
-      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : armed ? tx(locale, "Confirm", "Удалить?") : <Trash2 className="h-3.5 w-3.5" />}
+      {pending ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : armed ? (
+        inUse ? (
+          tx(locale, `Delete, unlink ${inUse} ${inUse === 1 ? "entry" : "entries"}?`, `Удалить и отвязать ${inUse}?`)
+        ) : (
+          tx(locale, "Confirm", "Удалить?")
+        )
+      ) : (
+        <Trash2 className="h-3.5 w-3.5" />
+      )}
     </button>
   );
 }
@@ -112,7 +99,6 @@ export function VendorsManager({ workspaceId, vendors, canEdit, locale }: { work
         <SearchBox value={query} onChange={setQuery} placeholder={tx(locale, "Search vendors", "Поиск поставщиков")} />
         {canEdit ? (
           <div className="ml-auto flex gap-2">
-            <ImportFromEntriesButton workspaceId={workspaceId} locale={locale} />
             <Button type="button" size="sm" onClick={() => setEditing("new")}>
               <Plus className="h-3.5 w-3.5" />
               {tx(locale, "New vendor", "Новый поставщик")}
@@ -170,6 +156,7 @@ export function VendorsManager({ workspaceId, vendors, canEdit, locale }: { work
                       </button>
                       <DeleteButton
                         label={vendor.name}
+                        inUse={vendor.entryCount}
                         locale={locale}
                         onConfirm={async () => {
                           const result = await deleteVendorAction(workspaceId, vendor.id);
@@ -297,7 +284,6 @@ export function AccountsManager({
         ) : null}
         {canEdit ? (
           <div className="ml-auto flex gap-2">
-            <ImportFromEntriesButton workspaceId={workspaceId} locale={locale} />
             <Button type="button" size="sm" onClick={() => setEditing("new")}>
               <Plus className="h-3.5 w-3.5" />
               {tx(locale, "New account", "Новый аккаунт")}
@@ -368,6 +354,7 @@ export function AccountsManager({
                           </button>
                           <DeleteButton
                             label={account.name}
+                            inUse={account.entryCount}
                             locale={locale}
                             onConfirm={async () => {
                               const result = await deleteAccountAction(workspaceId, account.id);

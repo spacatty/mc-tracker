@@ -6,10 +6,8 @@ import { getUserAuthByUsername, getWorkspaceRole } from "@/lib/db";
 import {
   deleteAccountForWorkspace,
   deleteVendorForWorkspace,
-  getAccountForWorkspace,
-  importVendorsFromEntries,
-  linkEntryToAccount,
   readAccountCredentials,
+  relinkEntry,
   resolveEntryLogin,
   saveAccountForWorkspace,
   saveVendorForWorkspace,
@@ -66,17 +64,6 @@ export async function deleteVendorAction(workspaceId: number, id: number): Promi
     deleteVendorForWorkspace(id, workspaceId, user.id);
     refresh();
     return { ok: true };
-  } catch (error) {
-    return failure(error);
-  }
-}
-
-export async function importVendorsFromEntriesAction(workspaceId: number): Promise<Result<{ vendors: number; accounts: number }>> {
-  const user = await requireUser();
-  try {
-    const counts = importVendorsFromEntries(workspaceId, user.id);
-    refresh();
-    return { ok: true, ...counts };
   } catch (error) {
     return failure(error);
   }
@@ -192,22 +179,23 @@ export async function saveEntryCredentialsAction(input: {
 }): Promise<Result<{ accountId: number }>> {
   const user = await requireUser();
   try {
-    const resolved = resolveEntryLogin(input.itemId, input.workspaceId, user.id);
+    let resolved = resolveEntryLogin(input.itemId, input.workspaceId, user.id);
     if (!resolved) return { ok: false, error: "Entry not found." };
-    let vendorId = resolved.vendorId;
-    if (!vendorId && resolved.item.vendorName?.trim()) {
-      vendorId = saveVendorForWorkspace({ name: resolved.item.vendorName, url: resolved.item.vendorUrl || "", notes: "" }, input.workspaceId, user.id);
+    if (!resolved.account) {
+      const accountName = (input.accountName || resolved.item.accountName || "").trim();
+      if (!accountName) return { ok: false, error: "Give the account a name." };
+      // Creates (or finds) the vendor and account from the entry and links them.
+      relinkEntry(input.itemId, input.workspaceId, user.id, accountName);
+      resolved = resolveEntryLogin(input.itemId, input.workspaceId, user.id);
     }
-    const accountName = (resolved.account?.name || input.accountName || resolved.item.accountName || "").trim();
-    if (!accountName) return { ok: false, error: "Give the account a name." };
-    if (!resolved.item.accountName?.trim()) linkEntryToAccount(input.itemId, input.workspaceId, user.id, accountName);
-    const existing = resolved.account ? getAccountForWorkspace(resolved.account.id, input.workspaceId, user.id) : null;
+    const account = resolved?.account;
+    if (!account) return { ok: false, error: "Could not link an account to this entry." };
     const accountId = saveAccountForWorkspace(
       {
-        id: existing?.id,
-        vendorId: existing ? existing.vendorId : vendorId,
-        name: accountName,
-        loginUrl: input.loginUrl ?? existing?.loginUrl ?? "",
+        id: account.id,
+        vendorId: account.vendorId,
+        name: account.name,
+        loginUrl: input.loginUrl ?? account.loginUrl,
         login: input.login,
         password: input.password,
       },

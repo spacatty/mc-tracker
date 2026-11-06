@@ -65,6 +65,9 @@ export type PaymentItem = {
   vendorName: string;
   vendorUrl: string;
   accountName: string;
+  /** The linked vendor and account records (see lib/vault/schema.ts); null when the entry has none. */
+  vendorId?: number | null;
+  accountId?: number | null;
   notes: string;
   customFields: Record<string, unknown>;
   ownerId: number | null;

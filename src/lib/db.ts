@@ -42,6 +42,7 @@ import {
   selectedEntriesExportPayloadSchema,
   workspaceExportPayloadSchema,
 } from "./workspace-export";
+import { ensureVaultSchema } from "./vault/schema";
 
 const dbPath = process.env.SQLITE_PATH || path.join(process.cwd(), "data", "mc-tracker.sqlite");
 
@@ -151,6 +152,8 @@ function mapItem(row: DbRow): PaymentItem {
     vendorName: String(row.vendor_name || ""),
     vendorUrl: String(row.vendor_url || ""),
     accountName: String(row.account_name || ""),
+    vendorId: row.vendor_id == null ? null : Number(row.vendor_id),
+    accountId: row.account_id == null ? null : Number(row.account_id),
     notes: String(row.notes || ""),
     customFields: parseJson<Record<string, unknown>>(row.custom_fields_json, {}),
     ownerId: row.owner_id === null ? null : Number(row.owner_id),
@@ -673,6 +676,8 @@ function migrate(db: Database.Database) {
     ]),
     JSON.stringify([{ id: "plan", label: "Plan", type: "text", required: false, bold: false, color: "#60a5fa", showInTable: true }]),
   );
+
+  ensureVaultSchema(db);
 
 }
 
