@@ -9,7 +9,6 @@ import { cn, displayDate, formatMoney, periodLabel } from "@/lib/utils";
 import { titleWithHost } from "@/lib/item-host";
 import { AppIcon } from "./icons";
 import { DashboardUpcomingActions } from "./dashboard-upcoming-actions";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { NativeSelect } from "./ui/native-select";
@@ -18,6 +17,8 @@ import { TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/tab
 type UpcomingItem = PaymentItem & {
   nextPaymentAt: string;
   daysUntilPayment: number;
+  /** The amount converted to the display currency. */
+  displayAmount?: number;
 };
 
 function tx(locale: Locale, en: string, ru: string) {
@@ -68,13 +69,26 @@ function DetailValue({ label, children }: { label: string; children: React.React
   );
 }
 
+/** Amount in the display currency, with the entry's own amount underneath when it is in another currency. */
+function Amount({ item, displayCurrency }: { item: UpcomingItem; displayCurrency: string }) {
+  const converted = item.currency !== displayCurrency && item.displayAmount !== undefined;
+  return (
+    <>
+      <span className="block font-semibold tabular-nums text-white">{formatMoney(converted ? item.displayAmount! : item.amount, converted ? displayCurrency : item.currency)}</span>
+      {converted ? <span className="mt-0.5 block text-[11.5px] tabular-nums text-zinc-500">{formatMoney(item.amount, item.currency)}</span> : null}
+    </>
+  );
+}
+
 export function DashboardUpcomingTable({
   items,
   workspaceId,
+  displayCurrency,
   locale,
 }: {
   items: UpcomingItem[];
   workspaceId: number;
+  displayCurrency: string;
   locale: Locale;
 }) {
   const [expanded, setExpanded] = useState<Set<number>>(() => new Set());
@@ -135,9 +149,7 @@ export function DashboardUpcomingTable({
     const url = vendorHref(item.vendorUrl);
     const notes = item.notes.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     return (
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        {/* Vendor and account columns only fit on very wide screens, so they are always here too. */}
-        <DetailValue label={tx(locale, "Vendor / account", "Поставщик / аккаунт")}>{[item.vendorName, item.accountName].filter(Boolean).join(" · ") || "—"}</DetailValue>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <DetailValue label={tx(locale, "Billing", "Оплата")}>{billingLabel(item, locale)}</DetailValue>
         <DetailValue label={tx(locale, "Billing range", "Период действия")}>
           {displayDate(item.billingStartAt)} → {displayDate(item.billingEndAt)}
@@ -179,29 +191,26 @@ export function DashboardUpcomingTable({
         </NativeSelect>
         <span className="text-xs text-zinc-500">{filtering ? `${visible.length} / ${items.length}` : items.length}</span>
       </div>
-      <div className="h-[420px] space-y-3 overflow-y-auto p-3 md:hidden">
+      <div className="space-y-2 p-3 md:hidden">
         {visible.map((item) => (
           <article key={item.id} className="overflow-hidden rounded-lg border border-white/[0.06] bg-white/[0.02]">
-            <div className="p-3">
-              <div className="flex items-start gap-2">
-                {disclosure(item)}
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate font-semibold text-foreground">{item.name}</h3>
-                  {hostLine(item) ? <p className="mt-0.5 font-mono text-[11.5px] text-zinc-500">{hostLine(item)}</p> : null}
-                  <p className="mt-1 text-xs text-muted-foreground">{item.vendorName || "—"} · {item.accountName || "—"}</p>
-                </div>
-                <DashboardUpcomingActions workspaceId={item.workspaceId || workspaceId} itemId={item.id} itemName={item.name} amountLabel={formatMoney(item.amount, item.currency)} locale={locale} />
+            <div className="flex items-start gap-2 p-3">
+              {disclosure(item)}
+              <div className="min-w-0 flex-1">
+                <h3 className="flex min-w-0 items-center gap-1.5 font-semibold text-foreground">
+                  <span className="shrink-0" style={{ color: item.categoryColor || undefined }}><AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" /></span>
+                  <span className="truncate">{item.name}</span>
+                </h3>
+                {hostLine(item) ? <p className="mt-0.5 font-mono text-[11.5px] text-zinc-500">{hostLine(item)}</p> : null}
+                <p className={cn("mt-1.5 text-xs", item.daysUntilPayment < 0 ? "text-red-300" : "text-zinc-400")}>
+                  {relativeDays(item.daysUntilPayment, locale)} <span className="text-zinc-500">· {displayDate(item.nextPaymentAt)}</span>
+                </p>
               </div>
-              <div className="mt-3 flex items-end justify-between gap-3 pl-8">
-                <div>
-                  <Badge className="gap-1.5" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}18`, color: item.categoryColor || "#c4b5fd" }}>
-                    <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
-                    {item.categoryName || t(locale, "uncategorized")}
-                  </Badge>
-                  <p className="mt-2 text-xs text-muted-foreground">{t(locale, "paymentDate")}: {displayDate(item.nextPaymentAt)}</p>
-                </div>
-                <p className="text-right font-semibold text-foreground">{formatMoney(item.amount, item.currency)}</p>
-              </div>
+              <div className="shrink-0 text-right text-sm"><Amount item={item} displayCurrency={displayCurrency} /></div>
+            </div>
+            <div className="flex items-center justify-between gap-2 border-t border-white/[0.04] px-3 py-2">
+              <span className="min-w-0 truncate text-xs text-zinc-500">{[item.vendorName, item.accountName].filter(Boolean).join(" · ") || "—"}</span>
+              <DashboardUpcomingActions workspaceId={item.workspaceId || workspaceId} itemId={item.id} itemName={item.name} amountLabel={formatMoney(item.amount, item.currency)} locale={locale} />
             </div>
             {expanded.has(item.id) ? <div className="border-t border-border bg-surface p-3">{details(item)}</div> : null}
           </article>
@@ -209,72 +218,75 @@ export function DashboardUpcomingTable({
         {!visible.length ? <p className="py-8 text-center text-sm text-muted-foreground">{emptyText}</p> : null}
       </div>
 
-      {/* Fixed height so a long list scrolls inside the card; the header stays pinned. */}
-      <div className="hidden h-[420px] overflow-auto md:block">
-        <table className="w-full caption-bottom text-sm">
-          <TableHeader className="sticky top-0 z-10 bg-surface">
+      {/* Fixed column widths so names truncate to one line instead of pushing the table sideways. */}
+      <div className="hidden md:block">
+        <table className="w-full table-fixed text-sm">
+          <colgroup>
+            <col className="w-11" />
+            <col />
+            <col className="w-[9.5rem]" />
+            <col className="w-[22%]" />
+            <col className="w-[7.5rem]" />
+            <col className="w-[6.5rem]" />
+          </colgroup>
+          <TableHeader>
             <TableRow>
-              <TableHead className="w-12 px-0 text-center first:pl-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
+              <TableHead className="px-0"><span className="sr-only">{tx(locale, "Details", "Детали")}</span></TableHead>
               <TableHead>{tx(locale, "Name", "Название")}</TableHead>
-              <TableHead>{tx(locale, "Payment date", "Дата оплаты")}</TableHead>
-              <TableHead className="text-center">{t(locale, "category")}</TableHead>
-              <TableHead className="hidden 2xl:table-cell">{tx(locale, "Vendor", "Вендор")}</TableHead>
-              <TableHead className="hidden 2xl:table-cell">{tx(locale, "Account", "Аккаунт")}</TableHead>
+              <TableHead>{tx(locale, "Due", "Срок")}</TableHead>
+              <TableHead>{tx(locale, "Vendor · account", "Поставщик · аккаунт")}</TableHead>
               <TableHead className="text-right">{t(locale, "amount")}</TableHead>
-              <TableHead className="text-right">{t(locale, "actions")}</TableHead>
+              <TableHead><span className="sr-only">{t(locale, "actions")}</span></TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.map((item) => (
               <Fragment key={item.id}>
                 <TableRow className="group">
-                  <TableCell className="w-12 px-0 py-2 text-center first:pl-0">{disclosure(item)}</TableCell>
-                  <TableCell className="font-medium text-white">
-                    <span className="block">{item.name}</span>
-                    {hostLine(item) ? <span className="mt-0.5 block font-mono text-[11.5px] font-normal text-zinc-500">{hostLine(item)}</span> : null}
+                  <TableCell className="px-0 py-2 text-center">{disclosure(item)}</TableCell>
+                  <TableCell className="py-2.5" title={item.categoryName || undefined}>
+                    <span className="flex min-w-0 items-center gap-2 font-medium text-white">
+                      <span className="shrink-0" style={{ color: item.categoryColor || undefined }}><AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" /></span>
+                      <span className="truncate">{item.name}</span>
+                    </span>
+                    {hostLine(item) ? <span className="mt-0.5 block truncate pl-[22px] font-mono text-[11.5px] text-zinc-500">{hostLine(item)}</span> : null}
                   </TableCell>
-                  <TableCell className="whitespace-nowrap text-zinc-300">
-                    <span className={cn("block", item.daysUntilPayment < 0 && "text-red-300")}>{relativeDays(item.daysUntilPayment, locale)}</span>
+                  <TableCell className="py-2.5">
+                    <span className={cn("block truncate", item.daysUntilPayment < 0 ? "text-red-300" : "text-zinc-200")}>{relativeDays(item.daysUntilPayment, locale)}</span>
                     <span className="mt-0.5 block text-[11.5px] text-zinc-500">{displayDate(item.nextPaymentAt)}</span>
                   </TableCell>
-                  <TableCell className="text-center">
-                    <Badge className="gap-1.5" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}18`, color: item.categoryColor || "#c4b5fd" }}>
-                      <AppIcon name={item.categoryIcon} className="h-3 w-3" />
-                      {item.categoryName || t(locale, "uncategorized")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="hidden font-medium text-white 2xl:table-cell">
+                  <TableCell className="py-2.5">
                     {item.vendorName ? (
                       vendorHref(item.vendorUrl) ? (
-                        <a href={vendorHref(item.vendorUrl)} target="_blank" rel="noreferrer" className="underline decoration-zinc-600 hover:decoration-violet-300">
+                        <a href={vendorHref(item.vendorUrl)} target="_blank" rel="noreferrer" className="block truncate text-zinc-200 transition hover:text-white">
                           {item.vendorName}
                         </a>
-                      ) : item.vendorName
+                      ) : <span className="block truncate text-zinc-200">{item.vendorName}</span>
                     ) : <span className="text-zinc-500">—</span>}
+                    {item.accountName ? <span className="mt-0.5 block truncate text-[11.5px] text-zinc-500" title={item.accountName}>{item.accountName}</span> : null}
                   </TableCell>
-                  <TableCell className="hidden max-w-48 truncate text-zinc-300 2xl:table-cell" title={item.accountName || undefined}>{item.accountName || "—"}</TableCell>
-                  <TableCell className="text-right font-semibold text-white">{formatMoney(item.amount, item.currency)}</TableCell>
+                  <TableCell className="py-2.5 text-right"><Amount item={item} displayCurrency={displayCurrency} /></TableCell>
                   <TableCell className="py-2">
                     <div className="flex justify-end">
-                    <DashboardUpcomingActions
-                      workspaceId={item.workspaceId || workspaceId}
-                      itemId={item.id}
-                      itemName={item.name}
-                      amountLabel={formatMoney(item.amount, item.currency)}
-                      locale={locale}
-                    />
+                      <DashboardUpcomingActions
+                        workspaceId={item.workspaceId || workspaceId}
+                        itemId={item.id}
+                        itemName={item.name}
+                        amountLabel={formatMoney(item.amount, item.currency)}
+                        locale={locale}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
                 {expanded.has(item.id) ? (
                   <TableRow>
-                    <TableCell colSpan={8} className="bg-white/[0.015] py-3 pl-16">{details(item)}</TableCell>
+                    <TableCell colSpan={6} className="bg-white/[0.015] py-3 pl-14">{details(item)}</TableCell>
                   </TableRow>
                 ) : null}
               </Fragment>
             ))}
             {!visible.length ? (
-              <TableRow><TableCell colSpan={8} className="py-10 text-center text-zinc-500">{emptyText}</TableCell></TableRow>
+              <TableRow><TableCell colSpan={6} className="py-10 text-center text-zinc-500">{emptyText}</TableCell></TableRow>
             ) : null}
           </TableBody>
         </table>

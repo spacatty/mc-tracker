@@ -2316,6 +2316,17 @@ async function getConversionRates(displayCurrency: string, currencies: string[])
   return rates;
 }
 
+/** Monthly spend per vendor in the display currency, largest first (top 6). */
+function vendorSpend(items: PaymentItem[], displayCurrency: string, rates: Map<string, number>) {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const name = (item.vendorName || "").trim();
+    if (!name) continue;
+    map.set(name, (map.get(name) || 0) + convertForDisplay(normalizeMonthlyAmount(item), item.currency, displayCurrency, rates));
+  }
+  return [...map.entries()].map(([name, monthly]) => ({ name, monthly })).sort((a, b) => b.monthly - a.monthly).slice(0, 6);
+}
+
 function convertForDisplay(amount: number, sourceCurrency: string, displayCurrency: string, rates: Map<string, number>) {
   const from = normalizeDashboardCurrency(sourceCurrency);
   const to = normalizeDashboardCurrency(displayCurrency);
@@ -2384,9 +2395,9 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
       if (daysUntilPayment > 14) return null;
-      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item) };
+      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item), displayAmount: convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates) };
     })
-    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string } => Boolean(item))
+    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string; displayAmount: number } => Boolean(item))
     .sort((a, b) => a.nextPaymentAt.localeCompare(b.nextPaymentAt));
 
   const dueMap = new Map<
@@ -2449,6 +2460,7 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
     upcomingDueByCategory: [...dueMap.values()].sort((a, b) => b.year - a.year),
     categoryItemSplit: [...categoryItemMap.values()].sort((a, b) => b.count - a.count),
     categoryBreakdown: [...categoryMap.values()].sort((a, b) => b.monthly - a.monthly),
+    vendorBreakdown: vendorSpend(recurring, resolvedDisplayCurrency, rates),
     workspaceObjectDominance: [],
     workspaceCostDominance: [],
     trend: [
@@ -2522,9 +2534,9 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
       if (daysUntilPayment > 14) return null;
-      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item) };
+      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item), displayAmount: convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates) };
     })
-    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string } => Boolean(item))
+    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string; displayAmount: number } => Boolean(item))
     .sort((a, b) => a.nextPaymentAt.localeCompare(b.nextPaymentAt));
 
   const dueMap = new Map<
@@ -2582,6 +2594,7 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
     upcomingDueByCategory: [...dueMap.values()].sort((a, b) => b.year - a.year),
     categoryItemSplit: [...categoryItemMap.values()].sort((a, b) => b.count - a.count),
     categoryBreakdown: [...categoryMap.values()].sort((a, b) => b.monthly - a.monthly),
+    vendorBreakdown: vendorSpend(recurring, resolvedDisplayCurrency, rates),
     workspaceObjectDominance: [],
     workspaceCostDominance: [],
     trend: [
@@ -2654,9 +2667,9 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
       if (daysUntilPayment > 14) return null;
-      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item) };
+      return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item), displayAmount: convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates) };
     })
-    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string } => Boolean(item))
+    .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string; displayAmount: number } => Boolean(item))
     .sort((a, b) => a.nextPaymentAt.localeCompare(b.nextPaymentAt));
 
   const dueMap = new Map<
@@ -2744,6 +2757,7 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
     upcomingDueByCategory: [...dueMap.values()].sort((a, b) => b.year - a.year),
     categoryItemSplit: [...categoryItemMap.values()].sort((a, b) => b.count - a.count),
     categoryBreakdown: [...categoryMap.values()].sort((a, b) => b.monthly - a.monthly),
+    vendorBreakdown: vendorSpend(recurring, resolvedDisplayCurrency, rates),
     workspaceObjectDominance,
     workspaceCostDominance,
     trend: [

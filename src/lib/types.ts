@@ -150,7 +150,8 @@ export type DashboardStats = {
   recurringCount: number;
   oneMonthChangeAmount: number;
   oneMonthChangePercent: number;
-  upcoming: Array<PaymentItem & { nextPaymentAt: string; daysUntilPayment: number }>;
+  /** displayAmount is the amount in the display currency. */
+  upcoming: Array<PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; displayAmount?: number }>;
   upcomingDueByCategory: Array<{
     categoryId: number | null;
     name: string;
@@ -163,6 +164,7 @@ export type DashboardStats = {
   }>;
   categoryItemSplit: Array<{ name: string; icon: string; color: string; count: number }>;
   categoryBreakdown: Array<{ name: string; icon: string; color: string; monthly: number }>;
+  vendorBreakdown: Array<{ name: string; monthly: number }>;
   workspaceObjectDominance: Array<{ name: string; color: string; count: number }>;
   workspaceCostDominance: Array<{ name: string; color: string; monthly: number }>;
   trend: Array<{ label: string; amount: number }>;
