@@ -2,7 +2,6 @@ import Link from "next/link";
 import { PencilLine } from "lucide-react";
 import { BulkImportPanel } from "@/components/bulk-import-panel";
 import { Button } from "@/components/ui/button";
-import { PageHeader } from "@/components/ui/page-header";
 import { requireUser } from "@/lib/auth";
 import { aiConfigured, aiModelLabel } from "@/lib/ai/client";
 import { listCategoriesForWorkspace, listItemsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
@@ -25,28 +24,26 @@ export default async function ImportPage({ searchParams }: { searchParams: Promi
   const ru = locale === "ru";
   const configured = aiConfigured();
   const aiLockedReason = !user.premium
-    ? (ru ? "AI-разбор свободного текста доступен в Premium. CSV и JSON работают всегда." : "AI parsing of free-form text is a Premium feature. CSV and JSON always work.")
+    ? (ru ? "Разбор произвольного текста с помощью AI доступен в Premium. CSV и JSON импортируются всегда." : "AI parsing of free-form text is a Premium feature. CSV and JSON always work.")
     : !configured
-      ? (ru ? "AI не настроен: добавьте ключ OpenRouter в разделе Admin или укажите OPENROUTER_API_KEY в .env.local." : "AI is not configured: add an OpenRouter key in Admin, or set OPENROUTER_API_KEY in .env.local.")
+      ? (ru ? "AI не настроен: добавьте ключ OpenRouter в разделе «Администрирование» или укажите OPENROUTER_API_KEY в .env.local." : "AI is not configured: add an OpenRouter key in Admin, or set OPENROUTER_API_KEY in .env.local.")
       : undefined;
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        eyebrow={ru ? "Импорт" : "Import"}
-        title={ru ? "Добавить записи пачкой" : "Add entries in bulk"}
-        description={ru
-          ? "Вставьте таблицу, список или счёт — проверьте строки в таблице и подтвердите все сразу."
-          : "Paste a spreadsheet, a list or an invoice, review the rows in the grid, and confirm them all at once."}
-        actions={workspace.accessRole !== "viewer" ? (
-          <Button asChild variant="ghost" size="sm">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[13px] text-zinc-500">{ru
+          ? "Вставьте таблицу, список или счёт, проверьте строки и подтвердите их все сразу."
+          : "Paste a spreadsheet, a list or an invoice, review the rows in the grid, and confirm them all at once."}</p>
+        {workspace.accessRole !== "viewer" ? (
+          <Button asChild variant="ghost" size="sm" className="shrink-0">
             <Link href={`/app/items?workspace=${workspace.id}${defaultCategoryId ? `&category=${defaultCategoryId}` : ""}&add=1`}>
               <PencilLine className="h-4 w-4" />
-              {ru ? "Добавить одну вручную" : "Add one manually"}
+              {ru ? "Добавить запись вручную" : "Add one manually"}
             </Link>
           </Button>
         ) : null}
-      />
+      </div>
       <BulkImportPanel
         workspaceId={workspace.id}
         categories={categories}

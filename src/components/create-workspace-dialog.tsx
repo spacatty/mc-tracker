@@ -1,65 +1,113 @@
 "use client";
 
-import * as Dialog from "@radix-ui/react-dialog";
-import type { ReactNode } from "react";
-import { Plus, X } from "lucide-react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useFormStatus } from "react-dom";
+import { FolderPlus, Loader2, Plus } from "lucide-react";
 import { createFolderAction } from "@/app/actions";
+import { tx } from "@/components/capture/shared";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import { EmojiPickerInput } from "./emoji-picker-input";
+import { CurrentWorkspaceInput } from "./current-workspace-input";
 import { Button } from "./ui/button";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "./ui/dialog";
+import { Field } from "./ui/field";
 import { Input } from "./ui/input";
+import { Kbd } from "./ui/kbd";
+
+/**
+ * Submit button for dialog forms bound to a server action: spins while pending and calls `onSubmitted`
+ * once the action settles (server actions here redirect, which would otherwise leave the dialog open).
+ */
+export function DialogSubmitButton({
+  children,
+  onSubmitted,
+  variant,
+}: {
+  children: ReactNode;
+  onSubmitted?: () => void;
+  variant?: "default" | "destructive";
+}) {
+  const { pending } = useFormStatus();
+  const wasPending = useRef(false);
+  useEffect(() => {
+    if (pending) {
+      wasPending.current = true;
+    } else if (wasPending.current) {
+      wasPending.current = false;
+      onSubmitted?.();
+    }
+  }, [pending, onSubmitted]);
+  return (
+    <Button type="submit" size="sm" variant={variant} disabled={pending}>
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+      {children}
+    </Button>
+  );
+}
 
 export function CreateWorkspaceDialog({
   trigger,
   locale = "en",
 }: {
+  /** Custom trigger. Only pass one from a client component (a server-rendered element here causes a hydration mismatch). */
   trigger?: ReactNode;
   locale?: Locale;
 }) {
+  const [open, setOpen] = useState(false);
   return (
-    <Dialog.Root>
-      <Dialog.Trigger asChild>
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
         {trigger || (
-          <Button>
-            <Plus className="h-4 w-4" />
+          <Button size="sm">
+            <Plus className="h-3.5 w-3.5" aria-hidden="true" />
             {t(locale, "createWorkspace")}
           </Button>
         )}
-      </Dialog.Trigger>
-      <Dialog.Portal>
-        <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
-        <Dialog.Content className="capture-panel-in fixed inset-x-0 top-[16vh] z-50 mx-auto w-[calc(100vw-1.5rem)] max-w-xl overflow-hidden rounded-xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
-          <div className="flex items-start justify-between gap-4 border-b border-white/10 bg-white/[0.015] p-5">
-            <div>
-              <Dialog.Title className="text-lg font-semibold text-white">{t(locale, "createWorkspace")}</Dialog.Title>
-              <Dialog.Description className="mt-1 text-sm text-zinc-500">
-                {locale === "ru"
-                  ? "Каждое пространство имеет отдельные категории, записи, уведомления и статистику."
-                  : "Each workspace has isolated categories, entries, notifications, and stats."}
-              </Dialog.Description>
+      </DialogTrigger>
+      <DialogContent size="md" closeLabel={tx(locale, "Close create workspace dialog", "Закрыть окно создания пространства")}>
+        <DialogHeader icon={<FolderPlus />}>
+          <DialogTitle>{t(locale, "createWorkspace")}</DialogTitle>
+          <DialogDescription>
+            {tx(
+              locale,
+              "Each workspace has its own categories, entries, notifications and stats.",
+              "У каждого пространства свои категории, записи, уведомления и статистика.",
+            )}
+          </DialogDescription>
+        </DialogHeader>
+        <form action={createFolderAction} className="flex min-h-0 flex-1 flex-col">
+          <CurrentWorkspaceInput />
+          <DialogBody>
+            <div className="grid gap-4 grid-cols-[5.5rem_minmax(0,1fr)]">
+              <Field label={tx(locale, "Icon", "Иконка")}>
+                <EmojiPickerInput name="emoji" defaultValue="📦" ariaLabel={tx(locale, "Workspace icon", "Иконка пространства")} />
+              </Field>
+              <Field label={t(locale, "name")} htmlFor="create-workspace-name" required>
+                <Input
+                  id="create-workspace-name"
+                  name="name"
+                  placeholder={tx(locale, "e.g. Team servers", "например, «Серверы команды»")}
+                  required
+                  autoFocus
+                />
+              </Field>
             </div>
-            <Dialog.Close asChild>
-              <button type="button" className="rounded-xl p-2 text-zinc-500 transition hover:bg-white/10 hover:text-white" aria-label={locale === "ru" ? "Закрыть окно создания пространства" : "Close create workspace dialog"}>
-                <X className="h-4 w-4" />
-              </button>
-            </Dialog.Close>
-          </div>
-
-          <form action={createFolderAction} className="grid gap-3 p-5 lg:grid-cols-[120px_1fr]">
-            <EmojiPickerInput name="emoji" defaultValue="📦" />
-            <Input name="name" placeholder={locale === "ru" ? "Название пространства, например Team servers" : "Workspace name, e.g. Team servers"} required />
-            <div className="lg:col-span-2 flex justify-end gap-2">
-              <Dialog.Close asChild>
-                <Button type="button" variant="secondary">{locale === "ru" ? "Отмена" : "Cancel"}</Button>
-              </Dialog.Close>
-              <Button type="submit">
-                {t(locale, "createWorkspace")}
-              </Button>
-            </div>
-          </form>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+          </DialogBody>
+          <DialogFooter
+            hint={
+              <>
+                <Kbd>Enter</Kbd> {tx(locale, "to create", "создать")}
+              </>
+            }
+          >
+            <Button type="button" variant="ghost" size="sm" onClick={() => setOpen(false)}>
+              {t(locale, "cancel")}
+            </Button>
+            <DialogSubmitButton onSubmitted={() => setOpen(false)}>{t(locale, "createWorkspace")}</DialogSubmitButton>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

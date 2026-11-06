@@ -1,11 +1,18 @@
 "use client";
 
-import { useMemo } from "react";
-import { Copy, Link2, Trash2 } from "lucide-react";
+import { useState, useTransition } from "react";
+import { Check, Copy, Link2, Trash2 } from "lucide-react";
 import { revokeWorkspaceInviteAction } from "@/app/actions";
+import { tx } from "@/components/capture/shared";
 import type { Locale } from "@/lib/i18n";
-import { t } from "@/lib/i18n";
-import { Button } from "./ui/button";
+import { roleLabel, t } from "@/lib/i18n";
+import { displayDate } from "@/lib/utils";
+import { useOrigin } from "./invite-created-banner";
+import { Badge } from "./ui/badge";
+import { ConfirmDialog } from "./ui/dialog";
+import { RowAction, RowActions } from "./ui/row-actions";
+
+type Invite = { token: string; role: string; created_at?: string };
 
 export function WorkspaceInviteLinks({
   workspaceId,
@@ -14,55 +21,90 @@ export function WorkspaceInviteLinks({
   locale = "en",
 }: {
   workspaceId: number;
-  invites: Array<{ token: string; role: string }>;
+  invites: Invite[];
   isOwner: boolean;
   locale?: Locale;
 }) {
-  const base = useMemo(() => {
-    if (typeof window === "undefined") return "";
-    return window.location.origin;
-  }, []);
+  const origin = useOrigin();
+  const [copiedToken, setCopiedToken] = useState("");
+  const [revokeTarget, setRevokeTarget] = useState<Invite | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  function fullLink(token: string) {
-    if (!base) return `/invite/${token}`;
-    return `${base}/invite/${token}`;
+  const fullLink = (token: string) => `${origin}/invite/${token}`;
+
+  async function copy(token: string) {
+    await navigator.clipboard?.writeText(fullLink(token));
+    setCopiedToken(token);
+    window.setTimeout(() => setCopiedToken((current) => (current === token ? "" : current)), 1200);
+  }
+
+  function revoke() {
+    if (!revokeTarget) return;
+    const token = revokeTarget.token;
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("workspaceId", String(workspaceId));
+      formData.set("token", token);
+      await revokeWorkspaceInviteAction(formData);
+      setRevokeTarget(null);
+    });
+  }
+
+  if (!invites.length) {
+    return <p className="px-4 py-6 text-center text-[13px] text-zinc-500">{t(locale, "noActiveInvites")}</p>;
   }
 
   return (
-    <div className="space-y-2">
-      {invites.map((invite) => {
-        const link = fullLink(invite.token);
-        return (
-          <div key={invite.token} className="flex flex-wrap items-center gap-2 rounded-xl border border-violet-400/15 bg-violet-500/[0.06] p-3 text-xs text-zinc-300">
-            <button
-              type="button"
-              className="inline-flex items-center gap-2 break-all rounded-lg px-2 py-1 text-left hover:bg-white/10"
-              onClick={async () => {
-                await navigator.clipboard?.writeText(link);
-              }}
-              title={locale === "ru" ? "Скопировать ссылку-приглашение" : "Copy invite link"}
-            >
-              <span className="grid h-5 w-5 place-items-center rounded-md bg-violet-500/20 text-violet-200">
-                <Link2 className="h-3 w-3 shrink-0" />
-              </span>
-              <span className="font-mono">{invite.role}: {link}</span>
-              <Copy className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
-            </button>
-            {isOwner ? (
-              <form action={revokeWorkspaceInviteAction} className="ml-auto">
-                <input type="hidden" name="workspaceId" value={workspaceId} />
-                <input type="hidden" name="token" value={invite.token} />
-                <Button size="sm" className="h-7 border border-red-300/30 bg-red-500/15 text-red-100 hover:bg-red-500/25">
-                  <Trash2 className="h-3.5 w-3.5" />
-                  {locale === "ru" ? "Отозвать" : "Revoke"}
-                </Button>
-              </form>
-            ) : null}
-          </div>
-        );
-      })}
-      {!invites.length ? <p className="text-sm text-zinc-500">{t(locale, "noActiveInvites")}</p> : null}
-    </div>
+    <>
+      <ul className="divide-y divide-white/[0.05]">
+        {invites.map((invite) => {
+          const role = invite.role === "editor" || invite.role === "viewer" ? roleLabel(locale, invite.role) : invite.role;
+          return (
+            <li key={invite.token} className="group flex items-center gap-3 px-4 py-2.5 transition hover:bg-white/[0.03]">
+              <Link2 className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-mono text-[12px] text-zinc-300">{fullLink(invite.token)}</p>
+                {invite.created_at ? (
+                  <p className="text-[11.5px] tabular-nums text-zinc-500">
+                    {tx(locale, "Created", "Создана")} {displayDate(invite.created_at)}
+                  </p>
+                ) : null}
+              </div>
+              <Badge variant="outline" tone={invite.role === "editor" ? "accent" : "default"} className="shrink-0">
+                {role}
+              </Badge>
+              <RowActions>
+                <RowAction
+                  label={copiedToken === invite.token ? tx(locale, "Copied", "Скопировано") : tx(locale, "Copy invite link", "Копировать ссылку-приглашение")}
+                  icon={copiedToken === invite.token ? <Check className="text-emerald-300" /> : <Copy />}
+                  onClick={() => void copy(invite.token)}
+                />
+                {isOwner ? (
+                  <RowAction
+                    label={tx(locale, "Revoke invite", "Отозвать приглашение")}
+                    icon={<Trash2 />}
+                    tone="danger"
+                    onClick={() => setRevokeTarget(invite)}
+                  />
+                ) : null}
+              </RowActions>
+            </li>
+          );
+        })}
+      </ul>
+      <ConfirmDialog
+        open={Boolean(revokeTarget)}
+        onOpenChange={(next) => {
+          if (!next) setRevokeTarget(null);
+        }}
+        destructive
+        pending={pending}
+        title={tx(locale, "Revoke this invite?", "Отозвать приглашение?")}
+        description={tx(locale, "The link stops working right away. People who already joined keep access.", "Ссылка сразу перестанет работать. Те, кто уже присоединился, сохранят доступ.")}
+        confirmLabel={tx(locale, "Revoke", "Отозвать")}
+        cancelLabel={t(locale, "cancel")}
+        onConfirm={revoke}
+      />
+    </>
   );
 }
-

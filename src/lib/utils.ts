@@ -92,3 +92,18 @@ export function addBillingPeriod(start: Date, period: BillingPeriod | null, cust
   else date.setMonth(date.getMonth() + 1);
   return date;
 }
+
+/**
+ * Category and field colours are stored as whatever the user picked, which is often a saturated swatch.
+ * Blend them toward zinc so icons, badges and chips read in the app's muted palette.
+ */
+export function softColor(color?: string | null, strength = 70) {
+  if (!color) return undefined;
+  return `color-mix(in srgb, ${color} ${strength}%, #a1a1aa)`;
+}
+
+/** A faint fill derived from a category colour (chip backgrounds, bars). */
+export function softFill(color?: string | null, alpha = 12) {
+  if (!color) return undefined;
+  return `color-mix(in srgb, ${color} ${alpha}%, transparent)`;
+}

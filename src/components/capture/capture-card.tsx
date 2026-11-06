@@ -5,7 +5,7 @@ import { useState, type ReactNode } from "react";
 import type { CaptureContext, ParsedLine } from "@/lib/capture/syntax";
 import type { ImportRow, ImportRowErrors } from "@/lib/import/rows";
 import type { Locale } from "@/lib/i18n";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn, formatMoney, softColor } from "@/lib/utils";
 import { AppIcon } from "../icons";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
 import { CategoryList, CommitInput, CurrencySelect, PeriodPicker, addPeriodIso, inputClass, type PeriodValue } from "./editors";
@@ -45,7 +45,7 @@ export function CaptureCard({
 }) {
   const { row, assumed, duplicateOf, target } = parsed;
   const category = context.categories.find((candidate) => candidate.id === row.categoryId);
-  const color = category?.color || "#71717a";
+  const color = softColor(category?.color || "#71717a");
   const amount = Number(row.amountInput || 0);
   const customDays = Number(row.customPeriodDaysInput) || 30;
   const periodValue: PeriodValue = { paymentType: row.paymentType, period: row.period, customDays };
@@ -303,7 +303,7 @@ export function CaptureCard({
             </p>
           ) : null}
           {row.action !== "create" && !target ? (
-            <p className="flex items-center gap-1.5 text-xs text-red-300"><AlertTriangle className="h-3.5 w-3.5" />{tx(locale, "That entry id does not exist in this workspace.", "Записи с таким id нет в этом пространстве.")}</p>
+            <p className="flex items-center gap-1.5 text-xs text-red-300"><AlertTriangle className="h-3.5 w-3.5" />{tx(locale, "That entry id does not exist in this workspace.", "Записи с таким ID нет в этом пространстве.")}</p>
           ) : null}
           {Object.entries(errors).filter(([key]) => key !== "id").map(([key, message]) => (
             <p key={key} className="flex items-center gap-1.5 text-xs text-red-300"><AlertTriangle className="h-3.5 w-3.5" />{message}</p>
@@ -367,15 +367,15 @@ function DatesEditor({ start, end, period, locale, onSave }: { start: string; en
         </label>
         {recurring ? (
           <label className="space-y-1 text-[11px] text-zinc-500">
-            {tx(locale, "Renews / expires", "Продление")}
+            {tx(locale, "Renews / expires", "Продление / окончание")}
             <input type="date" className={inputClass} value={endDraft} onChange={(event) => setEndDraft(event.target.value)} />
           </label>
         ) : null}
       </div>
       {recurring ? (
         <div className="flex flex-wrap gap-1">
-          <Chip onClick={() => { setStartDraft(today); setEndDraft(addPeriodIso(today, period)); }}>{tx(locale, "Starts today", "С сегодня")}</Chip>
-          <Chip onClick={() => setEndDraft(addPeriodIso(startDraft || today, period))}>{tx(locale, "One period after start", "Через период")}</Chip>
+          <Chip onClick={() => { setStartDraft(today); setEndDraft(addPeriodIso(today, period)); }}>{tx(locale, "Starts today", "Начать сегодня")}</Chip>
+          <Chip onClick={() => setEndDraft(addPeriodIso(startDraft || today, period))}>{tx(locale, "One period after start", "Через один период")}</Chip>
         </div>
       ) : null}
       <button type="submit" className="h-8 w-full rounded-lg bg-violet-500/25 text-sm font-medium text-violet-50 transition hover:bg-violet-500/35">{tx(locale, "Done", "Готово")}</button>

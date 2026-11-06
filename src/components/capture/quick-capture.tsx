@@ -32,7 +32,7 @@ const STEP_LABELS: Record<GuideStep, [string, string]> = {
   vendor: ["Vendor", "Поставщик"],
   account: ["Account", "Аккаунт"],
   price: ["Price", "Цена"],
-  date: ["Billing start", "Начало оплаты"],
+  date: ["Billing start", "Начало периода"],
 };
 const STEP_ICONS: Record<string, ReactNode> = {
   category: <Tags className="h-3 w-3" />,
@@ -337,7 +337,7 @@ export function QuickCapture({
           detail: tx(locale, `${count} ${count === 1 ? "entry" : "entries"}`, `${count} зап.`),
         }));
         if (body && word.startsWith("@") && !ranked.some((entry) => entry.vendor.toLowerCase() === body.toLowerCase())) {
-          suggestions.push({ key: "v-new", label: tx(locale, `Create “${body}”`, `Создать «${body}»`), insert: `@${quoteIfSpaces(body)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new vendor", "новый") });
+          suggestions.push({ key: "v-new", label: tx(locale, `Create “${body}”`, `Создать «${body}»`), insert: `@${quoteIfSpaces(body)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new vendor", "новый поставщик") });
         }
       }
     } else if (step === "account") {
@@ -359,7 +359,7 @@ export function QuickCapture({
           .slice(0, 6);
         ranked.forEach(({ account }) => suggestions.push({ key: `a${account}`, label: account, insert: `account:${quoteIfSpaces(account)}`, replace: true, detail: vendor, match: query, icon: <LetterIcon text={account} /> }));
         if (query && !ranked.some((entry) => entry.account.toLowerCase() === query.toLowerCase())) {
-          suggestions.push({ key: "a-new", label: tx(locale, `Use “${query}”`, `Использовать «${query}»`), insert: `account:${quoteIfSpaces(query)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new account", "новый") });
+          suggestions.push({ key: "a-new", label: tx(locale, `Use “${query}”`, `Использовать «${query}»`), insert: `account:${quoteIfSpaces(query)}`, replace: true, icon: <Plus className="h-3.5 w-3.5 text-zinc-400" />, detail: tx(locale, "new account", "новый аккаунт") });
         }
       }
     } else if (step === "price") {
@@ -367,7 +367,7 @@ export function QuickCapture({
         question = tx(locale, "How often?", "Как часто?");
         PERIOD_CHOICES.forEach((choice) => suggestions.push({ key: `p${choice.token}`, label: tx(locale, choice.en, choice.ru), insert: `${caretWord.replace(/\/.*$/, "")}${choice.token}`, replace: true, icon: <Repeat className="h-3.5 w-3.5 text-zinc-400" />, detail: choice.token }));
       } else if (wordIsNumber) {
-        question = tx(locale, "Which currency, and how often?", "Какая валюта и период?");
+        question = tx(locale, "Which currency, and how often?", "Какая валюта и как часто?");
         const amount = word.replace(/^[$€£₽¥]/, "");
         const typedSymbol = word.match(/^[$€£₽¥]/)?.[0];
         const codes = typedSymbol ? [SYMBOL_CODES[typedSymbol] || "USD"] : [...new Set([context.defaultCurrency, ...preferredCurrencies(context), "USD", "EUR", "RUB"])].slice(0, 4);
@@ -382,7 +382,7 @@ export function QuickCapture({
         question = tx(locale, "How much? Type it any way: 25 USD, $25, 25€, 2500 RUB, 10/yr", "Сколько? Как угодно: 25 USD, $25, 25€, 2500 RUB, 10/yr");
       }
     } else if (step === "date") {
-      question = tx(locale, "When does billing start? Any format: 03.11.2026, 3/11/26, 2026-11-03", "Когда начало оплаты? Любой формат: 03.11.2026, 3/11/26, 2026-11-03");
+      question = tx(locale, "When does billing start? Any format: 03.11.2026, 3/11/26, 2026-11-03", "Когда начинается период оплаты? Любой формат: 03.11.2026, 3/11/26, 2026-11-03");
       const parsedDate = wordIsDate ? parseDate(word) : null;
       if (parsedDate) {
         suggestions.push({ key: "d-typed", label: tx(locale, `Starts ${formatHuman(parsedDate, locale)}`, `С ${formatHuman(parsedDate, locale)}`), insert: caretWord, replace: true, icon: <CalendarDays className="h-3.5 w-3.5 text-zinc-400" />, detail: parsedDate });
@@ -391,12 +391,12 @@ export function QuickCapture({
         const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
         [
           { key: "today", label: tx(locale, "Today", "Сегодня"), date: today },
-          { key: "first", label: tx(locale, "1st of this month", "1-е число"), date: first },
+          { key: "first", label: tx(locale, "1st of this month", "1-е число месяца"), date: first },
         ].forEach((choice) => suggestions.push({ key: `d${choice.key}`, label: choice.label, insert: dottedDate(choice.date), replace: false, detail: dottedDate(choice.date), icon: <CalendarDays className="h-3.5 w-3.5 text-zinc-400" /> }));
       }
       suggestions.push({ key: "d-calendar", label: tx(locale, "Pick on calendar…", "Выбрать в календаре…"), insert: "", calendar: true, icon: <CalendarDays className="h-3.5 w-3.5 text-violet-300" /> });
     } else {
-      question = row ? tx(locale, "All set. ↵ saves; add more lines with ⇧↵.", "Готово. ↵ сохранит, ⇧↵ — новая строка.") : "";
+      question = row ? tx(locale, "All set. ↵ saves; add more lines with ⇧↵.", "Готово. ↵ — сохранить, ⇧↵ — новая строка.") : "";
     }
     return { step, steps, done, suggestions, question };
   }, [caret, caretLine.index, caretLine.start, caretWord, context, currentLine, locale, payload, skipped, slashReady]);
@@ -534,7 +534,7 @@ export function QuickCapture({
     const converted = result.rows.map((row) => rowToLine(row, context)).join("\n");
     const base = text.trim() ? `${text.replace(/\s+$/, "")}\n` : "";
     updateText(base + converted, (base + converted).length);
-    setNotice(tx(locale, `Turned ${result.rows.length} ${result.format.toUpperCase()} rows into lines. Check the cards, then save.`, `${result.rows.length} строк ${result.format.toUpperCase()} превращены в строки ввода. Проверьте карточки и сохраните.`));
+    setNotice(tx(locale, `Turned ${result.rows.length} ${result.format.toUpperCase()} rows into lines. Check the cards, then save.`, `Из ${result.format.toUpperCase()} получено строк ввода: ${result.rows.length}. Проверьте карточки и сохраните.`));
     return true;
   }
 
@@ -580,7 +580,7 @@ export function QuickCapture({
         updateText(converted.join("\n"));
       } catch (error) {
         const reason = error instanceof Error ? error.message : "";
-        setAiError(tx(locale, `AI could not read that${reason ? ` (${reason})` : ""}. Your text is untouched.`, `AI не смог разобрать текст${reason ? ` (${reason})` : ""}. Текст не изменён.`));
+        setAiError(tx(locale, `AI could not read that${reason ? ` (${reason})` : ""}. Your text is untouched.`, `AI не смог разобрать текст${reason ? ` (${reason})` : ""}. Ваш текст не изменён.`));
       }
     });
   }
@@ -701,7 +701,17 @@ export function QuickCapture({
           aria-describedby={undefined}
           className="capture-panel-in fixed inset-x-0 top-[22vh] z-50 mx-auto flex max-h-[74vh] w-[calc(100vw-1.5rem)] max-w-[840px] flex-col rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
           // Closes only from the X button: Escape and outside clicks would throw away what was typed.
-          onEscapeKeyDown={(event) => event.preventDefault()}
+          // Escape still closes the open menu or calendar when focus sits outside the editor
+          // (a tab, the category chip, the menu itself); the editor handles its own keys.
+          onEscapeKeyDown={(event) => {
+            event.preventDefault();
+            if (event.target === textareaRef.current) return;
+            if (calendarAt) closeCalendar();
+            else if (showSuggestions) {
+              setSuggestionsDismissed(true);
+              textareaRef.current?.focus();
+            }
+          }}
           onInteractOutside={(event) => event.preventDefault()}
           onDragOver={(event) => { event.preventDefault(); setDragging(true); }}
           onDragLeave={() => setDragging(false)}
@@ -716,7 +726,7 @@ export function QuickCapture({
 
           {/* Context bar: mode tabs, default category, close. Keyboard hints live in the menu and footer. */}
           <div className="flex h-14 shrink-0 items-center gap-3 border-b border-white/[0.06] px-5 text-[13px]">
-            <div role="tablist" aria-label={tx(locale, "Capture mode", "Режим")} className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
+            <div role="tablist" aria-label={tx(locale, "Capture mode", "Режим ввода")} className="flex shrink-0 items-center gap-0.5 rounded-lg bg-white/[0.03] p-0.5">
               {([
                 ["quick", <Zap key="i" className="h-3.5 w-3.5" />, tx(locale, "Quick", "Быстро")],
                 ["ai", <Sparkles key="i" className="h-3.5 w-3.5" />, tx(locale, "AI import", "AI-импорт")],
@@ -802,7 +812,7 @@ export function QuickCapture({
               rows={1}
               spellCheck={false}
               disabled={readOnly}
-              placeholder={readOnly ? tx(locale, "You can only view this workspace.", "У вас доступ только на просмотр.") : tx(locale, "What are you paying for?  hz-fsn-01 #servers @Hetzner €4.51/mo", "За что вы платите?  hz-fsn-01 #servers @Hetzner €4.51/mo")}
+              placeholder={readOnly ? tx(locale, "You can only view this workspace.", "Это пространство доступно только для просмотра.") : tx(locale, "What are you paying for?  hz-fsn-01 #servers @Hetzner €4.51/mo", "За что вы платите?  hz-fsn-01 #servers @Hetzner €4.51/mo")}
               onChange={(event) => { updateText(event.target.value); setCaret(event.target.selectionStart); }}
               onKeyDown={onKeyDown}
               onKeyUp={syncCaret}
@@ -881,7 +891,7 @@ export function QuickCapture({
               {guide.question && !showSuggestions ? <p className="text-sm text-zinc-300">{guide.question}</p> : null}
               {guide.step === "done" && fieldHints.length > 0 && !showSuggestions ? (
                 <div className="flex flex-wrap items-center gap-1.5 text-xs text-zinc-500">
-                  <span>{tx(locale, "Optional fields:", "Доп. поля:")}</span>
+                  <span>{tx(locale, "Optional fields:", "Необязательные поля:")}</span>
                   {fieldHints.map((field) => (
                     <button
                       key={field.id}
@@ -900,7 +910,7 @@ export function QuickCapture({
           {/* Body: cards or onboarding */}
           <div className="min-h-0 flex-1 overflow-y-auto border-t border-white/[0.06]">
             {loading && !payload ? (
-              <div className="flex items-center gap-2 px-7 py-6 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" />{tx(locale, "Loading workspace…", "Загрузка…")}</div>
+              <div className="flex items-center gap-2 px-7 py-6 text-sm text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" />{tx(locale, "Loading workspace…", "Загружаем пространство…")}</div>
             ) : null}
 
             {aiState ? (
@@ -943,7 +953,7 @@ export function QuickCapture({
                   <span className="block text-xs text-zinc-400">
                     {payload?.aiAvailable
                       ? tx(locale, "IPs, domains, logins and names are masked before anything is sent.", "IP, домены, логины и названия маскируются перед отправкой.")
-                      : tx(locale, "AI needs Premium and an API key (Admin → AI import).", "Нужен Premium и ключ API (Админ → AI-импорт).")}
+                      : tx(locale, "AI needs Premium and an API key (Admin → AI import).", "Для AI нужны Premium и API-ключ (Админ → AI-импорт).")}
                   </span>
                 </span>
                 <ArrowRight className="h-4 w-4 text-zinc-500" />
@@ -984,9 +994,9 @@ export function QuickCapture({
                 <span>{tx(locale, "AI turns the text into capture lines you can check before saving.", "AI превратит текст в строки, которые можно проверить перед сохранением.")}</span>
               ) : parsed.length ? (
                 <>
-                  {counts.create ? <span className="text-zinc-300">{tx(locale, `${counts.create} new`, `${counts.create} новых`)}</span> : null}
-                  {counts.edit ? <span className="text-orange-200">{tx(locale, `${counts.edit} update`, `${counts.edit} изм.`)}</span> : null}
-                  {counts.pay ? <span className="text-emerald-200">{tx(locale, `${counts.pay} payment`, `${counts.pay} оплат`)}</span> : null}
+                  {counts.create ? <span className="text-zinc-300">{tx(locale, `${counts.create} new`, `новые: ${counts.create}`)}</span> : null}
+                  {counts.edit ? <span className="text-orange-200">{tx(locale, `${counts.edit} update`, `изменения: ${counts.edit}`)}</span> : null}
+                  {counts.pay ? <span className="text-emerald-200">{tx(locale, `${counts.pay} payment`, `оплаты: ${counts.pay}`)}</span> : null}
                   {totals.length ? (
                     <span className="text-zinc-300">+{totals.map(([currency, value]) => formatMoney(value, currency)).join(" + ")} {tx(locale, "/ month", "/ мес")}</span>
                   ) : null}
@@ -994,7 +1004,7 @@ export function QuickCapture({
               ) : (
                 <span className="flex items-center gap-1.5">
                   <FileUp className="h-3.5 w-3.5" />
-                  {tx(locale, "Paste a table or drop a file. Each line becomes an entry.", "Вставьте таблицу или файл. Каждая строка станет записью.")}
+                  {tx(locale, "Paste a table or drop a file. Each line becomes an entry.", "Вставьте таблицу или перетащите файл. Каждая строка станет записью.")}
                 </span>
               )}
               {serverMessage ? <span className="text-red-300">{serverMessage}</span> : null}
@@ -1002,7 +1012,7 @@ export function QuickCapture({
             {mode === "quick" && payload?.aiAvailable && aiState ? (
               <button type="button" onClick={() => runAi(aiState.answers)} disabled={isThinking} className="inline-flex h-9 items-center gap-1.5 rounded-xl border border-white/10 px-3 text-sm text-zinc-200 transition hover:bg-white/[0.06] disabled:opacity-50">
                 {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />}
-                {tx(locale, "Ask again", "Ещё раз")}
+                {tx(locale, "Ask again", "Спросить ещё раз")}
               </button>
             ) : null}
             <span className="hidden shrink-0 items-center gap-1 whitespace-nowrap text-[11px] text-zinc-600 md:flex">
@@ -1017,7 +1027,7 @@ export function QuickCapture({
                 className="btn-aurora inline-flex h-9 items-center gap-2 rounded-lg px-4 text-sm font-semibold disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isThinking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Wand2 className="h-4 w-4" />}
-                {tx(locale, "Parse with AI", "Разобрать с AI")}
+                {tx(locale, "Parse with AI", "Разобрать с помощью AI")}
               </button>
             ) : (
             <button
@@ -1081,12 +1091,12 @@ const AiImportPane = forwardRef<HTMLTextAreaElement, {
         <label className="flex items-center gap-2 text-sm text-zinc-300">
           <input type="checkbox" checked={noNotes} onChange={(event) => onNoNotesChange(event.target.checked)} className="h-4 w-4 accent-violet-500" />
           {tx(locale, "Don't add notes", "Не добавлять заметки")}
-          <span className="text-xs text-zinc-500">{tx(locale, "AI fills fields only, never the notes", "AI заполняет только поля, без заметок")}</span>
+          <span className="text-xs text-zinc-500">{tx(locale, "AI fills fields only, never the notes", "AI заполняет только поля и не трогает заметки")}</span>
         </label>
         <p className="text-xs text-zinc-500">
           {aiAvailable
             ? tx(locale, "Labels like name:, vendor:, account:, ip:, price: and billing start: (dd.mm.yyyy) are used as given. IPs, domains, logins and names are masked before anything is sent.", "Метки name:, vendor:, account:, ip:, price: и billing start: (дд.мм.гггг) используются как есть. IP, домены, логины и названия маскируются перед отправкой.")
-            : tx(locale, "AI needs Premium and an API key (Admin → AI import).", "Нужен Premium и ключ API (Админ → AI-импорт).")}
+            : tx(locale, "AI needs Premium and an API key (Admin → AI import).", "Для AI нужны Premium и API-ключ (Админ → AI-импорт).")}
         </p>
         {error ? <p className="text-sm text-red-300">{error}</p> : null}
       </div>
@@ -1100,7 +1110,7 @@ function Onboarding({ locale, onFile }: { locale: Locale; onFile: () => void }) 
     { kind: "vendor", syntax: "@Hetzner", en: "vendor", ru: "поставщик" },
     { kind: "field", syntax: "account:ops", en: "account / login", ru: "аккаунт / логин" },
     { kind: "money", syntax: "€4.51/mo", en: "price & period", ru: "цена и период" },
-    { kind: "date", syntax: "01.11.26", en: "billing start", ru: "начало оплаты" },
+    { kind: "date", syntax: "01.11.26", en: "billing start", ru: "начало периода" },
     { kind: "field", syntax: "/ip: 1.2.3.4", en: "category field", ru: "поле категории" },
     { kind: "notes", syntax: "// text", en: "notes", ru: "заметка" },
   ];
@@ -1116,7 +1126,7 @@ function Onboarding({ locale, onFile }: { locale: Locale; onFile: () => void }) 
         ))}
       </div>
       <p className="text-xs leading-relaxed text-zinc-500">
-        {tx(locale, "Only the name is required. Everything is optional and editable on the card. Got a spreadsheet or an invoice? Paste it,", "Обязательно только название, остальное можно поправить на карточке. Есть таблица или счёт? Вставьте её,")}{" "}
+        {tx(locale, "Only the name is required. Everything is optional and editable on the card. Got a spreadsheet or an invoice? Paste it,", "Обязательно только название, всё остальное можно поправить на карточке. Есть таблица или счёт? Вставьте их,")}{" "}
         <button type="button" onClick={onFile} className="text-violet-300 underline-offset-2 hover:underline">{tx(locale, "pick a file", "выберите файл")}</button>{" "}
         {tx(locale, "or drop it here.", "или перетащите сюда.")}
       </p>

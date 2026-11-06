@@ -398,15 +398,15 @@ export function validateImportRow(row: ImportRow, categories: Category[], curren
   if (row.action !== "create" && !row.targetItemId) errors.id = tx("Pick the existing entry.", "Выберите существующую запись.");
   if (row.paymentType === "recurring" && row.period === "custom") {
     const days = Number(row.customPeriodDaysInput);
-    if (!Number.isInteger(days) || days < 1) errors.customPeriodDays = tx("Enter whole days.", "Введите число дней.");
+    if (!Number.isInteger(days) || days < 1) errors.customPeriodDays = tx("Enter whole days.", "Укажите целое число дней.");
   }
   for (const key of ["billingStartAt", "billingEndAt"] as const) {
-    if (row[key] && !/^\d{4}-\d{2}-\d{2}$/.test(row[key])) errors[key] = tx("Use YYYY-MM-DD.", "Формат ГГГГ-ММ-ДД.");
+    if (row[key] && !/^\d{4}-\d{2}-\d{2}$/.test(row[key])) errors[key] = tx("Use YYYY-MM-DD.", "Формат: ГГГГ-ММ-ДД.");
   }
   if (!errors.billingEndAt && row.billingStartAt && row.billingEndAt && row.billingEndAt < row.billingStartAt) {
-    errors.billingEndAt = tx("Ends before it starts.", "Окончание раньше начала.");
+    errors.billingEndAt = tx("Ends before it starts.", "Дата окончания раньше даты начала.");
   }
-  if (!validHttpUrl(row.vendorUrl)) errors.vendorUrl = tx("Enter a valid http(s) URL.", "Введите корректный URL.");
+  if (!validHttpUrl(row.vendorUrl)) errors.vendorUrl = tx("Enter a valid http(s) URL.", "Введите корректный адрес http(s).");
   if (row.action !== "pay") {
     category?.fields.forEach((field) => {
       const value = row.customFields[field.id];

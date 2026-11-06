@@ -34,7 +34,7 @@ import {
 import { rowFromEntry, rowToLine, type CaptureEntryRef } from "@/lib/capture/syntax";
 import type { Locale } from "@/lib/i18n";
 import type { Category, CategoryField, EntryDraft, PaymentItem, VendorSuggestion } from "@/lib/types";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn, formatMoney, softColor } from "@/lib/utils";
 import { useCapture } from "../capture/capture-provider";
 import { CategoryList, CommitInput, CurrencySelect, PeriodPicker, addPeriodIso, inputClass, type PeriodValue } from "../capture/editors";
 import {
@@ -50,8 +50,12 @@ import {
   urgencyTone,
 } from "../capture/shared";
 import { AppIcon } from "../icons";
+import { Button } from "../ui/button";
+import { NativeSelect } from "../ui/native-select";
+import { ConfirmDialog } from "../ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "../ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Tooltip } from "../ui/tooltip";
 
 type HistoryRow = Awaited<ReturnType<typeof getEntryHistoryAction>>[number];
 
@@ -141,7 +145,7 @@ function PropertyRow({
 }) {
   const [editing, setEditing] = useState(false);
   return (
-    <div className="group grid min-h-10 grid-cols-[8.5rem_1fr] items-center gap-2 rounded-lg px-2 transition hover:bg-white/[0.03]">
+    <div className="group grid min-h-9 grid-cols-[8.5rem_1fr] items-center gap-2 rounded-md px-2 transition hover:bg-white/[0.03]">
       <span className="truncate text-[13px] text-zinc-500">{label}</span>
       <div className="flex min-w-0 items-center gap-1">
         {editing && editor ? (
@@ -152,19 +156,21 @@ function PropertyRow({
               type="button"
               disabled={!editable || !editor}
               onClick={() => setEditing(true)}
-              className={cn("min-w-0 flex-1 truncate rounded-md px-1.5 py-1 text-left text-sm text-zinc-100 transition", editable && editor && "hover:bg-white/[0.06]")}
+              className={cn("min-w-0 flex-1 truncate rounded-md px-1.5 py-1 text-left text-[13px] text-zinc-100 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40", editable && editor && "hover:bg-white/[0.06]")}
             >
               {children}
             </button>
             {copyValue ? (
-              <button
-                type="button"
-                onClick={() => { void navigator.clipboard.writeText(copyValue); toast(tx(locale, "Copied", "Скопировано")); }}
-                className="rounded-md p-1 text-zinc-600 opacity-0 transition hover:bg-white/[0.06] hover:text-zinc-200 group-hover:opacity-100"
-                aria-label={tx(locale, "Copy", "Копировать")}
-              >
-                <Copy className="h-3.5 w-3.5" />
-              </button>
+              <Tooltip label={tx(locale, "Copy", "Копировать")}>
+                <button
+                  type="button"
+                  onClick={() => { void navigator.clipboard.writeText(copyValue); toast(tx(locale, "Copied", "Скопировано")); }}
+                  className="inline-grid h-7 w-7 shrink-0 place-items-center rounded-md text-zinc-500 opacity-0 transition hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 group-hover:opacity-100 [@media(hover:none)]:opacity-100"
+                  aria-label={tx(locale, "Copy", "Копировать")}
+                >
+                  <Copy className="h-3.5 w-3.5" />
+                </button>
+              </Tooltip>
             ) : null}
           </>
         )}
@@ -242,7 +248,7 @@ export function EntryInspector({
   }
 
   const entry = local;
-  const color = category?.color || "#71717a";
+  const color = softColor(category?.color || "#71717a");
   const customDays = entry.customPeriodDays || 30;
   const periodValue: PeriodValue = { paymentType: entry.paymentType, period: entry.period, customDays };
   const today = todayIso();
@@ -285,7 +291,7 @@ export function EntryInspector({
       formData.set("paymentDate", today);
       await payEntryAction(formData);
       toast.success(tx(locale, `Payment recorded for ${entry.name}`, `Оплата записана: ${entry.name}`), {
-        description: entry.paymentType === "recurring" ? tx(locale, "Renewal date moved forward one period.", "Дата продления сдвинута на период.") : undefined,
+        description: entry.paymentType === "recurring" ? tx(locale, "Renewal date moved forward one period.", "Дата продления сдвинута на один период.") : undefined,
       });
       router.refresh();
     });
@@ -296,7 +302,7 @@ export function EntryInspector({
       await archiveItemAction(itemForm());
       onClose();
       router.refresh();
-      toast(tx(locale, `${entry.name} archived`, `${entry.name} в архиве`), {
+      toast(tx(locale, `${entry.name} archived`, `«${entry.name}» перемещена в архив`), {
         action: {
           label: tx(locale, "Undo", "Отменить"),
           onClick: async () => { await restoreItemAction(itemForm()); router.refresh(); },
@@ -318,7 +324,7 @@ export function EntryInspector({
       await deleteItemAction(itemForm());
       onClose();
       router.refresh();
-      toast(tx(locale, `${entry.name} deleted`, `${entry.name} удалена`));
+      toast(tx(locale, `${entry.name} deleted`, `Запись «${entry.name}» удалена`));
     });
   }
 
@@ -327,7 +333,7 @@ export function EntryInspector({
     if (value === undefined || value === null || value === "") return empty;
     if (field.type === "checkbox") return value ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет");
     if (field.type === "url") return <span className="text-sky-300">{String(value).replace(/^https?:\/\//, "")}</span>;
-    return <span className={cn(field.bold && "font-semibold")} style={{ color: field.color || undefined }}>{String(value)}</span>;
+    return <span className={cn(field.bold && "font-semibold")} style={{ color: softColor(field.color) }}>{String(value)}</span>;
   }
 
   function fieldEditor(field: CategoryField) {
@@ -339,7 +345,7 @@ export function EntryInspector({
         return (
           <div className="flex gap-1">
             {[true, false].map((option) => (
-              <button key={String(option)} type="button" className={cn("flex-1 rounded-lg border border-white/10 px-3 py-1.5 text-sm", Boolean(value) === option && "bg-violet-500/20")} onClick={() => { setValue(option); close(); }}>
+              <button key={String(option)} type="button" className={cn("h-8 flex-1 rounded-md border border-white/10 px-3 text-[13px] text-zinc-300 transition hover:bg-white/[0.06]", Boolean(value) === option && "border-violet-400/30 bg-violet-500/10 text-violet-100")} onClick={() => { setValue(option); close(); }}>
                 {option ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет")}
               </button>
             ))}
@@ -348,10 +354,10 @@ export function EntryInspector({
       }
       if (field.type === "select" && field.options?.length) {
         return (
-          <select autoFocus className={inputClass} defaultValue={String(value ?? "")} onChange={(event) => { setValue(event.target.value); close(); }} onBlur={close}>
-            <option value="" className="bg-zinc-900">—</option>
-            {field.options.map((option) => <option key={option} value={option} className="bg-zinc-900">{option}</option>)}
-          </select>
+          <NativeSelect size="sm" defaultOpen ariaLabel={field.label} value={String(value ?? "")} onChange={(next) => { setValue(next); close(); }} onOpenChange={(open) => { if (!open) close(); }}>
+            <option value="">—</option>
+            {field.options.map((option) => <option key={option} value={option}>{option}</option>)}
+          </NativeSelect>
         );
       }
       return (
@@ -384,8 +390,12 @@ export function EntryInspector({
 
           {/* Top bar */}
           <div className="relative flex items-center gap-1 px-4 pt-3">
-            <button type="button" onClick={() => onNavigate(-1)} className="rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Previous", "Предыдущая")}><ChevronUp className="h-4 w-4" /></button>
-            <button type="button" onClick={() => onNavigate(1)} className="rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Next", "Следующая")}><ChevronDown className="h-4 w-4" /></button>
+            <Tooltip label={tx(locale, "Previous", "Предыдущая")}>
+              <Button type="button" variant="ghost" size="icon-xs" onClick={() => onNavigate(-1)} aria-label={tx(locale, "Previous", "Предыдущая")}><ChevronUp className="h-4 w-4" /></Button>
+            </Tooltip>
+            <Tooltip label={tx(locale, "Next", "Следующая")}>
+              <Button type="button" variant="ghost" size="icon-xs" onClick={() => onNavigate(1)} aria-label={tx(locale, "Next", "Следующая")}><ChevronDown className="h-4 w-4" /></Button>
+            </Tooltip>
             {position ? <span className="ml-1 text-xs tabular-nums text-zinc-600">{position.index + 1} / {position.total}</span> : null}
             <span className="ml-2 hidden items-center gap-1 text-[11px] text-zinc-600 sm:flex"><Kbd>J</Kbd><Kbd>K</Kbd></span>
             <span className="ml-auto flex items-center gap-1.5 text-xs text-zinc-500">
@@ -394,22 +404,24 @@ export function EntryInspector({
             {editable ? (
               <DropdownMenu modal={false}>
                 <DropdownMenuTrigger asChild>
-                  <button type="button" className="ml-1 rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200 data-[state=open]:bg-white/[0.06] data-[state=open]:text-zinc-200" aria-label={tx(locale, "More actions", "Другие действия")}>
+                  <Button type="button" variant="ghost" size="icon-xs" className="ml-1 data-[state=open]:bg-white/[0.06] data-[state=open]:text-foreground" aria-label={tx(locale, "More actions", "Ещё")}>
                     <MoreHorizontal className="h-4 w-4" />
-                  </button>
+                  </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="min-w-52 bg-[#18181c]">
-                  <DropdownMenuItem className="gap-2.5" onSelect={duplicate}><CopyPlus className="h-3.5 w-3.5 text-zinc-500" />{tx(locale, "Duplicate", "Дублировать")}</DropdownMenuItem>
-                  <DropdownMenuItem className="gap-2.5" onSelect={editAsText}><Terminal className="h-3.5 w-3.5 text-zinc-500" />{tx(locale, "Edit as text", "Изменить как текст")}</DropdownMenuItem>
-                  <DropdownMenuItem className="gap-2.5" disabled={isActing} onSelect={archive}><Archive className="h-3.5 w-3.5 text-zinc-500" />{tx(locale, "Archive", "В архив")}</DropdownMenuItem>
+                <DropdownMenuContent align="end" sideOffset={4} className="min-w-52">
+                  <DropdownMenuItem icon={<CopyPlus />} onSelect={duplicate}>{tx(locale, "Duplicate", "Дублировать")}</DropdownMenuItem>
+                  <DropdownMenuItem icon={<Terminal />} onSelect={editAsText}>{tx(locale, "Edit as text", "Изменить как текст")}</DropdownMenuItem>
+                  <DropdownMenuItem icon={<Archive />} disabled={isActing} onSelect={archive}>{tx(locale, "Archive", "В архив")}</DropdownMenuItem>
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem className="gap-2.5 text-red-300 data-[highlighted]:bg-red-500/10 data-[highlighted]:text-red-200" disabled={isActing} onSelect={() => setConfirmDelete(true)}>
-                    <Trash2 className="h-3.5 w-3.5" />{tx(locale, "Delete…", "Удалить…")}
+                  <DropdownMenuItem destructive icon={<Trash2 />} disabled={isActing} onSelect={() => setConfirmDelete(true)}>
+                    {tx(locale, "Delete…", "Удалить…")}
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
             ) : null}
-            <Dialog.Close className="ml-1 rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Close", "Закрыть")}><X className="h-4 w-4" /></Dialog.Close>
+            <Dialog.Close asChild>
+              <Button type="button" variant="ghost" size="icon-xs" className="ml-0.5" aria-label={tx(locale, "Close", "Закрыть")}><X className="h-4 w-4" /></Button>
+            </Dialog.Close>
           </div>
 
           <div className="relative min-h-0 flex-1 overflow-y-auto px-5 pb-8">
@@ -417,8 +429,8 @@ export function EntryInspector({
             <div className="mt-4 flex items-center gap-2">
               <Popover>
                 <PopoverTrigger asChild>
-                  <button type="button" disabled={!editable} className="inline-flex items-center gap-1.5 rounded-full border border-white/10 px-2 py-0.5 text-xs font-medium transition hover:border-white/25" style={{ color, background: `${color}14` }}>
-                    <AppIcon name={category?.icon || "CircleDashed"} className="h-3.5 w-3.5" />
+                  <button type="button" disabled={!editable} className="-ml-1.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-xs font-medium transition hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 disabled:hover:bg-transparent" style={{ color }}>
+                    <AppIcon name={category?.icon || "CircleDashed"} className="h-3 w-3" />
                     {category?.name || tx(locale, "No category", "Без категории")}
                   </button>
                 </PopoverTrigger>
@@ -444,16 +456,16 @@ export function EntryInspector({
                 {entry.accountName ? <span className="text-zinc-500"> · {entry.accountName}</span> : null}
               </p>
             ) : null}
-            {saveError ? <p className="mt-2 text-sm text-red-300">{saveError}</p> : null}
+            {saveError ? <p role="alert" className="mt-2 text-xs font-medium text-red-300">{saveError}</p> : null}
 
             {/* Hero stats */}
             <div className="mt-5 grid grid-cols-2 gap-2.5">
               <Popover>
                 <PopoverTrigger asChild>
-                  <button type="button" disabled={!editable} className="rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4 text-left transition hover:border-white/15 hover:bg-white/[0.05]">
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{tx(locale, "Price", "Цена")}</p>
+                  <button type="button" disabled={!editable} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-4 text-left transition hover:border-white/10 hover:bg-white/[0.04] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 disabled:hover:border-white/[0.06] disabled:hover:bg-white/[0.02]">
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{tx(locale, "Price", "Цена")}</p>
                     <p className="mt-1.5 text-2xl font-semibold tabular-nums text-white">{formatMoney(entry.amount, entry.currency)}</p>
-                    <p className="text-xs text-zinc-500">
+                    <p className="text-[11.5px] text-zinc-500">
                       {entry.paymentType === "recurring" ? `/ ${periodWord(entry.paymentType, entry.period, customDays, locale)}` : tx(locale, "one-time", "разово")}
                       {monthly && entry.period !== "1m" ? ` · ≈ ${formatMoney(monthly, entry.currency)}/${tx(locale, "mo", "мес")}` : ""}
                     </p>
@@ -475,19 +487,19 @@ export function EntryInspector({
                   />
                 </PopoverContent>
               </Popover>
-              <div className="flex items-center gap-3 rounded-2xl border border-white/[0.08] bg-white/[0.03] p-4">
+              <div className="flex items-center gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
                 {entry.paymentType === "recurring" && end ? (
                   <>
                     <RenewalRing progress={progress} tone={urgencyTone(daysLeft)} />
                     <div className="min-w-0">
-                      <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{tx(locale, "Renews", "Продление")}</p>
+                      <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{tx(locale, "Renews", "Продление")}</p>
                       <p className={cn("mt-1 text-base font-semibold", urgencyTone(daysLeft))}>{daysLeft !== null ? relativeDays(daysLeft, locale) : "—"}</p>
-                      <p className="text-xs text-zinc-500">{shortDate(end, locale, true)}</p>
+                      <p className="text-[11.5px] tabular-nums text-zinc-500">{shortDate(end, locale, true)}</p>
                     </div>
                   </>
                 ) : (
                   <div>
-                    <p className="text-[11px] uppercase tracking-[0.18em] text-zinc-500">{tx(locale, "Paid", "Оплачено")}</p>
+                    <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{tx(locale, "Paid", "Оплачено")}</p>
                     <p className="mt-1 text-base font-semibold text-zinc-200">{shortDate(start, locale, true)}</p>
                   </div>
                 )}
@@ -497,20 +509,29 @@ export function EntryInspector({
             {/* Actions */}
             {editable ? (
               <div className="mt-4 flex flex-wrap items-center gap-2">
-                <ActionButton onClick={markPaid} disabled={isActing} tone="primary" icon={isActing ? <Loader2 className="h-4 w-4 animate-spin" /> : <CircleCheckBig className="h-4 w-4" />}>{tx(locale, "Mark paid", "Отметить оплату")}</ActionButton>
-                <ActionButton onClick={() => setQuickLoginOpen(true)} icon={<KeyRound className="h-4 w-4 text-violet-300" />}>{tx(locale, "Quick login", "Быстрый вход")}</ActionButton>
+                <Button type="button" variant="secondary" size="sm" onClick={markPaid} disabled={isActing}>
+                  {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleCheckBig className="h-3.5 w-3.5 text-emerald-300" />}
+                  {tx(locale, "Mark paid", "Отметить оплату")}
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => setQuickLoginOpen(true)}>
+                  <KeyRound className="h-3.5 w-3.5 text-violet-300" />
+                  {tx(locale, "Quick login", "Быстрый вход")}
+                </Button>
                 <QuickLoginDialog open={quickLoginOpen} onOpenChange={setQuickLoginOpen} workspaceId={workspaceId} itemId={item.id} locale={locale} />
               </div>
             ) : null}
-            {confirmDelete ? (
-              <div className="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-red-400/25 bg-red-500/[0.07] px-3 py-2.5">
-                <p className="mr-auto text-sm text-red-100">{tx(locale, `Delete “${entry.name}” and its payment history? This can’t be undone.`, `Удалить «${entry.name}» вместе с историей платежей? Это необратимо.`)}</p>
-                <button type="button" onClick={() => setConfirmDelete(false)} className="h-8 rounded-md px-3 text-xs font-medium text-zinc-300 transition hover:bg-white/[0.06]">{tx(locale, "Cancel", "Отмена")}</button>
-                <button type="button" onClick={remove} disabled={isActing} className="inline-flex h-8 items-center gap-1.5 rounded-md bg-red-600 px-3 text-xs font-semibold text-white transition hover:bg-red-500 disabled:opacity-50">
-                  {isActing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}{tx(locale, "Delete", "Удалить")}
-                </button>
-              </div>
-            ) : null}
+            <ConfirmDialog
+              open={confirmDelete}
+              onOpenChange={setConfirmDelete}
+              destructive
+              pending={isActing}
+              title={tx(locale, `Delete “${entry.name}”?`, `Удалить «${entry.name}»?`)}
+              description={tx(locale, "The entry and its payment history will be deleted. This can’t be undone.", "Запись будет удалена вместе с историей платежей. Это действие нельзя отменить.")}
+              confirmLabel={tx(locale, "Delete", "Удалить")}
+              cancelLabel={tx(locale, "Cancel", "Отмена")}
+              closeLabel={tx(locale, "Close", "Закрыть")}
+              onConfirm={remove}
+            />
 
             {/* Billing */}
             <Section title={tx(locale, "Billing", "Оплата")}>
@@ -533,7 +554,7 @@ export function EntryInspector({
                 {start ? shortDate(start, locale, true) : empty}
               </PropertyRow>
               {entry.paymentType === "recurring" ? (
-                <PropertyRow label={tx(locale, "Renews on", "Продление")} editable={editable} locale={locale} editor={(close) => (
+                <PropertyRow label={tx(locale, "Renews on", "Дата продления")} editable={editable} locale={locale} editor={(close) => (
                   <CommitInput type="date" selectOnFocus={false} value={end || ""} onCommit={(value) => { save({ billingEndAt: value || null }); close(); }} onCancel={close} />
                 )}>
                   {end ? <>{shortDate(end, locale, true)} <span className={cn("ml-1 text-xs", urgencyTone(daysLeft))}>{daysLeft !== null ? relativeDays(daysLeft, locale) : ""}</span></> : empty}
@@ -556,7 +577,7 @@ export function EntryInspector({
                       <Link
                         href={`/app/vendors?workspace=${workspaceId}`}
                         onClick={(event) => event.stopPropagation()}
-                        aria-label={tx(locale, `Open ${entry.vendorName} on the Vendors page`, `Открыть ${entry.vendorName} в поставщиках`)}
+                        aria-label={tx(locale, `Open ${entry.vendorName} on the Vendors page`, `Открыть «${entry.vendorName}» на странице поставщиков`)}
                         className="shrink-0 rounded p-0.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200"
                       >
                         <ArrowUpRight className="h-3.5 w-3.5" />
@@ -572,7 +593,7 @@ export function EntryInspector({
                   <span className="text-zinc-500">{tx(locale, "Not linked", "Не привязан")}{editable ? <> · <span className="text-violet-300">{tx(locale, "Link", "Привязать")}</span></> : null}</span>
                 )}
               </PropertyRow>
-              <PropertyRow label={tx(locale, "Login URL", "Ссылка входа")} editable={editable} locale={locale} editor={(close) => (
+              <PropertyRow label={tx(locale, "Login URL", "Ссылка для входа")} editable={editable} locale={locale} editor={(close) => (
                 <CommitInput type="url" value={entry.vendorUrl} placeholder="https://" onCommit={(vendorUrl) => { save({ vendorUrl }); close(); }} onCancel={close} />
               )}>
                 {entry.vendorUrl ? (
@@ -617,7 +638,7 @@ export function EntryInspector({
                 placeholder={tx(locale, "Anything worth remembering…", "Что стоит запомнить…")}
                 rows={Math.min(Math.max(plainNotes(entry.notes).split("\n").length, 2), 8)}
                 onBlur={(event) => { if (event.target.value !== plainNotes(entry.notes)) save({ notes: event.target.value }); }}
-                className="w-full resize-none rounded-xl border border-transparent bg-white/[0.02] px-3 py-2 text-sm leading-relaxed text-zinc-200 outline-none transition placeholder:text-zinc-600 hover:border-white/10 focus:border-violet-400/40 focus:bg-violet-500/[0.04]"
+                className="w-full resize-none rounded-lg border border-transparent bg-white/[0.02] px-3 py-2 text-[13px] leading-relaxed text-zinc-200 outline-none transition placeholder:text-zinc-600 hover:border-white/10 focus:border-violet-400/40 focus:bg-violet-500/[0.04]"
               />
             </Section>
 
@@ -630,22 +651,22 @@ export function EntryInspector({
                   {historyRows.map((payment) => (
                     <li key={payment.id} className="relative">
                       <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-emerald-400" />
-                      <p className="text-sm text-zinc-200">{formatMoney(payment.amount, payment.currency)}</p>
-                      <p className="text-xs text-zinc-500">{shortDate(payment.paymentDate, locale, true)}{payment.dueDate ? ` → ${shortDate(payment.dueDate, locale, true)}` : ""}</p>
+                      <p className="text-[13px] font-medium tabular-nums text-zinc-100">{formatMoney(payment.amount, payment.currency)}</p>
+                      <p className="text-[11.5px] tabular-nums text-zinc-500">{shortDate(payment.paymentDate, locale, true)}{payment.dueDate ? ` → ${shortDate(payment.dueDate, locale, true)}` : ""}</p>
                     </li>
                   ))}
                 </ol>
               ) : (
-                <p className="px-2 text-sm text-zinc-600">{tx(locale, "No payments recorded yet. “Mark paid” adds one and moves the renewal date.", "Платежей пока нет. «Оплачено» добавит платёж и сдвинет дату продления.")}</p>
+                <p className="px-2 text-[13px] text-zinc-500">{tx(locale, "No payments recorded yet. “Mark paid” adds one and moves the renewal date.", "Платежей пока нет. Кнопка «Отметить оплату» добавит платёж и сдвинет дату продления.")}</p>
               )}
             </Section>
 
             {/* Capture line */}
-            <Section title={tx(locale, "As a capture line", "Как строка ввода")} icon={<Terminal className="h-3.5 w-3.5" />}>
+            <Section title={tx(locale, "As a capture line", "В виде строки быстрого ввода")} icon={<Terminal className="h-3.5 w-3.5" />}>
               <button
                 type="button"
                 onClick={() => { void navigator.clipboard.writeText(captureLine); toast(tx(locale, "Line copied", "Строка скопирована")); }}
-                className="group w-full rounded-xl border border-white/[0.06] bg-black/40 px-3 py-2.5 text-left font-mono text-[12px] leading-relaxed text-zinc-400 transition hover:border-white/15 hover:text-zinc-200"
+                className="group w-full rounded-lg border border-white/[0.06] bg-surface-muted px-3 py-2.5 text-left font-mono text-[12px] leading-relaxed text-zinc-400 transition hover:border-white/15 hover:text-zinc-200"
               >
                 {captureLine}
                 <span className="ml-2 inline-flex items-center gap-1 text-[10px] uppercase tracking-wider text-zinc-600 group-hover:text-violet-300"><Copy className="h-3 w-3" />{tx(locale, "copy", "копировать")}</span>
@@ -661,27 +682,9 @@ export function EntryInspector({
 function Section({ title, children, icon }: { title: string; children: ReactNode; icon?: ReactNode }) {
   return (
     <section className="mt-7">
-      <p className="mb-2 flex items-center gap-1.5 px-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-zinc-600">{icon}{title}</p>
+      <h3 className="mb-2 flex items-center gap-1.5 px-2 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{icon}{title}</h3>
       {children}
     </section>
-  );
-}
-
-function ActionButton({ children, icon, onClick, disabled, tone = "default" }: { children: ReactNode; icon: ReactNode; onClick: () => void; disabled?: boolean; tone?: "default" | "primary" }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        "inline-flex h-9 items-center gap-2 rounded-lg border px-3.5 text-[13px] font-medium transition active:scale-[0.97] disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/50",
-        tone === "primary" && "border-emerald-400/30 bg-emerald-500/20 text-emerald-50 hover:border-emerald-300/45 hover:bg-emerald-500/30",
-        tone === "default" && "border-white/10 bg-white/[0.04] text-zinc-200 hover:bg-white/[0.08] hover:text-white",
-      )}
-    >
-      {icon}
-      {children}
-    </button>
   );
 }
 
@@ -692,8 +695,8 @@ function InlinePeriod({ value, locale, onSave, onCancel }: { value: PeriodValue;
       <PeriodPicker value={draft} onChange={(next) => { setDraft(next); if (next.period !== "custom") onSave(next); }} locale={locale} />
       {draft.period === "custom" ? (
         <div className="flex gap-1">
-          <button type="button" className="h-7 flex-1 rounded-md bg-violet-500/25 text-xs text-violet-50" onClick={() => onSave(draft)}>{tx(locale, "Done", "Готово")}</button>
-          <button type="button" className="h-7 rounded-md px-2 text-xs text-zinc-400" onClick={onCancel}>{tx(locale, "Cancel", "Отмена")}</button>
+          <Button type="button" variant="accent" size="xs" className="flex-1" onClick={() => onSave(draft)}>{tx(locale, "Done", "Готово")}</Button>
+          <Button type="button" variant="ghost" size="xs" onClick={onCancel}>{tx(locale, "Cancel", "Отмена")}</Button>
         </div>
       ) : null}
     </div>
@@ -712,7 +715,7 @@ function InspectorPriceEditor({ amount, currency, period, locale, onSave }: { am
         <CurrencySelect value={currencyDraft} onChange={setCurrencyDraft} />
       </div>
       <PeriodPicker value={periodDraft} onChange={setPeriodDraft} locale={locale} />
-      <button type="submit" disabled={!valid} className="h-8 w-full rounded-lg bg-violet-500/25 text-sm font-medium text-violet-50 transition hover:bg-violet-500/35 disabled:opacity-50">{tx(locale, "Save", "Сохранить")}</button>
+      <Button type="submit" variant="accent" size="sm" disabled={!valid} className="w-full">{tx(locale, "Save", "Сохранить")}</Button>
     </form>
   );
 }

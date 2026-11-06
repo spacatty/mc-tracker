@@ -1,25 +1,33 @@
 "use client";
 
+/**
+ * Checkbox (16px). Pass `checked="indeterminate"` for a partial selection (renders a Minus).
+ *
+ * @example
+ * <Checkbox checked={allSelected ? true : someSelected ? "indeterminate" : false} onCheckedChange={toggleAll} aria-label="Select all" />
+ */
 import * as React from "react";
 import * as CheckboxPrimitive from "@radix-ui/react-checkbox";
-import { Check } from "lucide-react";
+import { Check, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-export const Checkbox = React.forwardRef<
-  React.ElementRef<typeof CheckboxPrimitive.Root>,
-  React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>
->(({ className, ...props }, ref) => (
-  <CheckboxPrimitive.Root
-    ref={ref}
-    className={cn(
-      "peer h-5 w-5 shrink-0 rounded-[5px] border border-white/15 bg-black/40 ring-offset-black transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/40 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-zinc-100 data-[state=checked]:bg-zinc-100 data-[state=checked]:text-zinc-900",
-      className,
-    )}
-    {...props}
-  >
-    <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
-      <Check className="h-4 w-4" />
-    </CheckboxPrimitive.Indicator>
-  </CheckboxPrimitive.Root>
-));
-Checkbox.displayName = CheckboxPrimitive.Root.displayName;
+export type CheckboxProps = React.ComponentPropsWithoutRef<typeof CheckboxPrimitive.Root>;
+
+export const Checkbox = React.forwardRef<React.ElementRef<typeof CheckboxPrimitive.Root>, CheckboxProps>(
+  ({ className, ...props }, ref) => (
+    <CheckboxPrimitive.Root
+      ref={ref}
+      className={cn(
+        "group/checkbox peer inline-grid h-4 w-4 shrink-0 place-items-center rounded-[4px] border border-white/20 bg-white/[0.02] text-white transition hover:border-white/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:border-violet-500 data-[state=checked]:bg-violet-500 data-[state=indeterminate]:border-violet-500 data-[state=indeterminate]:bg-violet-500",
+        className,
+      )}
+      {...props}
+    >
+      <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
+        <Check className="h-3 w-3 group-data-[state=indeterminate]/checkbox:hidden" strokeWidth={3} aria-hidden="true" />
+        <Minus className="hidden h-3 w-3 group-data-[state=indeterminate]/checkbox:block" strokeWidth={3} aria-hidden="true" />
+      </CheckboxPrimitive.Indicator>
+    </CheckboxPrimitive.Root>
+  ),
+);
+Checkbox.displayName = "Checkbox";

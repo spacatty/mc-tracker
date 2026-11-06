@@ -2,8 +2,7 @@ import { ArchivedEntriesTable } from "@/components/archived-entries-table";
 import { requireUser } from "@/lib/auth";
 import { listArchivedItemsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
 import { getLocale } from "@/lib/i18n-server";
-import { t } from "@/lib/i18n";
-import { PageHeader } from "@/components/ui/page-header";
+
 
 export default async function ArchivePage({ searchParams }: { searchParams: Promise<{ workspace?: string }> }) {
   const user = await requireUser();
@@ -13,12 +12,7 @@ export default async function ArchivePage({ searchParams }: { searchParams: Prom
   const items = listArchivedItemsForWorkspace(workspace.id, user.id);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t(locale, "archiveSection")}
-        description={locale === "ru" ? "Архивированные записи скрыты из списков и статистики" : "Archived entries are hidden from lists and stats"}
-      />
-
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <ArchivedEntriesTable
         items={items}
         workspaceId={workspace.id}

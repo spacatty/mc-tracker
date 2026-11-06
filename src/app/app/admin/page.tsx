@@ -3,103 +3,112 @@ import { aiSettingsSummary } from "@/lib/ai/client";
 import { AdminUsersTable } from "@/components/admin-users-table";
 import { requireUser } from "@/lib/auth";
 import { listUsers } from "@/lib/db";
+import type { Locale } from "@/lib/i18n";
+import { getLocale } from "@/lib/i18n-server";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/ui/field";
 import { SelectInput } from "@/components/ui/hidden-input";
 import { Input } from "@/components/ui/input";
-import { PageHeader } from "@/components/ui/page-header";
+import { SectionCard } from "@/components/ui/section-card";
+
+function tx(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
+const formFooterClass = "flex flex-wrap items-center justify-end gap-2 border-t border-white/[0.06] bg-white/[0.015] px-5 py-3";
 
 export default async function AdminPage() {
   const actor = await requireUser();
+  const locale = await getLocale();
   const users = listUsers();
   const ai = actor.role === "superadmin" ? aiSettingsSummary() : null;
 
   if (actor.role === "user") {
-    return (
-      <PageHeader title="Admin" />
-    );
+    return <p className="text-[13px] text-zinc-500">{tx(locale, "Admin tools are available to administrators only.", "Инструменты администрирования доступны только администраторам.")}</p>;
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader title="Admin" description="Users and recovery" />
-
-      <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
-        <div className="border-b border-white/[0.06] px-5 py-4">
-          <h2 className="text-[15px] font-semibold text-white">Create user</h2>
-          <p className="mt-1 text-sm text-zinc-500">Create an account with role and credentials in a single step.</p>
-        </div>
-        <form action={createUserAction} className="grid gap-3 p-5 md:grid-cols-2">
-          <label className="space-y-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            <span>Username</span>
-            <Input name="username" placeholder="Username" required />
-          </label>
-          <label className="space-y-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            <span>Password</span>
-            <Input name="password" type="password" placeholder="Password" required />
-          </label>
-          <label className="space-y-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-            <span>Role</span>
-            <SelectInput
-              name="role"
-              defaultValue="user"
-              options={[
-                { value: "user", label: "user" },
-                ...(actor.role === "superadmin" ? [{ value: "admin", label: "admin" }, { value: "superadmin", label: "superadmin" }] : []),
-              ]}
-            />
-          </label>
-          <div className="flex items-end justify-end">
-            <Button>Create user</Button>
+    <div className="flex h-full min-h-0 flex-col gap-6">
+      <SectionCard flush title={tx(locale, "Create user", "Создать пользователя")} description={tx(locale, "Create an account with role and credentials in a single step.", "Создайте аккаунт с ролью и учётными данными за один шаг.")}>
+        <form action={createUserAction}>
+          <div className="grid gap-4 p-5 sm:grid-cols-3">
+            <Field label={tx(locale, "Username", "Имя пользователя")} htmlFor="admin-new-username" required>
+              <Input id="admin-new-username" name="username" autoComplete="off" required />
+            </Field>
+            <Field label={tx(locale, "Password", "Пароль")} htmlFor="admin-new-password" required>
+              <Input id="admin-new-password" name="password" type="password" autoComplete="new-password" required />
+            </Field>
+            <Field label={tx(locale, "Role", "Роль")} htmlFor="admin-new-role">
+              <SelectInput
+                name="role"
+                defaultValue="user"
+                triggerId="admin-new-role"
+                options={[
+                  { value: "user", label: "user" },
+                  ...(actor.role === "superadmin" ? [{ value: "admin", label: "admin" }, { value: "superadmin", label: "superadmin" }] : []),
+                ]}
+              />
+            </Field>
+          </div>
+          <div className={formFooterClass}>
+            <Button type="submit" size="sm">
+              {tx(locale, "Create user", "Создать пользователя")}
+            </Button>
           </div>
         </form>
-      </section>
+      </SectionCard>
 
       {ai ? (
-        <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
-          <div className="border-b border-white/[0.06] px-5 py-4">
-            <h2 className="text-[15px] font-semibold text-white">AI import</h2>
-            <p className="mt-1 text-sm text-zinc-500">
-              OpenRouter key and model for free-form import. Values saved here override the environment; leave them empty to use .env.
-            </p>
-          </div>
-          <form action={updateAiSettingsAction} className="grid gap-3 p-5 md:grid-cols-2">
-            <label className="space-y-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-              <span>API key</span>
-              <Input
-                name="apiKey"
-                type="password"
-                autoComplete="off"
-                placeholder={ai.keySource === "none" ? "sk-or-v1-…" : "Leave empty to keep the current key"}
-              />
-              <span className="block text-xs font-normal normal-case tracking-normal text-zinc-500">
-                {ai.keySource === "admin"
-                  ? `Current: ${ai.maskedKey} (saved here)`
-                  : ai.keySource === "env"
-                    ? `Current: ${ai.maskedKey} (from .env)`
-                    : "No key set. AI import is off."}
-              </span>
-            </label>
-            <label className="space-y-2 text-xs font-semibold uppercase tracking-wide text-zinc-400">
-              <span>Model</span>
-              <Input name="model" defaultValue={ai.storedModel} placeholder={ai.fallbackModel} autoComplete="off" />
-              <span className="block text-xs font-normal normal-case tracking-normal text-zinc-500">
-                {ai.storedModel ? `In use: ${ai.model} (saved here)` : `In use: ${ai.model} (from .env or default)`}
-              </span>
-            </label>
+        <SectionCard
+          flush
+          title={tx(locale, "AI import", "Импорт с помощью AI")}
+          description={tx(locale, "OpenRouter key and model for free-form import. Values saved here override the environment; leave them empty to use .env.", "Ключ OpenRouter и модель для импорта произвольного текста. Сохранённые здесь значения важнее переменных окружения; оставьте поля пустыми, чтобы использовать .env.")}
+        >
+          <form action={updateAiSettingsAction}>
+            <div className="grid gap-4 p-5 sm:grid-cols-2">
+              <Field
+                label={tx(locale, "API key", "API-ключ")}
+                htmlFor="admin-ai-key"
+                hint={
+                  ai.keySource === "admin"
+                    ? tx(locale, `Current: ${ai.maskedKey} (saved here)`, `Текущий: ${ai.maskedKey} (сохранён здесь)`)
+                    : ai.keySource === "env"
+                      ? tx(locale, `Current: ${ai.maskedKey} (from .env)`, `Текущий: ${ai.maskedKey} (из .env)`)
+                      : tx(locale, "No key set. AI import is off.", "Ключ не задан. Импорт с помощью AI отключён.")
+                }
+              >
+                <Input
+                  id="admin-ai-key"
+                  name="apiKey"
+                  type="password"
+                  autoComplete="off"
+                  placeholder={ai.keySource === "none" ? "sk-or-v1-…" : tx(locale, "Leave empty to keep the current key", "Оставьте пустым, чтобы сохранить текущий ключ")}
+                />
+              </Field>
+              <Field
+                label={tx(locale, "Model", "Модель")}
+                htmlFor="admin-ai-model"
+                hint={ai.storedModel ? tx(locale, `In use: ${ai.model} (saved here)`, `Используется: ${ai.model} (сохранена здесь)`) : tx(locale, `In use: ${ai.model} (from .env or default)`, `Используется: ${ai.model} (из .env или по умолчанию)`)}
+              >
+                <Input id="admin-ai-model" name="model" defaultValue={ai.storedModel} placeholder={ai.fallbackModel} autoComplete="off" />
+              </Field>
+            </div>
             {/* Save comes first in the DOM so pressing Enter saves instead of removing the key. */}
-            <div className="flex items-end justify-end gap-2 md:col-span-2">
-              <Button type="submit">Save AI settings</Button>
+            <div className={formFooterClass}>
+              <Button type="submit" size="sm">
+                {tx(locale, "Save AI settings", "Сохранить настройки AI")}
+              </Button>
               {ai.keySource === "admin" ? (
-                <Button type="submit" name="clearKey" value="1" variant="destructive" className="order-first">
-                  Remove saved key
+                <Button type="submit" name="clearKey" value="1" variant="ghost" size="sm" className="order-first text-red-300 hover:bg-red-500/10 hover:text-red-200">
+                  {tx(locale, "Remove saved key", "Удалить сохранённый ключ")}
                 </Button>
               ) : null}
             </div>
           </form>
-        </section>
+        </SectionCard>
       ) : null}
 
-      <AdminUsersTable users={users} actorRole={actor.role} />
+      <AdminUsersTable users={users} actorRole={actor.role} locale={locale} />
     </div>
   );
 }

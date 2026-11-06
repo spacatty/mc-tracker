@@ -3,8 +3,15 @@ import { Slot } from "@radix-ui/react-slot";
 import { cva, type VariantProps } from "class-variance-authority";
 import { cn } from "@/lib/utils";
 
+/**
+ * Button. One Aurora `default` per view; everything else secondary / ghost / outline / accent / destructive.
+ *
+ * @example
+ * <Button size="sm" variant="ghost"><Plus className="h-3.5 w-3.5" /> Add</Button>
+ * <Button size="icon-sm" variant="ghost" aria-label="Close"><X className="h-4 w-4" /></Button>
+ */
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-lg text-sm font-medium transition active:scale-[0.98] disabled:pointer-events-none disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40 [&_svg]:shrink-0",
   {
     variants: {
       variant: {
@@ -20,10 +27,13 @@ const buttonVariants = cva(
           "border border-white/10 bg-transparent text-zinc-200 hover:bg-white/[0.06]",
       },
       size: {
+        xs: "h-7 gap-1.5 rounded-md px-2 text-xs",
+        sm: "h-8 gap-1.5 rounded-md px-2.5 text-xs",
         default: "h-9 px-3.5",
-        sm: "h-8 rounded-md px-2.5 text-xs",
         lg: "h-10 px-5",
         icon: "h-9 w-9",
+        "icon-sm": "h-8 w-8 rounded-md",
+        "icon-xs": "h-7 w-7 rounded-md",
       },
     },
     defaultVariants: {

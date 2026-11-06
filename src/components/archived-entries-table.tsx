@@ -1,24 +1,41 @@
 "use client";
 
-import * as Dialog from "@radix-ui/react-dialog";
 import { useMemo, useState, useTransition } from "react";
-import { AlertTriangle, ArchiveRestore, ArrowUpDown, ChevronLeft, ChevronRight, Search, Trash2 } from "lucide-react";
+import { Archive, ArchiveRestore, SearchX, Trash2 } from "lucide-react";
 import { deleteArchivedItemAction, deleteArchivedItemsAction, restoreItemAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
-import { t } from "@/lib/i18n";
+import { count, t } from "@/lib/i18n";
 import type { PaymentItem } from "@/lib/types";
-import { cn } from "@/lib/utils";
 import { displayDate, formatMoney } from "@/lib/utils";
 import { AppIcon } from "./icons";
+import { CopyHost, VendorAccount } from "./host-line";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Checkbox } from "./ui/checkbox";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "./ui/dropdown-menu";
-import { Input } from "./ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { ConfirmDialog } from "./ui/dialog";
+import { EmptyState } from "./ui/empty-state";
+import { SearchInput } from "./ui/input";
+import { RowAction, RowActionMenu, RowActions } from "./ui/row-actions";
+import { SectionCard } from "./ui/section-card";
+import {
+  SelectionBar,
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TablePagination,
+  TableRow,
+  TableSelectCell,
+  TableSelectHead,
+  TableToolbar,
+} from "./ui/table";
 
 type SortKey = "name" | "category" | "archived" | "amount";
+
+function tx(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
 
 function fuzzyMatch(value: string, query: string) {
   const normalized = query.trim().toLowerCase();
@@ -40,26 +57,6 @@ function valueFor(item: PaymentItem, key: SortKey) {
   return item.amount;
 }
 
-function SortButton({ label, sortKey, active, direction, onClick }: { label: string; sortKey: SortKey; active: SortKey; direction: "asc" | "desc"; onClick: (key: SortKey) => void }) {
-  return (
-    <button type="button" onClick={() => onClick(sortKey)} className="inline-flex items-center gap-1 hover:text-white">
-      {label}
-      <ArrowUpDown className={active === sortKey ? "h-3.5 w-3.5 text-violet-300" : "h-3.5 w-3.5 text-zinc-600"} />
-      {active === sortKey ? <span className="sr-only">{direction}</span> : null}
-    </button>
-  );
-}
-
-function ActionIcon({ children, tone = "violet" }: { children: React.ReactNode; tone?: "violet" | "sky" | "red" }) {
-  const toneClass = {
-    violet: "bg-violet-500/10 text-violet-200",
-    sky: "bg-sky-500/10 text-sky-200",
-    red: "bg-red-500/10 text-red-200",
-  }[tone];
-
-  return <span className={`grid h-8 w-8 place-items-center rounded-xl ${toneClass}`}>{children}</span>;
-}
-
 export function ArchivedEntriesTable({
   items,
   workspaceId,
@@ -78,6 +75,7 @@ export function ArchivedEntriesTable({
   const [direction, setDirection] = useState<"asc" | "desc">("desc");
   const [selectedIds, setSelectedIds] = useState(() => new Set<number>());
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<PaymentItem | null>(null);
   const [isPending, startTransition] = useTransition();
   const readOnlyWorkspace = workspaceRole === "viewer";
 
@@ -116,6 +114,11 @@ export function ArchivedEntriesTable({
   const allPageSelected = pagedIds.length > 0 && selectedOnPageCount === pagedIds.length;
   const pageSelectState = allPageSelected ? true : selectedOnPageCount > 0 ? "indeterminate" : false;
   const selectedCount = selectedIds.size;
+  const columnCount = readOnlyWorkspace ? 7 : 8;
+
+  function sortProps(key: SortKey) {
+    return { sortable: true, sorted: sortKey === key ? direction : (false as const), onSort: () => changeSort(key) };
+  }
 
   function toggleItem(id: number, checked: boolean | "indeterminate") {
     setSelectedIds((current) => {
@@ -137,12 +140,19 @@ export function ArchivedEntriesTable({
     });
   }
 
-  function runItemAction(action: (formData: FormData) => Promise<void>, id: number) {
+  function runItemAction(action: (formData: FormData) => Promise<void>, id: number, onDone?: () => void) {
     const formData = new FormData();
     formData.set("id", String(id));
     formData.set("workspaceId", String(workspaceId));
     startTransition(async () => {
       await action(formData);
+      setSelectedIds((current) => {
+        if (!current.has(id)) return current;
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+      onDone?.();
     });
   }
 
@@ -158,198 +168,166 @@ export function ArchivedEntriesTable({
   }
 
   if (!items.length) {
-    return (
-      <div className="rounded-xl border border-white/[0.08] bg-surface p-12 text-center">
-        <p className="text-zinc-500">{t(locale, "noArchivedEntries")}</p>
-      </div>
-    );
+    return <EmptyState icon={<Archive />} title={t(locale, "noArchivedEntries")} />;
   }
 
   return (
-    <div className="flex h-[calc(100vh-180px)] min-h-[520px] flex-col overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
-      <div className="border-b border-white/10 p-4">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-          <Input
-            value={query}
-            onChange={(event) => {
-              setQuery(event.target.value);
-              setPage(1);
-            }}
-            placeholder={locale === "ru" ? "Поиск в архиве..." : "Search archive..."}
-            className="pl-9"
-          />
-        </div>
-      </div>
-      <div className="min-h-0 flex-1 overflow-auto">
-        <Table className="min-w-[1120px]">
-          <TableHeader className="sticky top-0 z-20 bg-[#101013]/95 backdrop-blur-md">
-            <TableRow className="border-b border-white/10 bg-white/[0.02]">
-              <TableHead className="w-12">
-                <Checkbox
-                  checked={pageSelectState}
-                  onCheckedChange={toggleAllOnPage}
-                  disabled={!paged.length || readOnlyWorkspace}
-                  aria-label={locale === "ru" ? "Выбрать все записи" : "Select all entries"}
-                />
+    <SectionCard flush className="flex min-h-[24rem] flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+      <TableToolbar end={<span className="text-xs tabular-nums text-zinc-500">{count(locale, filtered.length, { one: "entry", other: "entries", ru: ["запись", "записи", "записей"] })}</span>}>
+        <SearchInput
+          size="sm"
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            setPage(1);
+          }}
+          placeholder={tx(locale, "Search archive…", "Поиск в архиве…")}
+          clearLabel={tx(locale, "Clear search", "Очистить поиск")}
+          className="max-w-sm flex-1"
+        />
+      </TableToolbar>
+
+      <Table bare fill minWidth={960}>
+        <TableHeader>
+          <TableRow>
+            <TableSelectHead
+              checked={pageSelectState}
+              onCheckedChange={toggleAllOnPage}
+              disabled={!paged.length || readOnlyWorkspace}
+              label={tx(locale, "Select all entries", "Выбрать все записи")}
+            />
+            <TableHead {...sortProps("name")}>{t(locale, "name")}</TableHead>
+            <TableHead width="12.5rem">{tx(locale, "Identifier", "Идентификатор")}</TableHead>
+            <TableHead width="10rem" {...sortProps("category")}>{t(locale, "category")}</TableHead>
+            <TableHead width="14rem">{tx(locale, "Vendor / account", "Поставщик / аккаунт")}</TableHead>
+            <TableHead width="8rem" align="center" {...sortProps("archived")}>{t(locale, "archived")}</TableHead>
+            <TableHead width="7.5rem" align="right" {...sortProps("amount")}>{t(locale, "amount")}</TableHead>
+            {!readOnlyWorkspace ? (
+              <TableHead align="right" width="1%">
+                <span className="sr-only">{t(locale, "actions")}</span>
               </TableHead>
-              <TableHead className="text-zinc-300"><SortButton label={t(locale, "name")} sortKey="name" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="text-center text-zinc-300"><SortButton label={t(locale, "category")} sortKey="category" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="text-zinc-300">{t(locale, "account")}</TableHead>
-              <TableHead className="text-center text-zinc-300"><SortButton label={t(locale, "archived")} sortKey="archived" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="w-[1%] whitespace-nowrap text-center text-zinc-300"><SortButton label={t(locale, "amount")} sortKey="amount" active={sortKey} direction={direction} onClick={changeSort} /></TableHead>
-              <TableHead className="w-32 text-center text-zinc-300">{t(locale, "actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {paged.map((item) => {
-              const selected = selectedIds.has(item.id);
-              return (
-                <TableRow
-                  key={item.id}
-                  className={cn(
-                    "group border-white/5 bg-[#101013] transition-colors duration-150 even:bg-[#0d0d12] hover:bg-[#15151d]",
-                    selected && "bg-[#171329] shadow-[inset_0_0_0_1px_rgba(167,139,250,0.38)] even:bg-[#171329]",
-                  )}
-                >
-                  <TableCell>
-                    <Checkbox
-                      checked={selectedIds.has(item.id)}
-                      onCheckedChange={(checked) => toggleItem(item.id, checked)}
-                      disabled={readOnlyWorkspace}
-                      aria-label={`Select ${item.name}`}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <span className="font-semibold text-white">{item.name}</span>
-                    {item.notes ? <p className="mt-1 line-clamp-1 max-w-xs text-xs text-zinc-500">{item.notes.replace(/<[^>]+>/g, "")}</p> : null}
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <Badge className="gap-2 border border-white/10 shadow-[inset_0_0_0_1px_rgba(255,255,255,0.06)]" style={{ backgroundColor: `${item.categoryColor || "#8b5cf6"}20`, color: item.categoryColor || "#c4b5fd" }}>
-                      <AppIcon name={item.categoryIcon} className="h-3.5 w-3.5" />
-                      {item.categoryName || (locale === "ru" ? "Без категории" : "Uncategorized")}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div>
-                      <p className="font-medium text-zinc-100">{item.accountName || "-"}</p>
-                      {item.vendorName ? <p className="max-w-52 truncate text-xs text-zinc-400">{item.vendorName}</p> : null}
-                    </div>
-                  </TableCell>
-                  <TableCell className="whitespace-nowrap text-center text-xs text-zinc-400">{displayDate(item.archivedAt)}</TableCell>
-                  <TableCell className="w-[1%] whitespace-nowrap text-center font-semibold text-white">{formatMoney(item.amount, item.currency)}</TableCell>
-                  <TableCell className="text-center">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="secondary" size="icon" className="h-9 w-9 border border-white/10 bg-white/[0.04] hover:bg-white/[0.1]">
-                          <ArchiveRestore className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56 p-2">
-                        {!readOnlyWorkspace ? (
-                          <DropdownMenuItem
-                            className="gap-3 rounded-xl px-3 py-2.5 text-sky-200"
-                            disabled={isPending}
-                            onSelect={() => runItemAction(restoreItemAction, item.id)}
-                          >
-                            <ActionIcon tone="sky"><ArchiveRestore className="h-4 w-4" /></ActionIcon>
-                            <span className="font-medium">{t(locale, "restore")}</span>
-                          </DropdownMenuItem>
-                        ) : null}
-                        {!readOnlyWorkspace ? (
-                          <DropdownMenuItem
-                            className="gap-3 rounded-xl px-3 py-2.5 text-red-200"
-                            disabled={isPending}
-                            onSelect={() => runItemAction(deleteArchivedItemAction, item.id)}
-                          >
-                            <ActionIcon tone="red"><Trash2 className="h-4 w-4" /></ActionIcon>
-                            <span className="font-medium">{t(locale, "deletePermanently")}</span>
-                          </DropdownMenuItem>
-                        ) : null}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-            {!filtered.length ? (
-              <TableRow><TableCell colSpan={7} className="px-5 py-12 text-center text-zinc-500">{t(locale, "noEntriesMatch")}</TableCell></TableRow>
             ) : null}
-          </TableBody>
-        </Table>
-      </div>
-      <div className="flex items-center justify-between gap-3 border-t border-white/10 px-4 py-3">
-        <div className="space-y-1">
-          {selectedCount > 0 && !readOnlyWorkspace ? (
-            <div className="flex min-h-9 items-center gap-2">
-              <Dialog.Root open={confirmOpen} onOpenChange={setConfirmOpen}>
-                <Dialog.Trigger asChild>
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    className="border border-red-400/20 bg-red-500/[0.06] px-2.5 text-red-100 hover:border-red-300/30 hover:bg-red-500/10 hover:text-white"
-                    title={locale === "ru" ? `Удалить выбранные: ${selectedCount}` : `Delete ${selectedCount} selected`}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    <span className="min-w-5 text-center text-sm font-semibold">{selectedCount}</span>
-                  </Button>
-                </Dialog.Trigger>
-                <Dialog.Portal>
-                  <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
-                  <Dialog.Content className="capture-panel-in fixed inset-x-0 top-[16vh] z-50 mx-auto w-[calc(100vw-1.5rem)] max-w-md rounded-xl border border-white/10 bg-[#101013] p-6 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
-                    <div className="flex gap-4">
-                      <span className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-red-500/10 text-red-200">
-                        <AlertTriangle className="h-5 w-5" />
-                      </span>
-                      <div className="min-w-0">
-                        <Dialog.Title className="text-lg font-semibold text-white">{t(locale, "confirmDeleteArchivedTitle")}</Dialog.Title>
-                        <Dialog.Description className="mt-2 text-sm leading-6 text-zinc-400">
-                          {t(locale, "confirmDeleteArchived")}
-                        </Dialog.Description>
-                      </div>
-                    </div>
-                    <div className="mt-6 flex justify-end gap-3">
-                      <Dialog.Close asChild>
-                        <Button type="button" variant="secondary" disabled={isPending}>Cancel</Button>
-                      </Dialog.Close>
-                      <Button type="button" variant="destructive" onClick={handleBulkDelete} disabled={isPending || selectedCount === 0}>
-                        {isPending ? (locale === "ru" ? "Удаление..." : "Deleting...") : locale === "ru" ? "Удалить все" : "Delete All"}
-                      </Button>
-                    </div>
-                  </Dialog.Content>
-                </Dialog.Portal>
-              </Dialog.Root>
-            </div>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {paged.map((item) => {
+            const selected = selectedIds.has(item.id);
+            return (
+              <TableRow key={item.id} selected={selected}>
+                <TableSelectCell
+                  checked={selected}
+                  onCheckedChange={(checked) => toggleItem(item.id, checked)}
+                  disabled={readOnlyWorkspace}
+                  label={tx(locale, `Select ${item.name}`, `Выбрать ${item.name}`)}
+                />
+                <TableCell primary>
+                  <span className="block max-w-xs truncate">{item.name}</span>
+                  {item.notes ? (
+                    <span className="mt-0.5 block max-w-xs truncate text-[11.5px] font-normal text-zinc-500">
+                      {item.notes.replace(/<[^>]+>/g, "")}
+                    </span>
+                  ) : null}
+                </TableCell>
+                <TableCell>{item.host ? <CopyHost value={item.host} locale={locale} className="mt-0 max-w-full" /> : <span className="text-zinc-700">—</span>}</TableCell>
+                <TableCell>
+                  <Badge color={item.categoryColor || undefined} icon={<AppIcon name={item.categoryIcon} />}>
+                    {item.categoryName || tx(locale, "Uncategorized", "Без категории")}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  <VendorAccount vendor={item.vendorName} account={item.accountName} className="max-w-64" />
+                </TableCell>
+                <TableCell muted align="center" className="whitespace-nowrap tabular-nums">{displayDate(item.archivedAt)}</TableCell>
+                <TableCell align="right" className="whitespace-nowrap font-semibold tabular-nums text-zinc-100">
+                  {formatMoney(item.amount, item.currency)}
+                </TableCell>
+                {!readOnlyWorkspace ? (
+                  <TableCell align="right" className="w-[1%] whitespace-nowrap">
+                    <RowActions>
+                      <RowAction
+                        label={t(locale, "restore")}
+                        icon={<ArchiveRestore />}
+                        hidden="hover"
+                        disabled={isPending}
+                        onClick={() => runItemAction(restoreItemAction, item.id)}
+                      />
+                      <RowActionMenu
+                        label={tx(locale, `More actions for ${item.name}`, `Другие действия: ${item.name}`)}
+                        disabled={isPending}
+                        items={[
+                          { label: t(locale, "restore"), icon: <ArchiveRestore />, onSelect: () => runItemAction(restoreItemAction, item.id) },
+                          "separator",
+                          { label: t(locale, "deletePermanently"), icon: <Trash2 />, destructive: true, onSelect: () => setDeleteTarget(item) },
+                        ]}
+                      />
+                    </RowActions>
+                  </TableCell>
+                ) : null}
+              </TableRow>
+            );
+          })}
+          {!filtered.length ? (
+            <TableEmpty colSpan={columnCount} icon={<SearchX />} title={t(locale, "noEntriesMatch")} />
           ) : null}
-        </div>
-        <div className="flex items-center gap-2">
-          <Select
-            value={String(pageSize)}
-            onValueChange={(value) => {
-              setPageSize(Number(value));
-              setPage(1);
-            }}
-          >
-            <SelectTrigger className="h-9 w-[78px] border-white/10 bg-black/30 text-zinc-200">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[10, 20, 50, 100].map((size) => (
-                <SelectItem key={size} value={String(size)}>{size}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="button" variant="secondary" size="icon" className="h-9 w-9" disabled={safePage <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-            <ChevronLeft className="h-4 w-4" />
+        </TableBody>
+      </Table>
+
+      {!readOnlyWorkspace ? (
+        <SelectionBar count={selectedCount} onClear={() => setSelectedIds(new Set())} locale={locale}>
+          <Button type="button" variant="destructive" size="sm" onClick={() => setConfirmOpen(true)} disabled={isPending}>
+            <Trash2 className="h-3.5 w-3.5" />
+            {tx(locale, "Delete permanently", "Удалить навсегда")}
           </Button>
-          <Badge variant="secondary" className="px-2.5 py-1 text-xs text-zinc-300">
-            {safePage}/{totalPages}
-          </Badge>
-          <Button type="button" variant="secondary" size="icon" className="h-9 w-9" disabled={safePage >= totalPages} onClick={() => setPage((current) => Math.min(totalPages, current + 1))}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-    </div>
+        </SelectionBar>
+      ) : null}
+
+      <TablePagination
+        page={safePage}
+        totalPages={totalPages}
+        pageSize={pageSize}
+        total={filtered.length}
+        onPage={setPage}
+        onPageSize={(size) => {
+          setPageSize(size);
+          setPage(1);
+        }}
+        locale={locale}
+      />
+
+      <ConfirmDialog
+        open={confirmOpen}
+        onOpenChange={setConfirmOpen}
+        destructive
+        pending={isPending}
+        title={t(locale, "confirmDeleteArchivedTitle")}
+        description={t(locale, "confirmDeleteArchived")}
+        confirmLabel={tx(locale, `Delete ${selectedCount}`, `Удалить (${selectedCount})`)}
+        cancelLabel={tx(locale, "Cancel", "Отмена")}
+        onConfirm={handleBulkDelete}
+      />
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        destructive
+        pending={isPending}
+        title={tx(locale, "Delete permanently?", "Удалить навсегда?")}
+        description={
+          deleteTarget
+            ? tx(
+                locale,
+                `“${deleteTarget.name}” will be deleted for good. This cannot be undone.`,
+                `«${deleteTarget.name}» будет удалена навсегда. Это действие нельзя отменить.`,
+              )
+            : undefined
+        }
+        confirmLabel={t(locale, "deletePermanently")}
+        cancelLabel={tx(locale, "Cancel", "Отмена")}
+        onConfirm={() => {
+          if (deleteTarget) runItemAction(deleteArchivedItemAction, deleteTarget.id, () => setDeleteTarget(null));
+        }}
+      />
+    </SectionCard>
   );
 }

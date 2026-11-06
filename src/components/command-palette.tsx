@@ -2,16 +2,16 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
-import * as Dialog from "@radix-ui/react-dialog";
 import { Command } from "cmdk";
 import { ArrowRight, CornerDownLeft, Languages, PanelLeft, Plus, Search, Tags } from "lucide-react";
 import { getCaptureContextAction, setLanguageAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import type { Category, Workspace } from "@/lib/types";
-import { cn, formatMoney } from "@/lib/utils";
+import { cn, formatMoney, softColor, softFill } from "@/lib/utils";
 import { useCapture } from "./capture/capture-provider";
 import { Kbd, tx } from "./capture/shared";
 import { AppIcon } from "./icons";
+import { Dialog, DialogContent, DialogTitle } from "./ui/dialog";
 
 /** Anything can open the palette by dispatching this event on window. */
 export const OPEN_PALETTE_EVENT = "mc-open-palette";
@@ -43,18 +43,18 @@ function Row({ value, keywords, onSelect, icon, label, detail }: { value: string
       value={value}
       keywords={keywords}
       onSelect={onSelect}
-      className="group flex h-10 cursor-pointer select-none items-center gap-2.5 rounded-lg px-2 text-[13px] text-zinc-300 outline-none data-[selected=true]:bg-white/[0.06] data-[selected=true]:text-zinc-50"
+      className="group flex h-10 cursor-pointer select-none items-center gap-2.5 rounded-md px-2 text-[13px] text-zinc-300 outline-none transition-colors data-[selected=true]:bg-white/[0.06] data-[selected=true]:text-zinc-50"
     >
       {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {detail ? <span className="max-w-[45%] shrink-0 truncate text-xs text-zinc-500">{detail}</span> : null}
+      {detail ? <span className="max-w-[45%] shrink-0 truncate text-[11.5px] text-zinc-500">{detail}</span> : null}
       <ArrowRight className="h-3.5 w-3.5 shrink-0 text-zinc-600 opacity-0 transition group-data-[selected=true]:opacity-100" />
     </Command.Item>
   );
 }
 
 const groupClass =
-  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.16em] [&_[cmdk-group-heading]]:text-zinc-600";
+  "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pb-1.5 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:text-[10.5px] [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-[0.12em] [&_[cmdk-group-heading]]:text-zinc-500";
 
 /** Ctrl+/ (⌘/ on Mac) jump-anywhere palette: pages, actions, workspaces, categories and entries. */
 export function CommandPalette({
@@ -142,17 +142,12 @@ export function CommandPalette({
   const typing = query.trim().length > 0;
 
   return (
-    <Dialog.Root open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery(""); }}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
-        <Dialog.Content
-          aria-describedby={undefined}
-          className="capture-panel-in fixed inset-x-0 top-[16vh] z-50 mx-auto flex max-h-[64vh] w-[calc(100vw-1.5rem)] max-w-[600px] flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#101013] shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)] outline-none"
-        >
-          <Dialog.Title className="sr-only">{tx(locale, "Go to", "Перейти")}</Dialog.Title>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) setQuery(""); }}>
+      <DialogContent aria-describedby={undefined} showClose={false} className="top-[16vh] max-h-[64vh] max-w-[600px]">
+          <DialogTitle className="sr-only">{tx(locale, "Go to", "Перейти")}</DialogTitle>
           <Command loop className="flex min-h-0 flex-1 flex-col" label={tx(locale, "Go to", "Перейти")}>
             <div className="flex items-center gap-3 border-b border-white/[0.06] px-5">
-              <Search className="h-4 w-4 shrink-0 text-zinc-500" />
+              <Search className="h-4 w-4 shrink-0 text-zinc-500" aria-hidden="true" />
               <Command.Input
                 autoFocus
                 value={query}
@@ -164,7 +159,7 @@ export function CommandPalette({
             </div>
 
             <Command.List className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-              <Command.Empty className="py-10 text-center text-sm text-zinc-500">{tx(locale, "Nothing matches.", "Ничего не найдено.")}</Command.Empty>
+              <Command.Empty className="py-10 text-center text-[13px] text-zinc-500">{tx(locale, "Nothing matches.", "Ничего не найдено.")}</Command.Empty>
 
               {canCreate ? (
                 <Command.Group heading={tx(locale, "Actions", "Действия")} className={groupClass}>
@@ -178,7 +173,7 @@ export function CommandPalette({
                   />
                   {!typing ? null : (
                     <>
-                      <Row value="action-sidebar" keywords={["sidebar", "collapse", "expand", "меню"]} onSelect={() => run(onToggleSidebar)} icon={<Tile><PanelLeft className="h-3.5 w-3.5" /></Tile>} label={tx(locale, "Toggle sidebar", "Свернуть / развернуть меню")} />
+                      <Row value="action-sidebar" keywords={["sidebar", "collapse", "expand", "меню"]} onSelect={() => run(onToggleSidebar)} icon={<Tile><PanelLeft className="h-3.5 w-3.5" /></Tile>} label={tx(locale, "Toggle sidebar", "Свернуть или развернуть меню")} />
                       <Row value="action-lang-en" keywords={["language", "english", "язык"]} onSelect={() => setLanguage("en")} icon={<Tile><Languages className="h-3.5 w-3.5" /></Tile>} label="English" detail={locale === "en" ? tx(locale, "current", "текущий") : undefined} />
                       <Row value="action-lang-ru" keywords={["language", "russian", "язык", "русский"]} onSelect={() => setLanguage("ru")} icon={<Tile><Languages className="h-3.5 w-3.5" /></Tile>} label="Русский" detail={locale === "ru" ? tx(locale, "current", "текущий") : undefined} />
                     </>
@@ -224,7 +219,7 @@ export function CommandPalette({
                       value={`category-${category.id}`}
                       keywords={[category.name, "category", "категория"]}
                       onSelect={() => go(withWorkspace(`/app/items?category=${category.id}`, currentWorkspaceId))}
-                      icon={<Tile style={{ color: category.color, backgroundColor: `${category.color}14`, borderColor: `${category.color}26` }}><AppIcon name={category.icon} className="h-3.5 w-3.5" /></Tile>}
+                      icon={<Tile style={{ color: softColor(category.color), backgroundColor: softFill(category.color, 8), borderColor: softFill(category.color, 18) }}><AppIcon name={category.icon} className="h-3.5 w-3.5" /></Tile>}
                       label={category.name}
                     />
                   ))}
@@ -245,7 +240,7 @@ export function CommandPalette({
                         value={`entry-${entry.id}`}
                         keywords={[entry.name, entry.vendorName, entry.accountName, category?.name || ""].filter(Boolean)}
                         onSelect={() => run(() => openEntry(entry.id))}
-                        icon={<Tile style={category ? { color: category.color } : undefined}><AppIcon name={category?.icon || "WalletCards"} className="h-3.5 w-3.5" /></Tile>}
+                        icon={<Tile style={category ? { color: softColor(category.color) } : undefined}><AppIcon name={category?.icon || "WalletCards"} className="h-3.5 w-3.5" /></Tile>}
                         label={<>{entry.name}{entry.vendorName ? <span className="text-zinc-600"> · {entry.vendorName}</span> : null}</>}
                         detail={<span className="tabular-nums">{formatMoney(entry.amount, entry.currency)}</span>}
                       />
@@ -255,14 +250,13 @@ export function CommandPalette({
               ) : null}
             </Command.List>
 
-            <div className="flex items-center gap-4 border-t border-white/[0.06] px-5 py-2.5 text-[11px] text-zinc-500">
+            <div className="flex items-center gap-4 border-t border-white/[0.06] px-5 py-2.5 text-[11.5px] text-zinc-500">
               <span className="flex items-center gap-1"><Kbd>↑</Kbd><Kbd>↓</Kbd>{tx(locale, "move", "выбор")}</span>
               <span className="flex items-center gap-1"><Kbd><CornerDownLeft className="h-3 w-3" /></Kbd>{tx(locale, "open", "открыть")}</span>
-              <span className="ml-auto flex items-center gap-1"><Kbd>{mac ? "⌘" : "Ctrl"}</Kbd><Kbd>/</Kbd>{tx(locale, "toggle", "открыть/закрыть")}</span>
+              <span className="ml-auto flex items-center gap-1"><Kbd>{mac ? "⌘" : "Ctrl"}</Kbd><Kbd>/</Kbd>{tx(locale, "toggle", "показать/скрыть")}</span>
             </div>
           </Command>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+      </DialogContent>
+    </Dialog>
   );
 }

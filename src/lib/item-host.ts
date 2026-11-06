@@ -22,9 +22,32 @@ export function hostKind(categoryName?: string | null): "ip" | "domain" | null {
   return null;
 }
 
-/** IP of a server or domain of a domain entry, from its category's IP/Domain field (or a value that looks like one). */
-export function itemHost(customFields: Record<string, unknown> | null | undefined, fields: CategoryField[] = [], categoryName?: string | null) {
-  const kind = hostKind(categoryName);
+/**
+ * The field a category uses as its entries' identifier when none is chosen yet: the IP field of a Servers category,
+ * the Domain field of a Domains category (or any category with such a field). Empty string = none.
+ */
+export function defaultIdentifierField(categoryName: string | null | undefined, fields: CategoryField[] = []) {
+  const kind = hostKind(categoryName)
+    ?? (fields.some((field) => IP_FIELD.test(field.label)) ? "ip" : fields.some((field) => DOMAIN_FIELD.test(field.label)) ? "domain" : null);
+  if (!kind) return "";
+  const pattern = kind === "ip" ? IP_FIELD : DOMAIN_FIELD;
+  return fields.find((field) => pattern.test(field.label) || pattern.test(field.id.replace(/_/g, " ")))?.id || "";
+}
+
+/**
+ * The entry's identifier (server IP, domain…). `identifierField` is the category setting: a field id, "" for none,
+ * or null/undefined when never set, which falls back to the IP/Domain detection below.
+ */
+export function itemHost(
+  customFields: Record<string, unknown> | null | undefined,
+  fields: CategoryField[] = [],
+  categoryName?: string | null,
+  identifierField?: string | null,
+) {
+  if (typeof identifierField === "string") return identifierField ? text((customFields || {})[identifierField]) : "";
+  // By category name first; otherwise a category with an IP or Domain field counts too (e.g. "VPS", "Хостинг").
+  const kind = hostKind(categoryName)
+    ?? (fields.some((field) => IP_FIELD.test(field.label)) ? "ip" : fields.some((field) => DOMAIN_FIELD.test(field.label)) ? "domain" : null);
   if (!kind) return "";
   const values = customFields || {};
   const fieldPattern = kind === "ip" ? IP_FIELD : DOMAIN_FIELD;

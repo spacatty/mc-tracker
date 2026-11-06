@@ -35,7 +35,7 @@ export const portableCategoryFieldSchema = z.object({
 export const portableCategorySchema = z.object({
   name: z.string().min(1),
   icon: z.string().default("Sparkles"),
-  color: z.string().default("#8b5cf6"),
+  color: z.string().default("#38bdf8"),
   sortOrder: z.number().int().nonnegative().default(0),
   fields: z.array(portableCategoryFieldSchema).default([]),
 });

@@ -2,20 +2,41 @@
 
 import { useMemo, useState } from "react";
 import { Check, ChevronsUpDown } from "lucide-react";
+import type { Locale } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
 import { AppIcon, iconNames } from "./icons";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { SearchInput } from "./ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 
-export function IconPicker({ name, defaultValue = "Sparkles" }: { name: string; defaultValue?: string }) {
+function tx(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
+const POPULAR = ["Globe", "Server", "Boxes", "WalletCards", "Database", "Cloud", "HardDrive", "Router", "Shield", "KeyRound", "Bell", "Zap"];
+
+function IconOption({ icon, selected, onPick }: { icon: string; selected: boolean; onPick: (icon: string) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(icon)}
+      aria-pressed={selected}
+      className={cn(
+        "flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-[13px] transition hover:bg-white/[0.06] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
+        selected ? "text-zinc-50" : "text-zinc-300",
+      )}
+    >
+      <AppIcon name={icon} className="h-4 w-4 shrink-0 text-zinc-400" />
+      <span className="min-w-0 flex-1 truncate">{icon}</span>
+      {selected ? <Check className="h-3.5 w-3.5 shrink-0 text-violet-300" aria-hidden="true" /> : null}
+    </button>
+  );
+}
+
+export function IconPicker({ name, defaultValue = "Sparkles", locale = "en" }: { name: string; defaultValue?: string; locale?: Locale }) {
   const [open, setOpen] = useState(false);
   const [value, setValue] = useState(defaultValue);
   const [query, setQuery] = useState("");
-  const allIcons = Array.isArray(iconNames) ? iconNames : [];
-  const popular = useMemo(
-    () => ["Globe", "Server", "Boxes", "WalletCards", "Database", "Cloud", "HardDrive", "Router", "Shield", "KeyRound", "Bell", "Zap"],
-    [],
-  );
+  const allIcons = useMemo(() => (Array.isArray(iconNames) ? iconNames : []), []);
   const filteredIcons = allIcons.filter((icon) => icon.toLowerCase().includes(query.toLowerCase())).slice(0, 80);
 
   function pick(icon: string) {
@@ -29,37 +50,46 @@ export function IconPicker({ name, defaultValue = "Sparkles" }: { name: string; 
       <input type="hidden" name={name} value={value} />
       <Popover open={open} onOpenChange={setOpen}>
         <PopoverTrigger asChild>
-          <Button type="button" variant="outline" className="w-full justify-between gap-3 pr-4">
-            <span className="flex items-center gap-2">
-              <AppIcon name={value} className="h-4 w-4" />
-              {value}
+          <button
+            type="button"
+            aria-label={tx(locale, `Icon: ${value}`, `Иконка: ${value}`)}
+            className="flex h-9 w-full items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-sm text-zinc-100 transition-colors hover:border-white/15 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/25 data-[state=open]:border-white/20"
+          >
+            <span className="flex min-w-0 items-center gap-2">
+              <AppIcon name={value} className="h-4 w-4 shrink-0 text-zinc-300" />
+              <span className="truncate">{value}</span>
             </span>
-            <ChevronsUpDown className="h-4 w-4 shrink-0 text-zinc-500" />
-          </Button>
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
+          </button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-80 p-3">
-          <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search Lucide icons..." />
-          <div className="mt-3 max-h-72 overflow-y-auto">
-            <p className="mb-2 px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">Popular</p>
-            <div className="grid grid-cols-2 gap-1">
-              {popular.map((icon) => (
-                <button key={icon} type="button" onClick={() => pick(icon)} className="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-zinc-200 hover:bg-white/10">
-                  <AppIcon name={icon} className="h-4 w-4" />
-                  <span className="min-w-0 flex-1 truncate">{icon}</span>
-                  {value === icon ? <Check className="h-4 w-4" /> : null}
-                </button>
-              ))}
-            </div>
-            <p className="mb-2 mt-4 px-1 text-xs font-medium uppercase tracking-wider text-zinc-500">All icons</p>
-            <div className="grid grid-cols-2 gap-1">
+        <PopoverContent align="start" className="w-80 p-2">
+          <SearchInput
+            size="sm"
+            value={query}
+            onChange={setQuery}
+            autoFocus
+            placeholder={tx(locale, "Search Lucide icons", "Поиск иконок Lucide")}
+            clearLabel={tx(locale, "Clear search", "Очистить поиск")}
+          />
+          <div className="mt-2 max-h-72 overflow-y-auto">
+            {!query ? (
+              <>
+                <p className="px-2 pb-1 pt-1.5 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{tx(locale, "Popular", "Популярные")}</p>
+                <div className="grid grid-cols-2 gap-0.5">
+                  {POPULAR.map((icon) => (
+                    <IconOption key={icon} icon={icon} selected={value === icon} onPick={pick} />
+                  ))}
+                </div>
+              </>
+            ) : null}
+            <p className="px-2 pb-1 pt-3 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{tx(locale, "All icons", "Все иконки")}</p>
+            <div className="grid grid-cols-2 gap-0.5">
               {filteredIcons.map((icon) => (
-                <button key={icon} type="button" onClick={() => pick(icon)} className="flex items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-zinc-200 hover:bg-white/10">
-                  <AppIcon name={icon} className="h-4 w-4" />
-                  <span className="min-w-0 flex-1 truncate">{icon}</span>
-                  {value === icon ? <Check className="h-4 w-4" /> : null}
-                </button>
+                <IconOption key={icon} icon={icon} selected={value === icon} onPick={pick} />
               ))}
-              {!filteredIcons.length ? <p className="col-span-2 py-6 text-center text-sm text-zinc-500">No icon found.</p> : null}
+              {!filteredIcons.length ? (
+                <p className="col-span-2 py-6 text-center text-[13px] text-zinc-500">{tx(locale, "No icon found.", "Ничего не найдено.")}</p>
+              ) : null}
             </div>
           </div>
         </PopoverContent>

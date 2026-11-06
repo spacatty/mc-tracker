@@ -126,9 +126,10 @@ function mapCategory(row: DbRow): Category {
     workspaceId: row.workspace_id === null || row.workspace_id === undefined ? null : Number(row.workspace_id),
     name: String(row.name),
     icon: String(row.icon || "Sparkles"),
-    color: String(row.color || "#8b5cf6"),
+    color: String(row.color || "#38bdf8"),
     sortOrder: Number(row.sort_order || 0),
     fields: Array.isArray(fields) ? fields : [],
+    identifierField: row.identifier_field === null || row.identifier_field === undefined ? null : String(row.identifier_field),
     createdAt: String(row.created_at),
     updatedAt: String(row.updated_at),
   };
@@ -157,6 +158,15 @@ function mapItem(row: DbRow): PaymentItem {
     accountId: row.account_id == null ? null : Number(row.account_id),
     notes: String(row.notes || ""),
     customFields: parseJson<Record<string, unknown>>(row.custom_fields_json, {}),
+    host:
+      row.category_fields_json !== undefined
+        ? itemHost(
+            parseJson<Record<string, unknown>>(row.custom_fields_json, {}),
+            parseJson<CategoryField[]>(row.category_fields_json, []),
+            row.category_name ? String(row.category_name) : null,
+            row.category_identifier_field === null || row.category_identifier_field === undefined ? null : String(row.category_identifier_field),
+          ) || undefined
+        : undefined,
     ownerId: row.owner_id === null ? null : Number(row.owner_id),
     archivedAt: row.archived_at ? String(row.archived_at) : null,
     createdAt: String(row.created_at),
@@ -205,7 +215,12 @@ function mapWebsiteNotification(row: DbRow): WebsiteNotification {
     readAt: row.read_at ? String(row.read_at) : null,
     itemName: row.item_name ? String(row.item_name) : undefined,
     itemHost: row.item_name
-      ? itemHost(parseJson<Record<string, unknown>>(row.item_custom_fields_json, {}), parseJson<CategoryField[]>(row.item_category_fields_json, []), row.item_category_name ? String(row.item_category_name) : null) || undefined
+      ? itemHost(
+          parseJson<Record<string, unknown>>(row.item_custom_fields_json, {}),
+          parseJson<CategoryField[]>(row.item_category_fields_json, []),
+          row.item_category_name ? String(row.item_category_name) : null,
+          row.item_category_identifier_field === null || row.item_category_identifier_field === undefined ? null : String(row.item_category_identifier_field),
+        ) || undefined
       : undefined,
   };
 }
@@ -213,9 +228,14 @@ function mapWebsiteNotification(row: DbRow): WebsiteNotification {
 /** Server IP or domain of an entry (Servers and Domains only; see lib/item-host.ts). */
 function hostForItem(item: Pick<PaymentItem, "categoryId" | "customFields">) {
   const row = item.categoryId
-    ? (getDb().prepare("SELECT name, fields_json FROM categories WHERE id = ?").get(item.categoryId) as DbRow | undefined)
+    ? (getDb().prepare("SELECT name, fields_json, identifier_field FROM categories WHERE id = ?").get(item.categoryId) as DbRow | undefined)
     : undefined;
-  return itemHost(item.customFields, parseJson<CategoryField[]>(row?.fields_json, []), row?.name ? String(row.name) : null);
+  return itemHost(
+    item.customFields,
+    parseJson<CategoryField[]>(row?.fields_json, []),
+    row?.name ? String(row.name) : null,
+    row?.identifier_field === null || row?.identifier_field === undefined ? null : String(row.identifier_field),
+  );
 }
 
 function mapInvoice(row: DbRow): Invoice {
@@ -318,7 +338,7 @@ function bootstrapWorkspaces(db: Database.Database) {
           workspaceId,
           String(legacyCategory.name),
           String(legacyCategory.icon || "Sparkles"),
-          String(legacyCategory.color || "#8b5cf6"),
+          String(legacyCategory.color || "#38bdf8"),
           Number(legacyCategory.sort_order || 0),
           String(legacyCategory.fields_json || "[]"),
           String(legacyCategory.created_at || nowIso()),
@@ -363,7 +383,7 @@ function bootstrapWorkspaces(db: Database.Database) {
     const now = nowIso();
     insertCategoryStmt.run(workspaceId, "Domains", "Globe", "#38bdf8", 1, "[]", now, now);
     insertCategoryStmt.run(workspaceId, "Servers", "Server", "#f43f5e", 2, "[]", now, now);
-    insertCategoryStmt.run(workspaceId, "General Services", "Boxes", "#8b5cf6", 3, "[]", now, now);
+    insertCategoryStmt.run(workspaceId, "General Services", "Boxes", "#38bdf8", 3, "[]", now, now);
   });
 
   // One-time repair for already duplicated categories from previous migrations.
@@ -633,6 +653,9 @@ function migrate(db: Database.Database) {
   if (!columnExists(db, "invoices", "account_name")) {
     db.prepare("ALTER TABLE invoices ADD COLUMN account_name TEXT").run();
   }
+  if (!columnExists(db, "categories", "identifier_field")) {
+    db.prepare("ALTER TABLE categories ADD COLUMN identifier_field TEXT").run();
+  }
   if (!columnExists(db, "categories", "workspace_id")) {
     db.prepare("ALTER TABLE categories ADD COLUMN workspace_id INTEGER REFERENCES workspaces(id) ON DELETE CASCADE").run();
   }
@@ -669,7 +692,7 @@ function migrate(db: Database.Database) {
     );
     insert.run("Domains", "Globe", "#38bdf8", 1, "[]", now, now);
     insert.run("Servers", "Server", "#f43f5e", 2, "[]", now, now);
-    insert.run("General Services", "Boxes", "#8b5cf6", 3, "[]", now, now);
+    insert.run("General Services", "Boxes", "#38bdf8", 3, "[]", now, now);
   }
 
   db.prepare(
@@ -1040,19 +1063,28 @@ export function upsertCategoryForWorkspace(formData: FormData, workspaceId: numb
   const current = id ? getCategoryForWorkspace(id, workspaceId, userId) : null;
   const name = String(formData.get("name") || "").trim();
   if (!name) throw new Error("Category name is required.");
+  // One category per name in a workspace (case-insensitive), so the sidebar and filters never show two "Servers".
+  const clash = getDb()
+    .prepare("SELECT id FROM categories WHERE workspace_id = ? AND lower(trim(name)) = lower(?) AND id != ? LIMIT 1")
+    .get(workspaceId, name, id || 0) as DbRow | undefined;
+  if (clash) throw new Error(`A category named "${name}" already exists in this workspace.`);
 
   const fields = buildFieldsFromForm(formData, current?.fields || []);
   const icon = String(formData.get("icon") || "Sparkles").trim();
-  const color = String(formData.get("color") || "#8b5cf6");
+  const color = String(formData.get("color") || "#38bdf8");
+  // The identifier must be one of this category's fields; anything else (or nothing chosen) means none.
+  const requestedIdentifier = formData.has("identifierField") ? String(formData.get("identifierField") || "") : current?.identifierField ?? "";
+  const identifierField = requestedIdentifier && fields.some((field) => field.id === requestedIdentifier) ? requestedIdentifier : "";
   const now = nowIso();
   const db = getDb();
 
   if (id) {
-    db.prepare("UPDATE categories SET name = ?, icon = ?, color = ?, fields_json = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").run(
+    db.prepare("UPDATE categories SET name = ?, icon = ?, color = ?, fields_json = ?, identifier_field = ?, updated_at = ? WHERE id = ? AND workspace_id = ?").run(
       name,
       icon,
       color,
       JSON.stringify(fields),
+      identifierField,
       now,
       id,
       workspaceId,
@@ -1064,9 +1096,9 @@ export function upsertCategoryForWorkspace(formData: FormData, workspaceId: numb
   const maxSort = db.prepare("SELECT COALESCE(MAX(sort_order), 0) as sort FROM categories WHERE workspace_id = ?").get(workspaceId) as DbRow;
   const result = db
     .prepare(
-      "INSERT INTO categories (workspace_id, name, icon, color, sort_order, fields_json, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO categories (workspace_id, name, icon, color, sort_order, fields_json, identifier_field, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
     )
-    .run(workspaceId, name, icon, color, Number(maxSort.sort || 0) + 1, JSON.stringify(fields), now, now);
+    .run(workspaceId, name, icon, color, Number(maxSort.sort || 0) + 1, JSON.stringify(fields), identifierField, now, now);
   const categoryId = Number(result.lastInsertRowid);
   saveCategoryNotificationChannels(categoryId, workspaceId, formData.getAll("notificationChannelIds").map(Number));
   return categoryId;
@@ -1159,7 +1191,7 @@ export function listItems() {
   return (
     getDb()
       .prepare(
-        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
          WHERE (items.archived_at IS NULL)
@@ -1173,7 +1205,7 @@ export function listItemsForUser(userId: number) {
   return (
     getDb()
       .prepare(
-        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
          WHERE items.owner_id = ? AND (items.archived_at IS NULL)
@@ -1188,7 +1220,7 @@ export function listItemsForWorkspace(workspaceId: number, userId: number) {
   return (
     getDb()
       .prepare(
-        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
          WHERE items.workspace_id = ? AND (items.archived_at IS NULL)
@@ -1203,7 +1235,7 @@ export function listArchivedItemsForWorkspace(workspaceId: number, userId: numbe
   return (
     getDb()
       .prepare(
-        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
          FROM items
          LEFT JOIN categories ON categories.id = items.category_id
          WHERE items.workspace_id = ? AND items.archived_at IS NOT NULL
@@ -1289,7 +1321,7 @@ export function listVendorSuggestionsForWorkspace(workspaceId: number, userId: n
 export function getItem(id: number) {
   const row = getDb()
     .prepare(
-      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
        FROM items
        LEFT JOIN categories ON categories.id = items.category_id
        WHERE items.id = ?`,
@@ -1301,7 +1333,7 @@ export function getItem(id: number) {
 export function getItemForUser(id: number, userId: number) {
   const row = getDb()
     .prepare(
-      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
        FROM items
        LEFT JOIN categories ON categories.id = items.category_id
        WHERE items.id = ? AND items.owner_id = ?`,
@@ -1314,7 +1346,7 @@ export function getItemForWorkspace(id: number, workspaceId: number, userId: num
   requireWorkspaceViewer(workspaceId, userId);
   const row = getDb()
     .prepare(
-      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
        FROM items
        LEFT JOIN categories ON categories.id = items.category_id
        WHERE items.id = ? AND items.workspace_id = ?`,
@@ -1627,7 +1659,7 @@ export function transferWorkspaceEntriesForUser(
       targetWorkspaceId,
       String(sourceCategory.name || "Category"),
       String(sourceCategory.icon || "Sparkles"),
-      String(sourceCategory.color || "#8b5cf6"),
+      String(sourceCategory.color || "#38bdf8"),
       sort,
       String(sourceCategory.fields_json || "[]"),
       String(sourceCategory.created_at || now),
@@ -1714,7 +1746,7 @@ export function exportSelectedEntriesForWorkspace(workspaceId: number, entryIds:
   const inClause = ids.map(() => "?").join(",");
   const rows = db
     .prepare(
-      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+      `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
        FROM items
        LEFT JOIN categories ON categories.id = items.category_id
        WHERE items.workspace_id = ? AND items.id IN (${inClause})`,
@@ -2014,15 +2046,16 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
     const existing = categoryByKey.get(key);
     if (existing) return existing.id;
     nextSort += 1;
-    const created = insertCategory.run(workspaceId, name.trim(), "Sparkles", "#8b5cf6", nextSort, "[]", now, now);
+    const created = insertCategory.run(workspaceId, name.trim(), "Sparkles", "#38bdf8", nextSort, "[]", now, now);
     const category: Category = {
       id: Number(created.lastInsertRowid),
       workspaceId,
       name: name.trim(),
       icon: "Sparkles",
-      color: "#8b5cf6",
+      color: "#38bdf8",
       sortOrder: nextSort,
       fields: [],
+      identifierField: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -2046,7 +2079,7 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
           workspaceId,
           category.name.trim(),
           category.icon || "Sparkles",
-          category.color || "#8b5cf6",
+          category.color || "#38bdf8",
           category.sortOrder > 0 ? category.sortOrder : nextSort,
           JSON.stringify(category.fields || []),
           now,
@@ -2057,9 +2090,10 @@ export function importWorkspaceDataForUser(workspaceId: number, payload: AnyExpo
           workspaceId,
           name: category.name.trim(),
           icon: category.icon || "Sparkles",
-          color: category.color || "#8b5cf6",
+          color: category.color || "#38bdf8",
           sortOrder: category.sortOrder > 0 ? category.sortOrder : nextSort,
           fields: category.fields || [],
+          identifierField: null,
           createdAt: now,
           updatedAt: now,
         });
@@ -2338,7 +2372,7 @@ function convertForDisplay(amount: number, sourceCurrency: string, displayCurren
   return amount * sourceToDisplay;
 }
 
-export async function dashboardStats(userId?: number, displayCurrency = "USD"): Promise<DashboardStats> {
+export async function dashboardStats(userId?: number, displayCurrency = "USD", horizonDays = 14): Promise<DashboardStats> {
   const items = typeof userId === "number" ? listItemsForUser(userId) : listItems();
   const resolvedDisplayCurrency = normalizeDashboardCurrency(displayCurrency);
   const rates = await getConversionRates(resolvedDisplayCurrency, items.map((item) => item.currency));
@@ -2369,7 +2403,7 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
     const current = categoryItemMap.get(key) || {
       name: key,
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       count: 0,
     };
     current.count += 1;
@@ -2380,7 +2414,7 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
     const current = categoryMap.get(key) || {
       name: key,
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       monthly: 0,
     };
     current.monthly += convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates);
@@ -2394,7 +2428,7 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
       const nextPayment = currentDueDate(item);
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
-      if (daysUntilPayment > 14) return null;
+      if (daysUntilPayment > horizonDays) return null;
       return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item), displayAmount: convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates) };
     })
     .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string; displayAmount: number } => Boolean(item))
@@ -2411,7 +2445,7 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
       categoryId: item.categoryId,
       name: item.categoryName || "Uncategorized",
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       week: 0,
       month: 0,
       quarter: 0,
@@ -2470,7 +2504,7 @@ export async function dashboardStats(userId?: number, displayCurrency = "USD"): 
   };
 }
 
-export async function dashboardStatsForWorkspace(workspaceId: number, userId: number, displayCurrency = "USD"): Promise<DashboardStats> {
+export async function dashboardStatsForWorkspace(workspaceId: number, userId: number, displayCurrency = "USD", horizonDays = 14): Promise<DashboardStats> {
   requireWorkspaceViewer(workspaceId, userId);
   const items = listItemsForWorkspace(workspaceId, userId);
   const resolvedDisplayCurrency = normalizeDashboardCurrency(displayCurrency);
@@ -2508,7 +2542,7 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
     const current = categoryItemMap.get(key) || {
       name: key,
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       count: 0,
     };
     current.count += 1;
@@ -2519,7 +2553,7 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
     const current = categoryMap.get(key) || {
       name: key,
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       monthly: 0,
     };
     current.monthly += convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates);
@@ -2533,7 +2567,7 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
       const nextPayment = currentDueDate(item);
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
-      if (daysUntilPayment > 14) return null;
+      if (daysUntilPayment > horizonDays) return null;
       return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item), displayAmount: convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates) };
     })
     .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string; displayAmount: number } => Boolean(item))
@@ -2550,7 +2584,7 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
       categoryId: item.categoryId,
       name: item.categoryName || "Uncategorized",
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       week: 0,
       month: 0,
       quarter: 0,
@@ -2604,13 +2638,13 @@ export async function dashboardStatsForWorkspace(workspaceId: number, userId: nu
   };
 }
 
-const WORKSPACE_DOMINANCE_COLORS = ["#8b5cf6", "#06b6d4", "#22c55e", "#f59e0b", "#ec4899", "#3b82f6", "#84cc16", "#ef4444"];
+const WORKSPACE_DOMINANCE_COLORS = ["#38bdf8", "#06b6d4", "#22c55e", "#f59e0b", "#ec4899", "#3b82f6", "#84cc16", "#ef4444"];
 
 function workspaceColor(index: number) {
   return WORKSPACE_DOMINANCE_COLORS[index % WORKSPACE_DOMINANCE_COLORS.length];
 }
 
-export async function dashboardStatsGlobalForUser(userId: number, displayCurrency = "USD"): Promise<DashboardStats> {
+export async function dashboardStatsGlobalForUser(userId: number, displayCurrency = "USD", horizonDays = 14): Promise<DashboardStats> {
   const workspaces = listWorkspacesForUser(userId);
   const items = workspaces.flatMap((workspace) => listItemsForWorkspace(workspace.id, userId));
   const resolvedDisplayCurrency = normalizeDashboardCurrency(displayCurrency);
@@ -2641,7 +2675,7 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
     const current = categoryItemMap.get(key) || {
       name: key,
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       count: 0,
     };
     current.count += 1;
@@ -2652,7 +2686,7 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
     const current = categoryMap.get(key) || {
       name: key,
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       monthly: 0,
     };
     current.monthly += convertForDisplay(normalizeMonthlyAmount(item), item.currency, resolvedDisplayCurrency, rates);
@@ -2666,7 +2700,7 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
       const nextPayment = currentDueDate(item);
       if (!nextPayment) return null;
       const daysUntilPayment = daysBetween(now, nextPayment);
-      if (daysUntilPayment > 14) return null;
+      if (daysUntilPayment > horizonDays) return null;
       return { ...item, nextPaymentAt: nextPayment.toISOString(), daysUntilPayment, host: hostForItem(item), displayAmount: convertForDisplay(item.amount, item.currency, resolvedDisplayCurrency, rates) };
     })
     .filter((item): item is PaymentItem & { nextPaymentAt: string; daysUntilPayment: number; host: string; displayAmount: number } => Boolean(item))
@@ -2683,7 +2717,7 @@ export async function dashboardStatsGlobalForUser(userId: number, displayCurrenc
       categoryId: item.categoryId,
       name: item.categoryName || "Uncategorized",
       icon: item.categoryIcon || "Boxes",
-      color: item.categoryColor || "#8b5cf6",
+      color: item.categoryColor || "#38bdf8",
       week: 0,
       month: 0,
       quarter: 0,
@@ -2843,7 +2877,7 @@ export function listFolderItems(folderId: number) {
   return (
     getDb()
       .prepare(
-        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color
+        `SELECT items.*, categories.name as category_name, categories.icon as category_icon, categories.color as category_color, categories.fields_json as category_fields_json, categories.identifier_field as category_identifier_field
          FROM folder_items
          JOIN items ON items.id = folder_items.item_id
          LEFT JOIN categories ON categories.id = items.category_id
@@ -3246,7 +3280,7 @@ export function listWebsiteNotificationsForWorkspace(workspaceId: number, userId
   requireWorkspaceViewer(workspaceId, userId);
   return (getDb()
     .prepare(
-      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json, categories.name AS item_category_name
+      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json, categories.name AS item_category_name, categories.identifier_field AS item_category_identifier_field
        FROM notifications
        LEFT JOIN items ON items.id = notifications.item_id
        LEFT JOIN categories ON categories.id = items.category_id
@@ -3269,7 +3303,7 @@ export function unreadWebsiteNotificationsForWorkspace(workspaceId: number, user
   requireWorkspaceViewer(workspaceId, userId);
   return (getDb()
     .prepare(
-      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json, categories.name AS item_category_name
+      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json, categories.name AS item_category_name, categories.identifier_field AS item_category_identifier_field
        FROM notifications
        LEFT JOIN items ON items.id = notifications.item_id
        LEFT JOIN categories ON categories.id = items.category_id

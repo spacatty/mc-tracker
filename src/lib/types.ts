@@ -43,6 +43,8 @@ export type Category = {
   color: string;
   sortOrder: number;
   fields: CategoryField[];
+  /** Field shown as the entries' identifier column: a field id, "" for none, null = not set (auto: IP / domain). */
+  identifierField: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -70,7 +72,7 @@ export type PaymentItem = {
   accountId?: number | null;
   notes: string;
   customFields: Record<string, unknown>;
-  /** Server IP or domain from the category's IP/Domain field, when known. */
+  /** The identifier from the category's identifier field (server IP, domain…), when there is one. */
   host?: string;
   ownerId: number | null;
   archivedAt: string | null;

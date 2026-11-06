@@ -1,8 +1,8 @@
 "use client";
 
-import { ArrowUpRight, Building2, KeyRound, Loader2, Pencil, Plus, Search, Trash2, UserRound } from "lucide-react";
+import { ArrowUpRight, Building2, KeyRound, Loader2, Pencil, Plus, SearchX, Trash2, UserRound } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useId, useMemo, useState, useTransition } from "react";
 import { toast } from "sonner";
 import {
   deleteAccountAction,
@@ -10,78 +10,102 @@ import {
   saveAccountAction,
   saveVendorAction,
 } from "@/app/vault-actions";
-import type { Locale } from "@/lib/i18n";
-import { cn } from "@/lib/utils";
+import { pluralRu, type Locale } from "@/lib/i18n";
 import type { VaultAccount, Vendor } from "@/lib/vault/types";
-import { Kbd } from "../capture/shared";
 import { LetterIcon } from "../capture/suggest-menu";
+import { Alert } from "../ui/alert";
+import { Badge } from "../ui/badge";
 import { Button } from "../ui/button";
-import { EmptyState } from "../ui/empty-state";
-import { Input, Textarea } from "../ui/input";
+import { ConfirmDialog } from "../ui/dialog";
+import { Field, FieldDescription } from "../ui/field";
+import { Input, SearchInput, Textarea } from "../ui/input";
 import { NativeSelect } from "../ui/native-select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
-import { FieldLabel, SecretRow, SetupTwoFactorNotice, TwoFactorPrompt, VaultDialog, hostOf, tx, useCredentialReveal } from "./shared";
+import { RowAction, RowActionMenu, RowActions } from "../ui/row-actions";
+import { SectionCard } from "../ui/section-card";
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow, TableToolbar } from "../ui/table";
+import {
+  CredentialsFieldset,
+  LegendAction,
+  PasswordInput,
+  SaveHint,
+  SecretNotes,
+  SecretRow,
+  SetupTwoFactorNotice,
+  TwoFactorPrompt,
+  VaultDialog,
+  hostOf,
+  tx,
+  useCredentialReveal,
+} from "./shared";
 
 function matches(query: string, ...values: string[]) {
   const needle = query.trim().toLowerCase();
   return !needle || values.some((value) => value.toLowerCase().includes(needle));
 }
 
-function SearchBox({ value, onChange, placeholder }: { value: string; onChange: (value: string) => void; placeholder: string }) {
-  return (
-    <label className="relative block w-full max-w-xs">
-      <Search className="pointer-events-none absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-zinc-500" />
-      <Input value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} className="h-8 pl-8 text-[13px]" />
-    </label>
-  );
-}
-
 function Avatar({ text }: { text: string }) {
   return (
-    <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03]">
+    <span className="grid h-7 w-7 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03]" aria-hidden="true">
       <LetterIcon text={text} />
     </span>
   );
 }
 
-/** Two-step delete. When entries use the record, the confirm step says how many will be unlinked (they keep their text). */
-function DeleteButton({ label, inUse = 0, locale, onConfirm }: { label: string; inUse?: number; locale: Locale; onConfirm: () => Promise<void> }) {
-  const [armed, setArmed] = useState(false);
-  const [pending, startTransition] = useTransition();
+function CountText({ shown, total, locale }: { shown: number; total: number; locale: Locale }) {
   return (
-    <button
-      type="button"
-      disabled={pending}
-      onBlur={() => setArmed(false)}
-      onClick={() => {
-        if (!armed) return setArmed(true);
-        startTransition(onConfirm);
-      }}
-      className={cn(
-        "inline-grid h-7 min-w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-red-500/15 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40",
-        armed && "bg-red-500/15 px-2 text-[11px] font-medium text-red-200",
-      )}
-      aria-label={tx(locale, `Delete ${label}`, `Удалить ${label}`)}
-      title={
-        armed
-          ? inUse
-            ? tx(locale, `${inUse} entries use ${label}. They keep the name but lose the link.`, `${label} используется в записях: ${inUse}. Они сохранят название, но потеряют связь.`)
-            : undefined
-          : tx(locale, "Delete", "Удалить")
+    <span className="text-xs tabular-nums text-zinc-500">
+      {shown === total ? total : tx(locale, `${shown} of ${total}`, `${shown} из ${total}`)}
+    </span>
+  );
+}
+
+type DeleteTarget = { id: number; name: string; inUse: number };
+
+/** Delete confirmation. When entries use the record, it says how many will be unlinked (they keep their text). */
+function DeleteConfirm({
+  target,
+  kind,
+  locale,
+  onClose,
+  onDelete,
+}: {
+  target: DeleteTarget | null;
+  kind: "vendor" | "account";
+  locale: Locale;
+  onClose: () => void;
+  onDelete: (id: number) => Promise<void>;
+}) {
+  const [pending, startTransition] = useTransition();
+  const name = target?.name || "";
+  const inUse = target?.inUse || 0;
+  return (
+    <ConfirmDialog
+      open={Boolean(target)}
+      onOpenChange={(next) => !next && onClose()}
+      destructive
+      pending={pending}
+      title={kind === "vendor" ? tx(locale, `Delete vendor “${name}”?`, `Удалить поставщика «${name}»?`) : tx(locale, `Delete account “${name}”?`, `Удалить аккаунт «${name}»?`)}
+      description={
+        inUse
+          ? tx(
+              locale,
+              `${inUse} ${inUse === 1 ? "entry uses" : "entries use"} it. They keep the name but lose the link.`,
+              `Используется в ${inUse} ${pluralRu(inUse, "записи", "записях", "записях")}. Название в них сохранится, но связь с ним пропадёт.`,
+            )
+          : kind === "account"
+            ? tx(locale, "Its encrypted credentials are deleted too. This cannot be undone.", "Зашифрованные учётные данные тоже будут удалены. Это действие нельзя отменить.")
+            : tx(locale, "This cannot be undone.", "Это действие нельзя отменить.")
       }
-    >
-      {pending ? (
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-      ) : armed ? (
-        inUse ? (
-          tx(locale, `Delete, unlink ${inUse} ${inUse === 1 ? "entry" : "entries"}?`, `Удалить и отвязать ${inUse}?`)
-        ) : (
-          tx(locale, "Confirm", "Удалить?")
-        )
-      ) : (
-        <Trash2 className="h-3.5 w-3.5" />
-      )}
-    </button>
+      confirmLabel={tx(locale, "Delete", "Удалить")}
+      cancelLabel={tx(locale, "Cancel", "Отмена")}
+      onConfirm={() => {
+        if (!target) return;
+        startTransition(async () => {
+          await onDelete(target.id);
+          onClose();
+        });
+      }}
+    />
   );
 }
 
@@ -91,87 +115,121 @@ export function VendorsManager({ workspaceId, vendors, canEdit, locale }: { work
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [editing, setEditing] = useState<Vendor | "new" | null>(null);
+  const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
   const visible = useMemo(() => vendors.filter((vendor) => matches(query, vendor.name, vendor.url, vendor.notes)), [vendors, query]);
+  const newButton = canEdit ? (
+    <Button type="button" size="sm" onClick={() => setEditing("new")}>
+      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      {tx(locale, "New vendor", "Новый поставщик")}
+    </Button>
+  ) : null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={query} onChange={setQuery} placeholder={tx(locale, "Search vendors", "Поиск поставщиков")} />
-        {canEdit ? (
-          <div className="ml-auto flex gap-2">
-            <Button type="button" size="sm" onClick={() => setEditing("new")}>
-              <Plus className="h-3.5 w-3.5" />
-              {tx(locale, "New vendor", "Новый поставщик")}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-
-      {vendors.length === 0 ? (
-        <EmptyState
-          icon={<Building2 />}
-          title={tx(locale, "No vendors yet", "Поставщиков пока нет")}
-          description={tx(locale, "Add the services you pay, with the URL you log in at. Entries link to a vendor by its name.", "Добавьте сервисы, которые оплачиваете, и URL для входа. Записи связываются с поставщиком по имени.")}
-        />
-      ) : (
-        <Table>
+    <>
+      <SectionCard flush className="flex min-h-[24rem] flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+        <TableToolbar end={newButton}>
+          <SearchInput
+            size="sm"
+            value={query}
+            onChange={setQuery}
+            placeholder={tx(locale, "Search vendors", "Поиск поставщиков")}
+            clearLabel={tx(locale, "Clear search", "Очистить поиск")}
+            className="max-w-sm flex-1"
+          />
+          <CountText shown={visible.length} total={vendors.length} locale={locale} />
+        </TableToolbar>
+        <Table bare fill minWidth={640}>
           <TableHeader>
             <TableRow>
               <TableHead>{tx(locale, "Vendor", "Поставщик")}</TableHead>
               <TableHead>URL</TableHead>
-              <TableHead className="text-center">{tx(locale, "Accounts", "Аккаунты")}</TableHead>
-              <TableHead className="text-center">{tx(locale, "Entries", "Записи")}</TableHead>
-              <TableHead className="w-24" />
+              <TableHead align="right">{tx(locale, "Accounts", "Аккаунты")}</TableHead>
+              <TableHead align="right">{tx(locale, "Entries", "Записи")}</TableHead>
+              <TableHead align="right" width="1%">
+                <span className="sr-only">{tx(locale, "Actions", "Действия")}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.map((vendor) => (
-              <TableRow key={vendor.id} className="group">
+              <TableRow key={vendor.id} interactive={canEdit} onClick={canEdit ? () => setEditing(vendor) : undefined}>
                 <TableCell>
                   <div className="flex items-center gap-2.5">
                     <Avatar text={vendor.name} />
                     <div className="min-w-0">
                       <p className="truncate font-medium text-zinc-100">{vendor.name}</p>
-                      {vendor.notes ? <p className="max-w-64 truncate text-xs text-zinc-500">{vendor.notes}</p> : null}
+                      {vendor.notes ? <p className="max-w-72 truncate text-[11.5px] text-zinc-500">{vendor.notes}</p> : null}
                     </div>
                   </div>
                 </TableCell>
                 <TableCell>
                   {vendor.url ? (
-                    <a href={vendor.url} target="_blank" rel="noreferrer" className="inline-flex max-w-72 items-center gap-1 text-sky-300 hover:text-sky-200">
+                    <a
+                      href={vendor.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      onClick={(event) => event.stopPropagation()}
+                      className="inline-flex max-w-72 items-center gap-1 rounded-sm text-sky-300 transition hover:text-sky-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                    >
                       <span className="truncate">{hostOf(vendor.url)}</span>
-                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0" />
+                      <ArrowUpRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                     </a>
                   ) : (
                     <span className="text-zinc-600">—</span>
                   )}
                 </TableCell>
-                <TableCell className="text-center tabular-nums">{vendor.accountCount || "—"}</TableCell>
-                <TableCell className="text-center tabular-nums">{vendor.entryCount || "—"}</TableCell>
-                <TableCell>
-                  {canEdit ? (
-                    <div className="flex justify-end gap-0.5">
-                      <button type="button" onClick={() => setEditing(vendor)} className="inline-grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40" aria-label={tx(locale, "Edit", "Изменить")} title={tx(locale, "Edit", "Изменить")}>
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                      <DeleteButton
-                        label={vendor.name}
-                        inUse={vendor.entryCount}
-                        locale={locale}
-                        onConfirm={async () => {
-                          const result = await deleteVendorAction(workspaceId, vendor.id);
-                          if (!result.ok) toast.error(result.error);
-                          router.refresh();
-                        }}
+                <TableCell align="right" className="tabular-nums">{vendor.accountCount || "—"}</TableCell>
+                <TableCell align="right" className="tabular-nums">{vendor.entryCount || "—"}</TableCell>
+                <TableCell align="right" className="w-[1%] whitespace-nowrap">
+                  <RowActions>
+                    {vendor.url ? (
+                      <RowAction label={tx(locale, `Open ${hostOf(vendor.url)}`, `Открыть ${hostOf(vendor.url)}`)} icon={<ArrowUpRight />} href={vendor.url} external hidden="hover" />
+                    ) : null}
+                    {canEdit ? (
+                      <RowActionMenu
+                        label={tx(locale, `More actions for ${vendor.name}`, `Другие действия с «${vendor.name}»`)}
+                        items={[
+                          { label: tx(locale, "Edit", "Изменить"), icon: <Pencil />, onSelect: () => setEditing(vendor) },
+                          "separator",
+                          {
+                            label: tx(locale, "Delete", "Удалить"),
+                            icon: <Trash2 />,
+                            destructive: true,
+                            onSelect: () => setDeleting({ id: vendor.id, name: vendor.name, inUse: vendor.entryCount }),
+                          },
+                        ]}
                       />
-                    </div>
-                  ) : null}
+                    ) : null}
+                  </RowActions>
                 </TableCell>
               </TableRow>
             ))}
+            {vendors.length === 0 ? (
+              <TableEmpty
+                colSpan={5}
+                icon={<Building2 />}
+                title={tx(locale, "No vendors yet", "Поставщиков пока нет")}
+                description={tx(
+                  locale,
+                  "Add the services you pay, with the URL you log in at. Entries link to a vendor by its name.",
+                  "Добавьте сервисы, за которые платите, и ссылки для входа. Записи связываются с поставщиком по названию.",
+                )}
+              />
+            ) : !visible.length ? (
+              <TableEmpty
+                colSpan={5}
+                icon={<SearchX />}
+                title={tx(locale, "Nothing matches", "Ничего не найдено")}
+                action={
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setQuery("")}>
+                    {tx(locale, "Clear search", "Очистить поиск")}
+                  </Button>
+                }
+              />
+            ) : null}
           </TableBody>
         </Table>
-      )}
+      </SectionCard>
 
       {editing ? (
         <VendorDialog
@@ -182,23 +240,36 @@ export function VendorsManager({ workspaceId, vendors, canEdit, locale }: { work
           onClose={() => setEditing(null)}
         />
       ) : null}
-    </div>
+      <DeleteConfirm
+        target={deleting}
+        kind="vendor"
+        locale={locale}
+        onClose={() => setDeleting(null)}
+        onDelete={async (id) => {
+          const result = await deleteVendorAction(workspaceId, id);
+          if (!result.ok) toast.error(result.error);
+          router.refresh();
+        }}
+      />
+    </>
   );
 }
 
 function VendorDialog({ workspaceId, vendor, locale, onClose }: { workspaceId: number; vendor: Vendor | null; locale: Locale; onClose: () => void }) {
   const router = useRouter();
+  const id = useId();
   const [name, setName] = useState(vendor?.name || "");
   const [url, setUrl] = useState(vendor?.url || "");
   const [notes, setNotes] = useState(vendor?.notes || "");
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
+  const formId = `${id}-form`;
 
   function submit() {
     startTransition(async () => {
       const result = await saveVendorAction({ workspaceId, id: vendor?.id, name, url, notes });
       if (!result.ok) return setError(result.error);
-      toast.success(vendor ? tx(locale, "Vendor saved", "Поставщик сохранён") : tx(locale, `Added ${name}`, `Добавлен ${name}`));
+      toast.success(vendor ? tx(locale, "Vendor saved", "Поставщик сохранён") : tx(locale, `Added ${name}`, `Добавлено: «${name}»`));
       onClose();
       router.refresh();
     });
@@ -209,33 +280,47 @@ function VendorDialog({ workspaceId, vendor, locale, onClose }: { workspaceId: n
       open
       onOpenChange={(open) => !open && onClose()}
       tone="sky"
-      icon={<Building2 className="h-4 w-4" />}
+      icon={<Building2 />}
       title={vendor ? tx(locale, "Edit vendor", "Изменить поставщика") : tx(locale, "New vendor", "Новый поставщик")}
-      description={tx(locale, "Entries with this vendor name use its URL for Quick login.", "Записи с этим именем поставщика используют его URL для входа.")}
+      description={tx(locale, "Entries with this vendor name use its URL for Quick login.", "Записи с этим названием поставщика используют его URL для быстрого входа.")}
+      hint={<SaveHint locale={locale} />}
       footer={
         <>
-          <span className="flex items-center gap-1 text-[11px] text-zinc-600"><Kbd>↵</Kbd>{tx(locale, "save", "сохранить")}<Kbd className="ml-2">Esc</Kbd>{tx(locale, "close", "закрыть")}</span>
-          <Button type="submit" form="vendor-form" size="sm" className="ml-auto" disabled={pending || !name.trim()}>
-            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            {tx(locale, "Cancel", "Отмена")}
+          </Button>
+          <Button type="submit" form={formId} size="sm" disabled={pending || !name.trim()}>
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
             {tx(locale, "Save", "Сохранить")}
           </Button>
         </>
       }
     >
-      <form id="vendor-form" className="space-y-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <label className="block">
-          <FieldLabel>{tx(locale, "Name", "Название")}</FieldLabel>
-          <Input autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Hetzner" />
-        </label>
-        <label className="block">
-          <FieldLabel>{tx(locale, "Login URL", "URL для входа")}</FieldLabel>
-          <Input value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://accounts.hetzner.com/login" inputMode="url" />
-        </label>
-        <label className="block">
-          <FieldLabel>{tx(locale, "Notes", "Заметки")}</FieldLabel>
-          <Textarea value={notes} onChange={(event) => setNotes(event.target.value)} rows={2} placeholder={tx(locale, "Support contacts, billing quirks…", "Контакты поддержки, особенности оплаты…")} />
-        </label>
-        {error ? <p className="text-xs text-red-300">{error}</p> : null}
+      <form
+        id={formId}
+        className="grid gap-4"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <Field label={tx(locale, "Name", "Название")} htmlFor={`${id}-name`} required>
+          <Input id={`${id}-name`} autoFocus value={name} onChange={(event) => setName(event.target.value)} placeholder="Hetzner" />
+        </Field>
+        <Field label={tx(locale, "Login URL", "URL для входа")} htmlFor={`${id}-url`}>
+          <Input id={`${id}-url`} value={url} onChange={(event) => setUrl(event.target.value)} placeholder="https://accounts.hetzner.com/login" inputMode="url" />
+        </Field>
+        <Field label={tx(locale, "Notes", "Заметки")} htmlFor={`${id}-notes`}>
+          <Textarea
+            id={`${id}-notes`}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            rows={2}
+            className="min-h-16"
+            placeholder={tx(locale, "Support contacts, billing quirks…", "Контакты поддержки, особенности оплаты…")}
+          />
+        </Field>
+        {error ? <Alert tone="danger">{error}</Alert> : null}
       </form>
     </VaultDialog>
   );
@@ -261,6 +346,7 @@ export function AccountsManager({
   const [vendorFilter, setVendorFilter] = useState("all");
   const [editing, setEditing] = useState<VaultAccount | "new" | null>(null);
   const [viewing, setViewing] = useState<VaultAccount | null>(null);
+  const [deleting, setDeleting] = useState<DeleteTarget | null>(null);
   const visible = useMemo(
     () =>
       accounts.filter(
@@ -270,108 +356,156 @@ export function AccountsManager({
       ),
     [accounts, query, vendorFilter],
   );
+  const newButton = canEdit ? (
+    <Button type="button" size="sm" onClick={() => setEditing("new")}>
+      <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+      {tx(locale, "New account", "Новый аккаунт")}
+    </Button>
+  ) : null;
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchBox value={query} onChange={setQuery} placeholder={tx(locale, "Search accounts", "Поиск аккаунтов")} />
-        {vendors.length ? (
-          <NativeSelect value={vendorFilter} onChange={setVendorFilter} ariaLabel={tx(locale, "Vendor", "Поставщик")} className="h-8 w-44 text-[13px]">
-            <option value="all">{tx(locale, "All vendors", "Все поставщики")}</option>
-            {vendors.map((vendor) => <option key={vendor.id} value={vendor.id}>{vendor.name}</option>)}
-            <option value="none">{tx(locale, "No vendor", "Без поставщика")}</option>
-          </NativeSelect>
-        ) : null}
-        {canEdit ? (
-          <div className="ml-auto flex gap-2">
-            <Button type="button" size="sm" onClick={() => setEditing("new")}>
-              <Plus className="h-3.5 w-3.5" />
-              {tx(locale, "New account", "Новый аккаунт")}
-            </Button>
-          </div>
-        ) : null}
-      </div>
-
-      {accounts.length === 0 ? (
-        <EmptyState
-          icon={<UserRound />}
-          title={tx(locale, "No accounts yet", "Аккаунтов пока нет")}
-          description={tx(locale, "Save the login for each vendor account. Credentials are encrypted before they are stored.", "Сохраните логин для каждого аккаунта. Данные шифруются перед сохранением.")}
-        />
-      ) : (
-        <Table>
+    <>
+      <SectionCard flush className="flex min-h-[24rem] flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col">
+        <TableToolbar end={newButton}>
+          <SearchInput
+            size="sm"
+            value={query}
+            onChange={setQuery}
+            placeholder={tx(locale, "Search accounts", "Поиск аккаунтов")}
+            clearLabel={tx(locale, "Clear search", "Очистить поиск")}
+            className="max-w-sm flex-1"
+          />
+          {vendors.length ? (
+            <NativeSelect size="sm" value={vendorFilter} onChange={setVendorFilter} ariaLabel={tx(locale, "Vendor", "Поставщик")} className="w-44">
+              <option value="all">{tx(locale, "All vendors", "Все поставщики")}</option>
+              {vendors.map((vendor) => (
+                <option key={vendor.id} value={vendor.id}>
+                  {vendor.name}
+                </option>
+              ))}
+              <option value="none">{tx(locale, "No vendor", "Без поставщика")}</option>
+            </NativeSelect>
+          ) : null}
+          <CountText shown={visible.length} total={accounts.length} locale={locale} />
+        </TableToolbar>
+        <Table bare fill minWidth={720}>
           <TableHeader>
             <TableRow>
               <TableHead>{tx(locale, "Account", "Аккаунт")}</TableHead>
               <TableHead>{tx(locale, "Vendor", "Поставщик")}</TableHead>
-              <TableHead>{tx(locale, "Credentials", "Данные")}</TableHead>
-              <TableHead className="text-center">{tx(locale, "Entries", "Записи")}</TableHead>
-              <TableHead className="w-32" />
+              <TableHead>{tx(locale, "Credentials", "Учётные данные")}</TableHead>
+              <TableHead align="right">{tx(locale, "Entries", "Записи")}</TableHead>
+              <TableHead align="right" width="1%">
+                <span className="sr-only">{tx(locale, "Actions", "Действия")}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {visible.map((account) => {
               const url = account.loginUrl || account.vendorUrl;
+              const none = !account.hasLogin && !account.hasPassword && !account.hasNotes;
               return (
-                <TableRow key={account.id} className="group">
+                <TableRow key={account.id} interactive onClick={() => setViewing(account)}>
                   <TableCell>
-                    <button type="button" onClick={() => setViewing(account)} className="flex items-center gap-2.5 text-left">
+                    <div className="flex items-center gap-2.5">
                       <Avatar text={account.name} />
-                      <span className="truncate font-medium text-zinc-100 hover:underline hover:decoration-white/30 hover:underline-offset-4">{account.name}</span>
-                    </button>
+                      <span className="truncate font-medium text-zinc-100">{account.name}</span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="min-w-0">
                       <p className="truncate text-zinc-300">{account.vendorName || <span className="text-zinc-600">—</span>}</p>
                       {url ? (
-                        <a href={url} target="_blank" rel="noreferrer" className="inline-flex max-w-60 items-center gap-1 text-xs text-sky-300 hover:text-sky-200">
+                        <a
+                          href={url}
+                          target="_blank"
+                          rel="noreferrer"
+                          onClick={(event) => event.stopPropagation()}
+                          className="inline-flex max-w-60 items-center gap-1 rounded-sm text-[11.5px] text-sky-300 transition hover:text-sky-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+                        >
                           <span className="truncate">{hostOf(url)}</span>
-                          <ArrowUpRight className="h-3 w-3 shrink-0" />
+                          <ArrowUpRight className="h-3 w-3 shrink-0" aria-hidden="true" />
                         </a>
                       ) : null}
                     </div>
                   </TableCell>
                   <TableCell>
-                    <div className="flex flex-wrap gap-1">
-                      {account.hasLogin ? <Chip>{tx(locale, "login", "логин")}</Chip> : null}
-                      {account.hasPassword ? <Chip>{tx(locale, "password", "пароль")}</Chip> : null}
-                      {account.hasNotes ? <Chip>{tx(locale, "notes", "заметки")}</Chip> : null}
-                      {!account.hasLogin && !account.hasPassword && !account.hasNotes ? <span className="text-xs text-zinc-600">{tx(locale, "none saved", "не заданы")}</span> : null}
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {account.hasLogin ? <Badge tone="success">{tx(locale, "login", "логин")}</Badge> : null}
+                      {account.hasPassword ? <Badge tone="success">{tx(locale, "password", "пароль")}</Badge> : null}
+                      {account.hasNotes ? <Badge tone="success">{tx(locale, "notes", "заметки")}</Badge> : null}
+                      {none ? <span className="text-xs text-zinc-600">{tx(locale, "none saved", "не сохранены")}</span> : null}
                     </div>
                   </TableCell>
-                  <TableCell className="text-center tabular-nums">{account.entryCount || "—"}</TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-0.5">
+                  <TableCell align="right" className="tabular-nums">{account.entryCount || "—"}</TableCell>
+                  <TableCell align="right" className="w-[1%] whitespace-nowrap">
+                    <RowActions>
                       {canEdit ? (
-                        <button type="button" onClick={() => setViewing(account)} className="inline-grid h-7 w-7 place-items-center rounded-md text-violet-300/80 transition hover:bg-violet-500/15 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40" aria-label={tx(locale, "View credentials", "Показать данные")} title={tx(locale, "View credentials", "Показать данные")}>
-                          <KeyRound className="h-3.5 w-3.5" />
-                        </button>
+                        <RowAction
+                          label={tx(locale, "View credentials", "Показать учётные данные")}
+                          icon={<KeyRound />}
+                          tone="accent"
+                          hidden="hover"
+                          onClick={() => setViewing(account)}
+                        />
+                      ) : null}
+                      {url ? (
+                        <RowAction label={tx(locale, `Open ${hostOf(url)}`, `Открыть ${hostOf(url)}`)} icon={<ArrowUpRight />} href={url} external hidden="hover" />
                       ) : null}
                       {canEdit ? (
-                        <div className="flex gap-0.5">
-                          <button type="button" onClick={() => setEditing(account)} className="inline-grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40" aria-label={tx(locale, "Edit", "Изменить")} title={tx(locale, "Edit", "Изменить")}>
-                            <Pencil className="h-3.5 w-3.5" />
-                          </button>
-                          <DeleteButton
-                            label={account.name}
-                            inUse={account.entryCount}
-                            locale={locale}
-                            onConfirm={async () => {
-                              const result = await deleteAccountAction(workspaceId, account.id);
-                              if (!result.ok) toast.error(result.error);
-                              router.refresh();
-                            }}
-                          />
-                        </div>
+                        <RowActionMenu
+                          label={tx(locale, `More actions for ${account.name}`, `Другие действия с «${account.name}»`)}
+                          items={[
+                            { label: tx(locale, "Edit", "Изменить"), icon: <Pencil />, onSelect: () => setEditing(account) },
+                            "separator",
+                            {
+                              label: tx(locale, "Delete", "Удалить"),
+                              icon: <Trash2 />,
+                              destructive: true,
+                              onSelect: () => setDeleting({ id: account.id, name: account.name, inUse: account.entryCount }),
+                            },
+                          ]}
+                        />
                       ) : null}
-                    </div>
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               );
             })}
+            {accounts.length === 0 ? (
+              <TableEmpty
+                colSpan={5}
+                icon={<UserRound />}
+                title={tx(locale, "No accounts yet", "Аккаунтов пока нет")}
+                description={tx(
+                  locale,
+                  "Save the login for each vendor account. Credentials are encrypted before they are stored.",
+                  "Сохраните логин для каждого аккаунта у поставщика. Учётные данные шифруются перед сохранением.",
+                )}
+              />
+            ) : !visible.length ? (
+              <TableEmpty
+                colSpan={5}
+                icon={<SearchX />}
+                title={tx(locale, "Nothing matches", "Ничего не найдено")}
+                action={
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setQuery("");
+                      setVendorFilter("all");
+                    }}
+                  >
+                    {tx(locale, "Clear filters", "Сбросить фильтры")}
+                  </Button>
+                }
+              />
+            ) : null}
           </TableBody>
         </Table>
-      )}
+      </SectionCard>
 
       {editing ? (
         <AccountDialog
@@ -397,12 +531,19 @@ export function AccountsManager({
           }}
         />
       ) : null}
-    </div>
+      <DeleteConfirm
+        target={deleting}
+        kind="account"
+        locale={locale}
+        onClose={() => setDeleting(null)}
+        onDelete={async (id) => {
+          const result = await deleteAccountAction(workspaceId, id);
+          if (!result.ok) toast.error(result.error);
+          router.refresh();
+        }}
+      />
+    </>
   );
-}
-
-function Chip({ children }: { children: React.ReactNode }) {
-  return <span className="rounded-full bg-emerald-400/10 px-2 py-0.5 text-[11px] text-emerald-200">{children}</span>;
 }
 
 function ViewAccountDialog({
@@ -429,45 +570,52 @@ function ViewAccountDialog({
     <VaultDialog
       open
       onOpenChange={(open) => !open && onClose()}
-      icon={<KeyRound className="h-4 w-4" />}
+      icon={<KeyRound />}
       title={account.name}
       description={account.vendorName || tx(locale, "No vendor", "Без поставщика")}
       footer={
-        <>
-          {url ? (
-            <Button type="button" size="sm" onClick={() => window.open(url, "_blank", "noopener,noreferrer")}>
-              <ArrowUpRight className="h-3.5 w-3.5" />
-              {tx(locale, "Open", "Открыть")} {hostOf(url)}
-            </Button>
-          ) : null}
-          {canEdit ? (
-            <Button type="button" variant="ghost" size="sm" className="ml-auto" onClick={onEdit}>
-              <Pencil className="h-3.5 w-3.5" />
-              {tx(locale, "Edit", "Изменить")}
-            </Button>
-          ) : null}
-        </>
+        canEdit || url ? (
+          <>
+            {canEdit ? (
+              <Button type="button" variant="ghost" size="sm" onClick={onEdit}>
+                <Pencil className="h-3.5 w-3.5" aria-hidden="true" />
+                {tx(locale, "Edit", "Изменить")}
+              </Button>
+            ) : null}
+            {url ? (
+              <Button type="button" size="sm" onClick={() => window.open(url, "_blank", "noopener,noreferrer")}>
+                <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                {tx(locale, "Open", "Открыть")} {hostOf(url)}
+              </Button>
+            ) : null}
+          </>
+        ) : null
       }
     >
-      {!canEdit ? (
-        <p className="text-xs text-zinc-500">{tx(locale, "Only workspace owners and editors can view credentials.", "Учётные данные видят только владельцы и редакторы.")}</p>
-      ) : state.status === "shown" ? (
-        <div className="space-y-1.5">
-          <SecretRow label={tx(locale, "Login", "Логин")} value={state.credentials.login} locale={locale} />
-          <SecretRow label={tx(locale, "Password", "Пароль")} value={state.credentials.password} secret locale={locale} />
-          {state.credentials.notes ? (
-            <p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-zinc-400">{state.credentials.notes}</p>
-          ) : null}
-        </div>
-      ) : state.status === "code" ? (
-        <TwoFactorPrompt locale={locale} pending={false} error={state.error} onSubmit={(code) => void reveal(account.id, code)} />
-      ) : state.status === "setup" ? (
-        <SetupTwoFactorNotice locale={locale} message={state.message} />
-      ) : state.status === "error" ? (
-        <p className="text-xs text-red-300">{state.message}</p>
-      ) : (
-        <div className="flex h-20 items-center justify-center text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /></div>
-      )}
+      <CredentialsFieldset locale={locale}>
+        {!canEdit ? (
+          <p className="text-xs text-zinc-500">{tx(locale, "Only workspace owners and editors can view credentials.", "Учётные данные видят только владельцы и редакторы пространства.")}</p>
+        ) : state.status === "shown" ? (
+          <div className="space-y-1.5">
+            <SecretRow label={tx(locale, "Login", "Логин")} value={state.credentials.login} locale={locale} />
+            <SecretRow label={tx(locale, "Password", "Пароль")} value={state.credentials.password} secret locale={locale} />
+            {state.credentials.notes ? <SecretNotes>{state.credentials.notes}</SecretNotes> : null}
+          </div>
+        ) : state.status === "code" ? (
+          <TwoFactorPrompt locale={locale} pending={false} error={state.error} onSubmit={(code) => void reveal(account.id, code)} />
+        ) : state.status === "setup" ? (
+          <SetupTwoFactorNotice locale={locale} message={state.message} />
+        ) : state.status === "error" ? (
+          <Alert tone="danger" className="text-xs">
+            {state.message}
+          </Alert>
+        ) : (
+          <div className="flex h-20 items-center justify-center text-zinc-500">
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+            <span className="sr-only">{tx(locale, "Loading", "Загрузка")}</span>
+          </div>
+        )}
+      </CredentialsFieldset>
     </VaultDialog>
   );
 }
@@ -486,6 +634,8 @@ function AccountDialog({
   onClose: () => void;
 }) {
   const router = useRouter();
+  const id = useId();
+  const formId = `${id}-form`;
   const { state, reveal } = useCredentialReveal(workspaceId);
   const [vendorId, setVendorId] = useState(String(account?.vendorId || vendors[0]?.id || ""));
   const [name, setName] = useState(account?.name || "");
@@ -494,7 +644,6 @@ function AccountDialog({
   const [login, setLogin] = useState<string | undefined>(account ? undefined : "");
   const [password, setPassword] = useState<string | undefined>(account ? undefined : "");
   const [notes, setNotes] = useState<string | undefined>(account ? undefined : "");
-  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [pending, startTransition] = useTransition();
   const vendor = vendors.find((item) => String(item.id) === vendorId);
@@ -523,106 +672,119 @@ function AccountDialog({
         notes,
       });
       if (!result.ok) return setError(result.error);
-      toast.success(account ? tx(locale, "Account saved", "Аккаунт сохранён") : tx(locale, `Added ${name}`, `Добавлен ${name}`));
+      toast.success(account ? tx(locale, "Account saved", "Аккаунт сохранён") : tx(locale, `Added ${name}`, `Добавлено: «${name}»`));
       onClose();
       router.refresh();
     });
   }
 
   const unchanged = tx(locale, "•••••• unchanged", "•••••• без изменений");
+  const showCurrent =
+    hasStored && login === undefined && state.status !== "code" ? (
+      <LegendAction onClick={() => void loadCurrent()} disabled={state.status === "loading"}>
+        {state.status === "loading" ? <Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" /> : <KeyRound className="h-3 w-3" aria-hidden="true" />}
+        {tx(locale, "Show current", "Показать текущие")}
+      </LegendAction>
+    ) : null;
 
   return (
     <VaultDialog
       open
-      wide
       onOpenChange={(open) => !open && onClose()}
-      icon={<UserRound className="h-4 w-4" />}
+      icon={<UserRound />}
       title={account ? tx(locale, "Edit account", "Изменить аккаунт") : tx(locale, "New account", "Новый аккаунт")}
       description={tx(locale, "Login, password and notes are encrypted at rest.", "Логин, пароль и заметки хранятся в зашифрованном виде.")}
+      hint={<SaveHint locale={locale} />}
       footer={
         <>
-          <span className="flex items-center gap-1 text-[11px] text-zinc-600"><Kbd>↵</Kbd>{tx(locale, "save", "сохранить")}<Kbd className="ml-2">Esc</Kbd>{tx(locale, "close", "закрыть")}</span>
-          <Button type="submit" form="account-form" size="sm" className="ml-auto" disabled={pending || !name.trim()}>
-            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            {tx(locale, "Save encrypted", "Сохранить")}
+          <Button type="button" variant="ghost" size="sm" onClick={onClose}>
+            {tx(locale, "Cancel", "Отмена")}
+          </Button>
+          <Button type="submit" form={formId} size="sm" disabled={pending || !name.trim()}>
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+            {tx(locale, "Save", "Сохранить")}
           </Button>
         </>
       }
     >
-      <form id="account-form" className="space-y-3" onSubmit={(event) => { event.preventDefault(); submit(); }}>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="block">
-            <FieldLabel>{tx(locale, "Vendor", "Поставщик")}</FieldLabel>
-            <NativeSelect value={vendorId} onChange={setVendorId} ariaLabel={tx(locale, "Vendor", "Поставщик")}>
+      <form
+        id={formId}
+        className="grid gap-5"
+        onSubmit={(event) => {
+          event.preventDefault();
+          submit();
+        }}
+      >
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={tx(locale, "Vendor", "Поставщик")} htmlFor={`${id}-vendor`}>
+            <NativeSelect id={`${id}-vendor`} value={vendorId} onChange={setVendorId} ariaLabel={tx(locale, "Vendor", "Поставщик")}>
               <option value="">{tx(locale, "No vendor", "Без поставщика")}</option>
-              {vendors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+              {vendors.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.name}
+                </option>
+              ))}
             </NativeSelect>
-          </label>
-          <label className="block">
-            <FieldLabel>{tx(locale, "Account name", "Имя аккаунта")}</FieldLabel>
-            <Input autoFocus={!account} value={name} onChange={(event) => setName(event.target.value)} placeholder="ops@company" />
-          </label>
+          </Field>
+          <Field label={tx(locale, "Account name", "Название аккаунта")} htmlFor={`${id}-name`} required>
+            <Input id={`${id}-name`} autoFocus={!account} value={name} onChange={(event) => setName(event.target.value)} placeholder="ops@company" />
+          </Field>
+          <FieldDescription className="-mt-2 sm:col-span-2">
+            {tx(locale, "Entries whose account and vendor match these names get Quick login.", "Записи с такими же названиями аккаунта и поставщика получат быстрый вход.")}
+          </FieldDescription>
+          <Field label={tx(locale, "Login URL", "URL для входа")} htmlFor={`${id}-url`} hint={tx(locale, "Optional. Defaults to the vendor’s URL.", "Необязательно. По умолчанию — URL поставщика.")} className="sm:col-span-2">
+            <Input id={`${id}-url`} value={loginUrl} onChange={(event) => setLoginUrl(event.target.value)} placeholder={vendor?.url || "https://"} inputMode="url" />
+          </Field>
         </div>
-        <p className="-mt-1 text-[11px] text-zinc-600">
-          {tx(locale, "Entries whose account and vendor match these names get Quick login.", "Записи с этими именами аккаунта и поставщика получат быстрый вход.")}
-        </p>
-        <label className="block">
-          <FieldLabel>{tx(locale, "Login URL (optional)", "URL входа (необязательно)")}</FieldLabel>
-          <Input value={loginUrl} onChange={(event) => setLoginUrl(event.target.value)} placeholder={vendor?.url || "https://"} inputMode="url" />
-        </label>
 
-        <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
-          <div className="mb-2 flex items-center">
-            <span className="text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">{tx(locale, "Credentials", "Учётные данные")}</span>
-            {hasStored && login === undefined && state.status !== "code" ? (
-              <button type="button" onClick={() => void loadCurrent()} disabled={state.status === "loading"} className="ml-auto flex items-center gap-1 text-[11px] text-violet-200 hover:text-white">
-                {state.status === "loading" ? <Loader2 className="h-3 w-3 animate-spin" /> : <KeyRound className="h-3 w-3" />}
-                {tx(locale, "Show current", "Показать текущие")}
-              </button>
-            ) : null}
-          </div>
+        <CredentialsFieldset
+          locale={locale}
+          action={showCurrent}
+          description={state.status === "shown" ? tx(locale, "Showing the stored values. Clear a field to remove it.", "Показаны сохранённые значения. Очистите поле, чтобы удалить его.") : undefined}
+        >
           {state.status === "code" ? (
-            <div className="mb-3"><TwoFactorPrompt locale={locale} pending={false} error={state.error} onSubmit={(code) => void loadCurrent(code)} /></div>
+            <TwoFactorPrompt locale={locale} pending={false} error={state.error} onSubmit={(code) => void loadCurrent(code)} />
           ) : state.status === "setup" ? (
-            <div className="mb-3"><SetupTwoFactorNotice locale={locale} message={state.message} /></div>
+            <SetupTwoFactorNotice locale={locale} message={state.message} />
           ) : state.status === "error" ? (
-            <p className="mb-3 text-xs text-red-300">{state.message}</p>
+            <Alert tone="danger" className="text-xs">
+              {state.message}
+            </Alert>
           ) : null}
-          <div className="space-y-2">
-            <Input
-              value={login ?? ""}
-              onChange={(event) => setLogin(event.target.value)}
-              autoComplete="off"
-              placeholder={login === undefined && account?.hasLogin ? unchanged : tx(locale, "Login or email", "Логин или email")}
-            />
-            <div className="relative">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <Field label={tx(locale, "Login", "Логин")} htmlFor={`${id}-login`}>
               <Input
+                id={`${id}-login`}
+                value={login ?? ""}
+                onChange={(event) => setLogin(event.target.value)}
+                autoComplete="off"
+                placeholder={login === undefined && account?.hasLogin ? unchanged : tx(locale, "Login or email", "Логин или email")}
+              />
+            </Field>
+            <Field label={tx(locale, "Password", "Пароль")} htmlFor={`${id}-password`}>
+              <PasswordInput
+                id={`${id}-password`}
+                locale={locale}
                 value={password ?? ""}
                 onChange={(event) => setPassword(event.target.value)}
-                type={showPassword ? "text" : "password"}
                 autoComplete="new-password"
-                placeholder={password === undefined && account?.hasPassword ? unchanged : tx(locale, "Password", "Пароль")}
-                className="pr-16"
+                placeholder={password === undefined && account?.hasPassword ? unchanged : undefined}
               />
-              <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded px-1.5 py-0.5 text-[11px] text-zinc-500 hover:text-zinc-200">
-                {showPassword ? tx(locale, "hide", "скрыть") : tx(locale, "show", "показать")}
-              </button>
-            </div>
+            </Field>
+          </div>
+          <Field label={tx(locale, "Notes", "Заметки")} htmlFor={`${id}-notes`}>
             <Textarea
+              id={`${id}-notes`}
               value={notes ?? ""}
               onChange={(event) => setNotes(event.target.value)}
               rows={2}
-              placeholder={notes === undefined && account?.hasNotes ? unchanged : tx(locale, "Recovery codes, security answers… (encrypted)", "Коды восстановления, ответы… (зашифровано)")}
+              className="min-h-16"
+              placeholder={notes === undefined && account?.hasNotes ? unchanged : tx(locale, "Recovery codes, security answers…", "Коды восстановления, ответы на контрольные вопросы…")}
             />
-          </div>
-          {state.status === "shown" ? <SecretPreviewNote locale={locale} /> : null}
-        </div>
-        {error ? <p className="text-xs text-red-300">{error}</p> : null}
+          </Field>
+        </CredentialsFieldset>
+        {error ? <Alert tone="danger">{error}</Alert> : null}
       </form>
     </VaultDialog>
   );
-}
-
-function SecretPreviewNote({ locale }: { locale: Locale }) {
-  return <p className="mt-2 text-[11px] text-zinc-600">{tx(locale, "Showing the stored values. Clear a field to remove it.", "Показаны сохранённые значения. Очистите поле, чтобы удалить его.")}</p>;
 }

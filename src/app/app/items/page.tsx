@@ -1,9 +1,8 @@
 import { EntriesWorkspace } from "@/components/inspector/entries-workspace";
 import { requireUser } from "@/lib/auth";
 import { listCategoriesForWorkspace, listItemsForWorkspace, listVendorSuggestionsForWorkspace, resolveWorkspaceForUser } from "@/lib/db";
-import { t } from "@/lib/i18n";
+
 import { getLocale } from "@/lib/i18n-server";
-import { PageHeader } from "@/components/ui/page-header";
 
 export default async function ItemsPage({ searchParams }: { searchParams: Promise<{ add?: string; category?: string; workspace?: string; entry?: string }> }) {
   const user = await requireUser();
@@ -22,12 +21,7 @@ export default async function ItemsPage({ searchParams }: { searchParams: Promis
   ].join("|");
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={selectedCategory ? selectedCategory.name : t(locale, "entries")}
-        description={selectedCategory ? (locale === "ru" ? "Записи категории" : "Entries in this category") : locale === "ru" ? "Все ресурсы" : "All tracked resources"}
-      />
-
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <EntriesWorkspace
         tableKey={entriesStateKey}
         items={items}

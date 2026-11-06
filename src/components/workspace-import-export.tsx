@@ -1,14 +1,18 @@
 "use client";
 
-import * as Dialog from "@radix-ui/react-dialog";
 import { useMemo, useState, useTransition } from "react";
-import { X } from "lucide-react";
+import { Download, FileJson, Loader2, Upload } from "lucide-react";
 import { exportWorkspaceAction, importWorkspaceAction } from "@/app/actions";
+import { tx } from "@/components/capture/shared";
 import type { Locale } from "@/lib/i18n";
-import { t } from "@/lib/i18n";
+import { pluralRu, t } from "@/lib/i18n";
+import { cn } from "@/lib/utils";
+import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
-import { Input } from "./ui/input";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Fieldset } from "./ui/field";
+import { SectionCard } from "./ui/section-card";
 
 type ExportOptions = {
   includeWorkspace: boolean;
@@ -73,9 +77,12 @@ export function WorkspaceImportExport({
   const [importPreview, setImportPreview] = useState<ImportPreview | null>(null);
   const [importResult, setImportResult] = useState<ImportSummary | null>(null);
   const [selectedSkippedEntry, setSelectedSkippedEntry] = useState<{ name: string; reason: string } | null>(null);
+  const [fileName, setFileName] = useState("");
+  const [dragging, setDragging] = useState(false);
   const [isExportPending, startExportTransition] = useTransition();
   const [isImportPending, startImportTransition] = useTransition();
   const canImport = workspaceRole !== "viewer";
+  const fileInputId = `workspace-import-file-${workspaceId}`;
 
   const anySectionEnabled = useMemo(
     () =>
@@ -148,7 +155,7 @@ export function WorkspaceImportExport({
 
   function onImportWorkspace() {
     if (!importPayload.trim()) {
-      setImportError(locale === "ru" ? "Сначала выберите файл JSON экспорта." : "Choose an export JSON file first.");
+      setImportError(locale === "ru" ? "Сначала выберите JSON-файл экспорта." : "Choose an export JSON file first.");
       return;
     }
     setImportError("");
@@ -163,151 +170,255 @@ export function WorkspaceImportExport({
     });
   }
 
+  function pickFile(file: File | null) {
+    setFileName(file?.name || "");
+    void onImportFileChange(file);
+  }
+
+  const exportOptions: Array<{ key: keyof ExportOptions; label: string; description?: string }> = [
+    { key: "includeWorkspace", label: tx(locale, "Workspace info", "Информация о пространстве"), description: tx(locale, "Name and icon.", "Название и иконка.") },
+    { key: "includeCategories", label: tx(locale, "Categories and custom fields", "Категории и дополнительные поля") },
+    { key: "includeEntries", label: t(locale, "entries") },
+    { key: "includeFolders", label: tx(locale, "Folders and links", "Папки и ссылки") },
+    { key: "includeInvoices", label: t(locale, "invoices") },
+    { key: "includeWebsiteNotifications", label: tx(locale, "Website notifications", "Уведомления на сайте") },
+  ];
+
+  const resultRows: Array<{ label: string; inserted: number; skipped: number }> = importResult
+    ? [
+        { label: t(locale, "categories"), inserted: importResult.insertedCategories, skipped: importResult.skippedCategories },
+        { label: t(locale, "entries"), inserted: importResult.insertedEntries, skipped: importResult.skippedEntries },
+        { label: tx(locale, "Folders", "Папки"), inserted: importResult.insertedFolders, skipped: importResult.skippedFolders },
+        { label: t(locale, "invoices"), inserted: importResult.insertedInvoices, skipped: importResult.skippedInvoices },
+        {
+          label: tx(locale, "Website notifications", "Уведомления на сайте"),
+          inserted: importResult.insertedWebsiteNotifications,
+          skipped: importResult.skippedWebsiteNotifications,
+        },
+      ]
+    : [];
+
+  const previewRows: Array<{ label: string; value: number }> = importPreview
+    ? [
+        { label: t(locale, "categories"), value: importPreview.counts.categories },
+        { label: t(locale, "entries"), value: importPreview.counts.entries },
+        { label: tx(locale, "Folders", "Папки"), value: importPreview.counts.folders },
+        { label: t(locale, "invoices"), value: importPreview.counts.invoices },
+        { label: tx(locale, "Website notifications", "Уведомления на сайте"), value: importPreview.counts.websiteNotifications },
+      ]
+    : [];
+
   return (
-    <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
-      <div className="border-b border-white/[0.06] px-5 py-4">
-        <h2 className="text-[15px] font-semibold text-white">{t(locale, "workspaceImportExport")}</h2>
-        <p className="mt-1 text-sm text-zinc-400">
-          {locale === "ru"
-            ? "Экспортируйте данные пространства для переноса между инстансами. Участники и приглашения не экспортируются."
-            : "Export workspace data to move between instances. Members and invites are never exported."}
-        </p>
-      </div>
-
-      <div className="grid gap-6 p-5 lg:grid-cols-2">
-        <div className="space-y-4 rounded-2xl border border-white/10 bg-black/25 p-4">
-          <h3 className="text-sm font-semibold text-violet-100">{t(locale, "exportWorkspace")}</h3>
-          <div className="grid gap-2 text-sm text-zinc-300">
-            <label className="inline-flex items-center gap-2">
-              <Checkbox checked={options.includeWorkspace} onCheckedChange={(value) => setOption("includeWorkspace", value === true)} />
-              {locale === "ru" ? "Информация о пространстве" : "Workspace info"}
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <Checkbox checked={options.includeCategories} onCheckedChange={(value) => setOption("includeCategories", value === true)} />
-              {locale === "ru" ? "Категории + кастомные поля" : "Categories + custom fields"}
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <Checkbox checked={options.includeEntries} onCheckedChange={(value) => setOption("includeEntries", value === true)} />
-              {t(locale, "entries")}
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <Checkbox checked={options.includeFolders} onCheckedChange={(value) => setOption("includeFolders", value === true)} />
-              {locale === "ru" ? "Папки + ссылки" : "Folders + links"}
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <Checkbox checked={options.includeInvoices} onCheckedChange={(value) => setOption("includeInvoices", value === true)} />
-              {t(locale, "invoices")}
-            </label>
-            <label className="inline-flex items-center gap-2">
-              <Checkbox checked={options.includeWebsiteNotifications} onCheckedChange={(value) => setOption("includeWebsiteNotifications", value === true)} />
-              {locale === "ru" ? "Website-уведомления" : "Website notifications"}
-            </label>
-          </div>
-          <div className="rounded-xl border border-violet-400/20 bg-violet-500/10 p-3 text-xs text-violet-100">
-            {locale === "ru"
-              ? "Экспорт по умолчанию содержит базовые данные. Токены Telegram, участники и приглашения пространства исключены."
-              : "Default export is core data. Telegram bot tokens, workspace members, and workspace invites are excluded."}
-          </div>
-          <Button type="button" onClick={onExportWorkspace} disabled={!anySectionEnabled || isExportPending}>
-            {isExportPending ? (locale === "ru" ? "Экспорт..." : "Exporting...") : t(locale, "exportWorkspace")}
-          </Button>
-          {exportError ? <p className="text-sm text-red-300">{exportError}</p> : null}
+    <div className="grid gap-4 lg:grid-cols-2">
+      <SectionCard
+        title={t(locale, "exportWorkspace")}
+        description={tx(
+          locale,
+          "Download this workspace as JSON to move it to another instance.",
+          "Скачайте пространство в JSON, чтобы перенести его на другой сервер.",
+        )}
+        footer={
+          <>
+            {exportError ? (
+              <p role="alert" className="mr-auto text-xs text-red-300">
+                {exportError}
+              </p>
+            ) : null}
+            <Button type="button" size="sm" onClick={onExportWorkspace} disabled={!anySectionEnabled || isExportPending}>
+              {isExportPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Download className="h-3.5 w-3.5" aria-hidden="true" />}
+              {isExportPending ? tx(locale, "Exporting…", "Экспорт…") : t(locale, "exportWorkspace")}
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <Fieldset legend={tx(locale, "Include", "Что включить")}>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {exportOptions.map((option) => {
+                const id = `export-${workspaceId}-${option.key}`;
+                return (
+                  <div key={option.key} className="flex items-start gap-3">
+                    <Checkbox
+                      id={id}
+                      checked={options[option.key]}
+                      onCheckedChange={(value) => setOption(option.key, value === true)}
+                      className="mt-0.5"
+                    />
+                    <label htmlFor={id} className="min-w-0 cursor-pointer">
+                      <span className="block text-[13px] font-medium text-zinc-200">{option.label}</span>
+                      {option.description ? <span className="block text-[11.5px] text-zinc-500">{option.description}</span> : null}
+                    </label>
+                  </div>
+                );
+              })}
+            </div>
+          </Fieldset>
+          <Alert tone="info">
+            {tx(
+              locale,
+              "Telegram bot tokens, members and invites are never exported.",
+              "Токены Telegram-ботов, участники и приглашения не экспортируются.",
+            )}
+          </Alert>
         </div>
+      </SectionCard>
 
-        <div className="space-y-4 rounded-2xl border border-white/10 bg-black/25 p-4">
-          <h3 className="text-sm font-semibold text-sky-100">{t(locale, "importWorkspace")}</h3>
-          <Input type="file" accept="application/json,.json" onChange={(event) => onImportFileChange(event.target.files?.[0] || null)} />
+      <SectionCard
+        title={t(locale, "importWorkspace")}
+        description={tx(
+          locale,
+          "Merge-safe: existing data is kept and new records are added.",
+          "Безопасное слияние: существующие данные сохраняются, новые добавляются.",
+        )}
+        footer={
+          <Button type="button" size="sm" variant="secondary" onClick={onImportWorkspace} disabled={!importPayload || isImportPending || !canImport}>
+            {isImportPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : <Upload className="h-3.5 w-3.5" aria-hidden="true" />}
+            {isImportPending ? tx(locale, "Importing…", "Импорт…") : t(locale, "importWorkspace")}
+          </Button>
+        }
+      >
+        <div className="space-y-4">
+          {!canImport ? (
+            <Alert tone="warning">
+              {tx(
+                locale,
+                "You have viewer access here. Importing needs the editor or owner role.",
+                "У вас доступ только на просмотр. Для импорта нужна роль редактора или владельца.",
+              )}
+            </Alert>
+          ) : null}
+
+          <label
+            htmlFor={fileInputId}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={() => setDragging(false)}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              pickFile(event.dataTransfer.files?.[0] || null);
+            }}
+            className={cn(
+              "flex cursor-pointer flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-6 text-center transition focus-within:ring-2 focus-within:ring-violet-400/40",
+              dragging ? "border-violet-400/50 bg-violet-500/[0.06]" : "border-white/10 bg-white/[0.02] hover:border-white/20 hover:bg-white/[0.03]",
+            )}
+          >
+            <span className="grid h-9 w-9 place-items-center rounded-lg border border-white/[0.06] bg-white/[0.03] text-zinc-400" aria-hidden="true">
+              <FileJson className="h-4 w-4" />
+            </span>
+            {fileName ? (
+              <span className="max-w-full truncate text-[13px] font-medium text-zinc-100">{fileName}</span>
+            ) : (
+              <span className="text-[13px] text-zinc-300">
+                {tx(locale, "Drop an export file here or ", "Перетащите файл экспорта сюда или ")}
+                <span className="text-violet-300">{tx(locale, "browse", "выберите")}</span>
+              </span>
+            )}
+            <span className="text-[11.5px] text-zinc-500">{tx(locale, "JSON from “Export workspace”", "JSON из «Экспорта пространства»")}</span>
+            <input
+              id={fileInputId}
+              type="file"
+              accept="application/json,.json"
+              className="sr-only"
+              onChange={(event) => pickFile(event.target.files?.[0] || null)}
+            />
+          </label>
+
           {importPreview ? (
-            <div className="rounded-xl border border-white/10 bg-black/30 p-3 text-xs text-zinc-300">
-              <p className="font-semibold text-white">{locale === "ru" ? "Обнаруженные разделы" : "Detected sections"}: {importPreview.sections.join(", ") || (locale === "ru" ? "нет" : "none")}</p>
-              <p className="mt-1">{t(locale, "categories")}: {importPreview.counts.categories}</p>
-              <p>{t(locale, "entries")}: {importPreview.counts.entries}</p>
-              <p>{locale === "ru" ? "Папки" : "Folders"}: {importPreview.counts.folders}</p>
-              <p>{t(locale, "invoices")}: {importPreview.counts.invoices}</p>
-              <p>{locale === "ru" ? "Website-уведомления" : "Website notifications"}: {importPreview.counts.websiteNotifications}</p>
+            <div className="rounded-lg border border-white/[0.06]">
+              <div className="border-b border-white/[0.06] px-3.5 py-2.5">
+                <p className="text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">{tx(locale, "Detected sections", "Найденные разделы")}</p>
+                <p className="mt-0.5 text-[13px] text-zinc-300">{importPreview.sections.join(", ") || tx(locale, "none", "нет")}</p>
+              </div>
+              <dl className="divide-y divide-white/[0.05] text-[13px]">
+                {previewRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between px-3.5 py-1.5">
+                    <dt className="text-zinc-400">{row.label}</dt>
+                    <dd className="font-medium tabular-nums text-zinc-100">{row.value}</dd>
+                  </div>
+                ))}
+              </dl>
             </div>
           ) : null}
-          <Button
-            type="button"
-            variant="secondary"
-            onClick={onImportWorkspace}
-            disabled={!importPayload || isImportPending || !canImport}
-          >
-            {isImportPending ? (locale === "ru" ? "Импорт..." : "Importing...") : t(locale, "importWorkspace")}
-          </Button>
-          <p className="text-xs text-zinc-500">{locale === "ru" ? "Импорт безопасен для слияния: существующие данные сохраняются, новые добавляются." : "Import is merge-safe: existing data is kept, and new records are added."}</p>
-          {!canImport ? <p className="text-xs text-amber-200">{locale === "ru" ? "У вас доступ viewer в этом пространстве. Для импорта нужна роль editor или owner." : "You have viewer access in this workspace. Import requires editor or owner role."}</p> : null}
-          {importError ? <p className="text-sm text-red-300">{importError}</p> : null}
+
+          {importError ? <Alert tone="danger">{importError}</Alert> : null}
+
           {importResult ? (
-            <div className="rounded-xl border border-emerald-400/25 bg-emerald-500/10 p-3 text-xs text-emerald-100">
-              <p>{t(locale, "categories")}: +{importResult.insertedCategories} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedCategories}</p>
-              <p>{t(locale, "entries")}: +{importResult.insertedEntries} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedEntries}</p>
+            <Alert tone="success" title={tx(locale, "Import finished", "Импорт завершён")}>
+              <dl className="mt-1 grid gap-0.5">
+                {resultRows.map((row) => (
+                  <div key={row.label} className="flex items-center justify-between gap-4">
+                    <dt>{row.label}</dt>
+                    <dd className="tabular-nums">
+                      +{row.inserted}
+                      <span className="opacity-60"> · {tx(locale, "skipped", "пропущено")} {row.skipped}</span>
+                    </dd>
+                  </div>
+                ))}
+              </dl>
               {importResult.skippedEntryDetails?.length ? (
-                <div className="mt-2 rounded-lg border border-white/10 bg-black/20 p-2 text-zinc-100">
-                  <p className="mb-1 text-[11px] uppercase tracking-[0.12em] text-zinc-400">
-                    {locale === "ru" ? "Пропущенные записи" : "Skipped entries"}
-                  </p>
-                  <ul className="space-y-1">
+                <div className="mt-2">
+                  <p className="text-[11.5px] font-medium">{tx(locale, "Skipped entries", "Пропущенные записи")}</p>
+                  <ul className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
                     {importResult.skippedEntryDetails.map((entry, index) => (
                       <li key={`${entry.name}-${index}`}>
                         <button
                           type="button"
-                          className="rounded px-1 py-0.5 text-left text-emerald-100 underline decoration-emerald-300/40 underline-offset-2 hover:text-white"
+                          className="rounded-sm text-left underline decoration-emerald-300/40 underline-offset-2 transition hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
                           onClick={() => setSelectedSkippedEntry(entry)}
                         >
-                          • {entry.name}
+                          {entry.name}
                         </button>
                       </li>
                     ))}
                   </ul>
                 </div>
               ) : null}
-              <p>{locale === "ru" ? "Папки" : "Folders"}: +{importResult.insertedFolders} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedFolders}</p>
-              <p>{t(locale, "invoices")}: +{importResult.insertedInvoices} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedInvoices}</p>
-              <p>{locale === "ru" ? "Website-уведомления" : "Website notifications"}: +{importResult.insertedWebsiteNotifications} / {locale === "ru" ? "пропущено" : "skipped"} {importResult.skippedWebsiteNotifications}</p>
-              {importResult.warnings.length ? (
-                <div className="mt-2 rounded-lg border border-amber-300/20 bg-amber-500/10 p-2 text-amber-100">
-                  {importResult.warnings.slice(0, 4).map((warning) => (
-                    <p key={warning}>{warning}</p>
-                  ))}
-                  {importResult.warnings.length > 4 ? <p>{locale === "ru" ? `...и еще предупреждений: ${importResult.warnings.length - 4}.` : `...and ${importResult.warnings.length - 4} more warning(s).`}</p> : null}
-                </div>
+            </Alert>
+          ) : null}
+
+          {importResult?.warnings.length ? (
+            <Alert tone="warning">
+              {importResult.warnings.slice(0, 4).map((warning) => (
+                <p key={warning}>{warning}</p>
+              ))}
+              {importResult.warnings.length > 4 ? (
+                <p>{tx(locale, `…and ${importResult.warnings.length - 4} more warning(s).`, `…и ещё ${importResult.warnings.length - 4} ${pluralRu(importResult.warnings.length - 4, "предупреждение", "предупреждения", "предупреждений")}.`)}</p>
               ) : null}
-            </div>
+            </Alert>
           ) : null}
         </div>
-      </div>
+      </SectionCard>
 
-      <Dialog.Root open={Boolean(selectedSkippedEntry)} onOpenChange={(open) => { if (!open) setSelectedSkippedEntry(null); }}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="capture-overlay-in fixed inset-0 z-50 bg-black/60 backdrop-blur-md" />
-          <Dialog.Content className="capture-panel-in fixed inset-x-0 top-[16vh] z-50 mx-auto w-[calc(100vw-1.5rem)] max-w-md rounded-xl border border-white/10 bg-[#101013] p-6 shadow-[0_40px_120px_-30px_rgba(0,0,0,0.85)]">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <Dialog.Title className="text-base font-semibold text-white">
-                  {locale === "ru" ? "Причина пропуска записи" : "Skipped entry details"}
-                </Dialog.Title>
-                <Dialog.Description className="mt-1 text-xs text-zinc-500">
-                  {locale === "ru" ? "Почему эта запись не была импортирована." : "Why this entry was not imported."}
-                </Dialog.Description>
-              </div>
-              <Dialog.Close asChild>
-                <button type="button" className="rounded-xl p-2 text-zinc-500 transition hover:bg-white/10 hover:text-white" aria-label="Close skipped entry dialog">
-                  <X className="h-4 w-4" />
-                </button>
-              </Dialog.Close>
-            </div>
-            {selectedSkippedEntry ? (
-              <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-4">
-                <p className="text-xs uppercase tracking-[0.12em] text-zinc-500">{locale === "ru" ? "Запись" : "Entry"}</p>
-                <p className="mt-1 text-sm font-semibold text-white">{selectedSkippedEntry.name}</p>
-                <p className="mt-3 text-xs uppercase tracking-[0.12em] text-zinc-500">{locale === "ru" ? "Причина" : "Reason"}</p>
-                <p className="mt-1 text-sm text-zinc-300">{selectedSkippedEntry.reason}</p>
-              </div>
-            ) : null}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
-    </section>
+      <Dialog
+        open={Boolean(selectedSkippedEntry)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedSkippedEntry(null);
+        }}
+      >
+        <DialogContent size="sm" closeLabel={tx(locale, "Close skipped entry dialog", "Закрыть окно пропущенной записи")}>
+          <DialogHeader icon={<FileJson />} tone="warning">
+            <DialogTitle>{tx(locale, "Skipped entry", "Пропущенная запись")}</DialogTitle>
+            <DialogDescription>{tx(locale, "Why this entry was not imported.", "Почему эта запись не импортирована.")}</DialogDescription>
+          </DialogHeader>
+          {selectedSkippedEntry ? (
+            <DialogBody>
+              <dl className="grid gap-3 text-[13px]">
+                <div>
+                  <dt className="text-xs font-medium text-zinc-400">{t(locale, "entry")}</dt>
+                  <dd className="mt-0.5 font-medium text-zinc-100">{selectedSkippedEntry.name}</dd>
+                </div>
+                <div>
+                  <dt className="text-xs font-medium text-zinc-400">{tx(locale, "Reason", "Причина")}</dt>
+                  <dd className="mt-0.5 text-zinc-300">{selectedSkippedEntry.reason}</dd>
+                </div>
+              </dl>
+            </DialogBody>
+          ) : null}
+        </DialogContent>
+      </Dialog>
+    </div>
   );
 }

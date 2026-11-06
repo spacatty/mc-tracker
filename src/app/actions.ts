@@ -213,10 +213,10 @@ export async function setLanguageAction(formData: FormData) {
 export async function saveCategoryAction(formData: FormData) {
   const user = await requireUser();
   const workspaceId = resolveWorkspaceId(formData.get("workspaceId"), user.id);
-  upsertCategoryForWorkspace(formData, workspaceId, user.id);
+  const categoryId = upsertCategoryForWorkspace(formData, workspaceId, user.id);
   revalidatePath("/app/categories");
   revalidatePath("/app");
-  redirect(`/app/categories?workspace=${workspaceId}`);
+  redirect(`/app/categories?workspace=${workspaceId}&category=${categoryId}`);
 }
 
 export async function saveItemAction(formData: FormData) {
@@ -598,6 +598,19 @@ export async function getTotpSetupAction() {
   return createTotpSetup(user.username);
 }
 
+/**
+ * Workspaces page URL after a workspace action: `ws` picks the workspace shown in the page's list, while the
+ * user's current workspace (`?workspace=`, sent by the form as `currentWorkspace`) stays as it was.
+ */
+function workspacesPageHref(formData: FormData, selectedWorkspaceId?: number | null, extra: Record<string, string> = {}) {
+  const params = new URLSearchParams(extra);
+  const current = Number(formData.get("currentWorkspace") || 0);
+  if (current > 0 && current !== Number(formData.get("deletedWorkspace") || 0)) params.set("workspace", String(current));
+  if (selectedWorkspaceId) params.set("ws", String(selectedWorkspaceId));
+  const query = params.toString();
+  return `/app/folders${query ? `?${query}` : ""}`;
+}
+
 export async function createFolderAction(formData: FormData) {
   const user = await requireUser();
   const workspaceId = createWorkspaceForUser(user.id, required(formData.get("name"), "Workspace name"), String(formData.get("emoji") || "📦"));
@@ -610,7 +623,7 @@ export async function createFolderAction(formData: FormData) {
     );
   }
   revalidatePath("/app/folders");
-  redirect(`/app/folders?workspace=${workspaceId}`);
+  redirect(workspacesPageHref(formData, workspaceId));
 }
 
 export async function updateFolderContentAction(formData: FormData) {
@@ -632,14 +645,14 @@ export async function createInviteAction(formData: FormData) {
   const workspaceId = Number(formData.get("workspaceId"));
   const token = createWorkspaceInvite(workspaceId, String(formData.get("role") || "viewer") as Exclude<WorkspaceRole, "owner">, user.id);
   revalidatePath("/app/folders");
-  redirect(`/app/folders?invite=${token}&workspace=${workspaceId}`);
+  redirect(workspacesPageHref(formData, workspaceId, { invite: token }));
 }
 
 export async function acceptInviteAction(formData: FormData) {
   const user = await requireUser();
   acceptWorkspaceInvite(normalizeInviteToken(formData.get("token")), user.id);
   revalidatePath("/app/folders");
-  redirect("/app/folders");
+  redirect(workspacesPageHref(formData));
 }
 
 export async function updateWorkspaceAction(formData: FormData) {
@@ -659,7 +672,8 @@ export async function deleteWorkspaceAction(formData: FormData) {
   deleteWorkspaceForUser(workspaceId, user.id);
   revalidatePath("/app/folders");
   revalidatePath("/app");
-  redirect("/app/folders");
+  formData.set("deletedWorkspace", String(workspaceId));
+  redirect(workspacesPageHref(formData));
 }
 
 export async function updateWorkspaceMemberRoleAction(formData: FormData) {
@@ -717,7 +731,7 @@ export async function transferWorkspaceEntriesAction(formData: FormData) {
   revalidatePath("/app/items");
   revalidatePath("/app");
   revalidatePath("/app/notifications");
-  redirect(`/app/folders?workspace=${targetWorkspaceId}`);
+  redirect(workspacesPageHref(formData, targetWorkspaceId));
 }
 
 export async function saveTelegramChannelAction(formData: FormData) {

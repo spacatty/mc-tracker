@@ -1,13 +1,14 @@
 "use client";
 
-import { Search } from "lucide-react";
+import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { Category, PaymentItem } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import { AppIcon } from "./icons";
 import { Badge } from "./ui/badge";
-import { Input } from "./ui/input";
+import { SearchInput } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 function fuzzyMatch(haystack: string, needle: string) {
@@ -39,6 +40,8 @@ export function EntrySearchSelect({
   const [categoryFilter, setCategoryFilter] = useState("");
   const [query, setQuery] = useState("");
   const selected = entries.find((entry) => String(entry.id) === value);
+  const categoryById = useMemo(() => new Map(categories.map((category) => [category.id, category])), [categories]);
+  const allCategoriesLabel = locale === "ru" ? "Все категории" : "All categories";
 
   const suggestions = useMemo(() => {
     return entries
@@ -48,59 +51,75 @@ export function EntrySearchSelect({
   }, [categoryFilter, entries, query]);
 
   return (
-    <div className="space-y-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+    <div className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]">
       <input type="hidden" name="itemId" value={value} />
-      <div className="grid gap-3 md:grid-cols-[240px_1fr]">
+      <div className="flex flex-col gap-2 border-b border-white/[0.06] p-2 sm:flex-row">
         <Select value={categoryFilter || "all"} onValueChange={(next) => setCategoryFilter(next === "all" ? "" : next)}>
-          <SelectTrigger>
-            <SelectValue placeholder={locale === "ru" ? "Все категории" : "All categories"} />
+          <SelectTrigger className="h-8 rounded-md text-[13px] sm:w-48" aria-label={t(locale, "category")}>
+            <SelectValue placeholder={allCategoriesLabel} />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{locale === "ru" ? "Все категории" : "All categories"}</SelectItem>
+            <SelectItem value="all">{allCategoriesLabel}</SelectItem>
             {categories.map((category) => (
               <SelectItem key={category.id} value={String(category.id)}>
                 <span className="flex items-center gap-2">
-                  <AppIcon name={category.icon} className="h-4 w-4" />
+                  <AppIcon name={category.icon} className="h-3.5 w-3.5" />
                   {category.name}
                 </span>
               </SelectItem>
             ))}
           </SelectContent>
         </Select>
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-          <Input
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={selected ? selected.name : (locale === "ru" ? "Поиск записи" : "Fuzzy-search entry")}
-            className="pl-9"
-          />
-        </div>
+        <SearchInput
+          size="sm"
+          value={query}
+          onChange={setQuery}
+          placeholder={selected ? selected.name : locale === "ru" ? "Найти запись" : "Search entries"}
+          aria-label={locale === "ru" ? "Найти запись" : "Search entries"}
+          clearLabel={locale === "ru" ? "Очистить поиск" : "Clear search"}
+          className="flex-1"
+        />
       </div>
 
-      <div className="max-h-72 overflow-y-auto rounded-xl border border-white/10 bg-zinc-950/60 p-1">
-        {suggestions.map((entry) => (
-          <button
-            key={entry.id}
-            type="button"
-            onClick={() => {
-              onChange(String(entry.id));
-              setQuery(entry.name);
-            }}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm text-zinc-200 transition hover:bg-white/10"
-          >
-            <span className="min-w-0 flex-1 truncate font-medium">{entry.name}</span>
-            <Badge
-              variant="secondary"
-              className="shrink-0"
-              style={{ backgroundColor: `${entry.categoryColor || "#8b5cf6"}25`, color: entry.categoryColor || "#c4b5fd" }}
+      <div role="listbox" aria-label={t(locale, "entry")} className="max-h-56 overflow-y-auto p-1">
+        {suggestions.map((entry) => {
+          const isSelected = String(entry.id) === value;
+          const category = entry.categoryId ? categoryById.get(entry.categoryId) : undefined;
+          const secondary = entry.accountName || entry.vendorName;
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              role="option"
+              aria-selected={isSelected}
+              onClick={() => {
+                onChange(String(entry.id));
+                setQuery("");
+              }}
+              className={cn(
+                "flex w-full items-center gap-3 rounded-md px-2.5 py-1.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
+                isSelected ? "bg-violet-500/10" : "hover:bg-white/[0.04]",
+              )}
             >
-              {entry.categoryName || t(locale, "uncategorized")}
-            </Badge>
-          </button>
-        ))}
+              <span className="grid h-4 w-4 shrink-0 place-items-center text-violet-300">
+                {isSelected ? <Check className="h-3.5 w-3.5" aria-hidden="true" /> : null}
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-[13px] font-medium text-zinc-100">{entry.name}</span>
+                {secondary ? <span className="block truncate text-[11.5px] text-zinc-500">{secondary}</span> : null}
+              </span>
+              <Badge
+                color={entry.categoryColor || category?.color || undefined}
+                icon={<AppIcon name={entry.categoryIcon || category?.icon} />}
+                className="shrink-0"
+              >
+                {entry.categoryName || t(locale, "uncategorized")}
+              </Badge>
+            </button>
+          );
+        })}
         {!suggestions.length ? (
-          <p className="px-3 py-6 text-center text-sm text-zinc-500">{locale === "ru" ? "Совпадений не найдено." : "No matching entries."}</p>
+          <p className="px-3 py-6 text-center text-[13px] text-zinc-500">{locale === "ru" ? "Ничего не найдено." : "No matching entries."}</p>
         ) : null}
       </div>
     </div>

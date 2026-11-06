@@ -1,151 +1,179 @@
 "use client";
 
+import { Crown, Loader2, Lock, ShieldCheck, UserCog } from "lucide-react";
 import { useState } from "react";
+import { useFormStatus } from "react-dom";
+import { toast } from "sonner";
 import { saveUserAdminChangesAction } from "@/app/actions";
+import type { Locale } from "@/lib/i18n";
 import type { User, UserRole } from "@/lib/types";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Field, FieldDescription, FieldRow } from "./ui/field";
 import { CheckboxInput, SelectInput } from "./ui/hidden-input";
 import { Input } from "./ui/input";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "./ui/table";
+import { RowAction, RowActions } from "./ui/row-actions";
+import { SectionCard } from "./ui/section-card";
+import { Switch } from "./ui/switch";
+import { Table, TableBody, TableCell, TableEmpty, TableHead, TableHeader, TableRow } from "./ui/table";
+import { Tooltip } from "./ui/tooltip";
+
+function tx(locale: Locale, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
+function SubmitButton({ locale }: { locale: Locale }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" size="sm" disabled={pending}>
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+      {tx(locale, "Save changes", "Сохранить изменения")}
+    </Button>
+  );
+}
 
 export function AdminUsersTable({
   users,
   actorRole,
+  locale,
 }: {
   users: User[];
   actorRole: UserRole;
+  locale: Locale;
 }) {
   const [editingUser, setEditingUser] = useState<User | null>(null);
 
   return (
     <>
-      <section className="overflow-hidden rounded-xl border border-white/[0.08] bg-surface">
-        <div className="border-b border-white/10 p-5">
-          <h2 className="text-[15px] font-semibold text-white">Users table</h2>
-          <p className="mt-1 text-sm text-zinc-500">Edit users from a single actions dialog.</p>
-        </div>
-        <Table>
+      <SectionCard flush className="flex min-h-[24rem] flex-1 flex-col" bodyClassName="flex min-h-0 flex-1 flex-col" title={tx(locale, "Users", "Пользователи")} description={tx(locale, "Open a user to change role, premium, password or 2FA.", "Откройте пользователя, чтобы изменить роль, Premium, пароль или 2FA.")}>
+        <Table bare fill minWidth={640}>
           <TableHeader>
             <TableRow>
-              <TableHead>User</TableHead>
-              <TableHead>Role</TableHead>
-              <TableHead>Premium</TableHead>
+              <TableHead>{tx(locale, "User", "Пользователь")}</TableHead>
+              <TableHead>{tx(locale, "Role", "Роль")}</TableHead>
+              <TableHead>{tx(locale, "Plan", "Тариф")}</TableHead>
               <TableHead>2FA</TableHead>
-              <TableHead>Created</TableHead>
-              <TableHead className="text-right">Actions</TableHead>
+              <TableHead>{tx(locale, "Created", "Создан")}</TableHead>
+              <TableHead align="right" width="1%">
+                <span className="sr-only">{tx(locale, "Actions", "Действия")}</span>
+              </TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {users.map((user) => {
               const manageable = actorRole === "superadmin" || user.role === "user";
               return (
-                <TableRow key={user.id}>
-                  <TableCell className="font-semibold text-white">{user.username}</TableCell>
+                <TableRow key={user.id} interactive={manageable} onClick={manageable ? () => setEditingUser(user) : undefined}>
+                  <TableCell primary>{user.username}</TableCell>
                   <TableCell>
-                    <Badge variant="secondary">{user.role}</Badge>
+                    <Badge variant="outline">{user.role}</Badge>
                   </TableCell>
-                  <TableCell>{user.premium ? <Badge variant="success">Premium</Badge> : <Badge variant="secondary">Standard</Badge>}</TableCell>
-                  <TableCell>{user.totpEnabled ? "Enabled" : "Off"}</TableCell>
-                  <TableCell className="text-zinc-500">{new Date(user.createdAt).toLocaleDateString("en-GB")}</TableCell>
-                  <TableCell className="text-right">
-                    {manageable ? (
-                      <Button size="sm" variant="secondary" onClick={() => setEditingUser(user)}>
-                        Manage
-                      </Button>
+                  <TableCell>
+                    {user.premium ? (
+                      <Badge tone="warning" icon={<Crown />}>
+                        Premium
+                      </Badge>
                     ) : (
-                      <span className="text-xs text-zinc-500">Locked</span>
+                      <span className="text-zinc-500">{tx(locale, "Standard", "Стандарт")}</span>
                     )}
+                  </TableCell>
+                  <TableCell>
+                    {user.totpEnabled ? (
+                      <Badge tone="success" icon={<ShieldCheck />}>
+                        {tx(locale, "On", "Вкл.")}
+                      </Badge>
+                    ) : (
+                      <span className="text-zinc-500">{tx(locale, "Off", "Выкл.")}</span>
+                    )}
+                  </TableCell>
+                  <TableCell muted className="tabular-nums">
+                    {new Date(user.createdAt).toLocaleDateString(locale === "ru" ? "ru-RU" : "en-GB")}
+                  </TableCell>
+                  <TableCell align="right" className="w-[1%] whitespace-nowrap">
+                    <RowActions>
+                      {manageable ? (
+                        <RowAction label={tx(locale, `Manage ${user.username}`, `Управление пользователем ${user.username}`)} icon={<UserCog />} onClick={() => setEditingUser(user)} />
+                      ) : (
+                        <Tooltip label={tx(locale, "Only a superadmin can manage this user", "Управлять этим пользователем может только superadmin")}>
+                          <span tabIndex={0} aria-label={tx(locale, "Locked", "Недоступно")} className="inline-grid h-7 w-7 place-items-center rounded-md text-zinc-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40">
+                            <Lock className="h-3.5 w-3.5" aria-hidden="true" />
+                          </span>
+                        </Tooltip>
+                      )}
+                    </RowActions>
                   </TableCell>
                 </TableRow>
               );
             })}
+            {!users.length ? <TableEmpty colSpan={6} title={tx(locale, "No users", "Пользователей нет")} /> : null}
           </TableBody>
         </Table>
-      </section>
+      </SectionCard>
 
-      {editingUser ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <button type="button" className="absolute inset-0" aria-label="Close edit user modal" onClick={() => setEditingUser(null)} />
-          <section className="relative z-10 w-full max-w-2xl overflow-hidden rounded-3xl border border-white/10 bg-[#0b0b12]">
-            <div className="flex items-center justify-between border-b border-white/10 px-5 py-4">
-              <div>
-                <h3 className="text-lg font-semibold text-white">Manage {editingUser.username}</h3>
-                <p className="text-sm text-zinc-500">Update access, premium, password, and account recovery.</p>
-              </div>
-              <Button type="button" variant="ghost" onClick={() => setEditingUser(null)}>
-                Close
-              </Button>
-            </div>
-
-            <form
-              action={saveUserAdminChangesAction}
-              className="p-5"
-              onSubmit={(event) => {
-                const ok = window.confirm(`Save changes for ${editingUser.username}?`);
-                if (!ok) event.preventDefault();
-              }}
-            >
-              <input type="hidden" name="userId" value={editingUser.id} />
-              <Table>
-                <TableBody>
-                  <TableRow>
-                    <TableHead className="w-44">Role</TableHead>
-                    <TableCell>
-                      {actorRole === "superadmin" ? (
-                        <SelectInput
-                          name="role"
-                          defaultValue={editingUser.role}
-                          options={[
-                            { value: "user", label: "user" },
-                            { value: "admin", label: "admin" },
-                            { value: "superadmin", label: "superadmin" },
-                          ]}
-                        />
-                      ) : (
-                        <span className="text-sm text-zinc-400">Superadmin only ({editingUser.role})</span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableHead>Premium</TableHead>
-                    <TableCell>
+      <Dialog open={Boolean(editingUser)} onOpenChange={(open) => !open && setEditingUser(null)}>
+        <DialogContent size="md">
+          {editingUser ? (
+            <>
+              <DialogHeader icon={<UserCog />}>
+                <DialogTitle className="truncate">{tx(locale, `Manage ${editingUser.username}`, `Управление пользователем ${editingUser.username}`)}</DialogTitle>
+                <DialogDescription>{tx(locale, "Update access, premium, password, and account recovery.", "Измените доступ, Premium, пароль и восстановление аккаунта.")}</DialogDescription>
+              </DialogHeader>
+              <form
+                key={editingUser.id}
+                action={async (formData) => {
+                  await saveUserAdminChangesAction(formData);
+                  toast.success(tx(locale, `Saved ${editingUser.username}`, `Изменения для ${editingUser.username} сохранены`));
+                  setEditingUser(null);
+                }}
+                className="flex min-h-0 flex-1 flex-col"
+              >
+                <input type="hidden" name="userId" value={editingUser.id} />
+                <DialogBody className="grid gap-4">
+                  <Field label={tx(locale, "Role", "Роль")} htmlFor="admin-edit-role" hint={actorRole === "superadmin" ? undefined : tx(locale, "Only a superadmin can change roles.", "Менять роли может только superadmin.")}>
+                    {actorRole === "superadmin" ? (
                       <SelectInput
-                        name="premium"
-                        defaultValue={editingUser.premium ? "1" : "0"}
+                        name="role"
+                        triggerId="admin-edit-role"
+                        defaultValue={editingUser.role}
                         options={[
-                          { value: "0", label: "Standard" },
-                          { value: "1", label: "Premium" },
+                          { value: "user", label: "user" },
+                          { value: "admin", label: "admin" },
+                          { value: "superadmin", label: "superadmin" },
                         ]}
                       />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableHead>Password</TableHead>
-                    <TableCell>
-                      <Input name="password" type="password" placeholder="Leave blank to keep current password" />
-                    </TableCell>
-                  </TableRow>
-                  <TableRow>
-                    <TableHead>Recovery / 2FA</TableHead>
-                    <TableCell>
-                      <CheckboxInput name="resetTotpNow">Reset 2FA now</CheckboxInput>
-                    </TableCell>
-                  </TableRow>
-                </TableBody>
-              </Table>
-              <div className="mt-5 flex justify-end gap-3">
-                <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
-                  Cancel
-                </Button>
-                <Button type="submit" variant="destructive">
-                  Save changes
-                </Button>
-              </div>
-            </form>
-          </section>
-        </div>
-      ) : null}
+                    ) : (
+                      <p className="flex h-9 items-center rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 text-sm text-zinc-400">{editingUser.role}</p>
+                    )}
+                  </Field>
+                  <Field label={tx(locale, "New password", "Новый пароль")} htmlFor="admin-edit-password" hint={tx(locale, "Leave blank to keep the current password.", "Оставьте пустым, чтобы сохранить текущий пароль.")}>
+                    <Input id="admin-edit-password" name="password" type="password" autoComplete="new-password" />
+                  </Field>
+                  <div className="-mx-5 divide-y divide-white/[0.06] border-y border-white/[0.06]">
+                    <FieldRow label="Premium" description={tx(locale, "Unlocks premium features for this user.", "Открывает пользователю функции Premium.")} htmlFor="admin-edit-premium" className="py-3">
+                      <Switch id="admin-edit-premium" name="premium" value="1" defaultChecked={editingUser.premium} />
+                    </FieldRow>
+                    <div className="px-5 py-3">
+                      <CheckboxInput name="resetTotpNow" id="admin-edit-reset-totp">
+                        <span className="text-[13px] text-zinc-300">{tx(locale, "Reset 2FA now", "Сбросить 2FA сейчас")}</span>
+                      </CheckboxInput>
+                      <FieldDescription className="mt-1 pl-6">
+                        {editingUser.totpEnabled ? tx(locale, "Removes the authenticator; they can set it up again.", "Аутентификатор будет удалён — пользователь сможет настроить его заново.") : tx(locale, "2FA is off for this user.", "У этого пользователя 2FA выключена.")}
+                      </FieldDescription>
+                    </div>
+                  </div>
+                </DialogBody>
+                <DialogFooter>
+                  <Button type="button" variant="ghost" size="sm" onClick={() => setEditingUser(null)}>
+                    {tx(locale, "Cancel", "Отмена")}
+                  </Button>
+                  <SubmitButton locale={locale} />
+                </DialogFooter>
+              </form>
+            </>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </>
   );
 }

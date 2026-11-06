@@ -1,22 +1,42 @@
 "use client";
 
-import { Archive, Search, Trash2 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { Archive, ArrowUpRight, Inbox, Trash2 } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { useMemo, useState, useTransition } from "react";
 import { archiveItemAction, deleteItemAction } from "@/app/actions";
+import { tx } from "@/components/capture/shared";
 import type { Locale } from "@/lib/i18n";
-import { t } from "@/lib/i18n";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "./ui/accordion";
-import { Button } from "./ui/button";
-import { Input } from "./ui/input";
+import { count, t } from "@/lib/i18n";
+import { AppIcon } from "./icons";
+import { VendorAccount } from "./host-line";
+import { Badge } from "./ui/badge";
+import { ConfirmDialog } from "./ui/dialog";
+import { SearchInput } from "./ui/input";
+import { RowAction, RowActionMenu, RowActions } from "./ui/row-actions";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TablePagination,
+  TableRow,
+  TableToolbar,
+} from "./ui/table";
 
 type WorkspaceEntry = {
   id: number;
   name: string;
   categoryName?: string;
+  categoryColor?: string;
+  categoryIcon?: string;
   vendorName?: string;
   accountName?: string;
   createdAt: string;
 };
+
+const PAGE_SIZE = 10;
 
 function fuzzyMatch(value: string, query: string) {
   const normalized = query.trim().toLowerCase();
@@ -31,7 +51,8 @@ function fuzzyMatch(value: string, query: string) {
   return true;
 }
 
-export function WorkspaceEntriesAccordionTable({
+/** The entries of one workspace (Workspaces → Entries tab): search, open, archive, delete. */
+export function WorkspaceEntriesTable({
   workspaceId,
   workspaceRole,
   entries,
@@ -42,8 +63,14 @@ export function WorkspaceEntriesAccordionTable({
   entries: WorkspaceEntry[];
   locale?: Locale;
 }) {
+  const router = useRouter();
   const [query, setQuery] = useState("");
-  const canDelete = workspaceRole !== "viewer";
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(PAGE_SIZE);
+  const [deleteTarget, setDeleteTarget] = useState<WorkspaceEntry | null>(null);
+  const [pending, startTransition] = useTransition();
+  const canEdit = workspaceRole !== "viewer";
+
   const filtered = useMemo(
     () =>
       entries
@@ -53,80 +80,158 @@ export function WorkspaceEntriesAccordionTable({
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()),
     [entries, query],
   );
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const currentPage = Math.min(page, totalPages);
+  const rows = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const columns = canEdit ? 4 : 3;
+
+  const entryHref = (entry: WorkspaceEntry) => `/app/items?workspace=${workspaceId}&entry=${entry.id}`;
+
+  function entryForm(entry: WorkspaceEntry) {
+    const formData = new FormData();
+    formData.set("id", String(entry.id));
+    formData.set("workspaceId", String(workspaceId));
+    return formData;
+  }
+
+  function archive(entry: WorkspaceEntry) {
+    startTransition(async () => {
+      await archiveItemAction(entryForm(entry));
+      router.refresh();
+    });
+  }
+
+  function remove() {
+    if (!deleteTarget) return;
+    const target = deleteTarget;
+    startTransition(async () => {
+      await deleteItemAction(entryForm(target));
+      setDeleteTarget(null);
+      router.refresh();
+    });
+  }
 
   return (
-    <Accordion type="single" collapsible className="rounded-lg border border-white/[0.06] bg-white/[0.02] px-4">
-      <AccordionItem value="workspace-entries" className="border-b-0">
-        <AccordionTrigger className="py-3 text-sm">
-          {locale === "ru" ? `Записей в пространстве: ${entries.length}` : `Entries already in workspace (${entries.length})`}
-        </AccordionTrigger>
-        <AccordionContent>
-          <div className="space-y-3">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-              <Input
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                placeholder={locale === "ru" ? "Фильтр записей..." : "Filter entries..."}
-                className="pl-9"
-              />
-            </div>
-
-            <div className="overflow-x-auto rounded-xl border border-white/10">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-white/[0.04] text-xs text-zinc-500">
-                  <tr>
-                    <th className="px-3 py-2 font-medium">{t(locale, "name")}</th>
-                    <th className="px-3 py-2 font-medium">{t(locale, "category")}</th>
-                    <th className="px-3 py-2 font-medium">{locale === "ru" ? "Аккаунт / вендор" : "Account / vendor"}</th>
-                    <th className="px-3 py-2 text-right font-medium">{t(locale, "actions")}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/10">
-                  {filtered.map((entry) => (
-                    <tr key={entry.id}>
-                      <td className="px-3 py-2 text-zinc-100">{entry.name}</td>
-                      <td className="px-3 py-2 text-zinc-400">{entry.categoryName || t(locale, "uncategorized")}</td>
-                      <td className="px-3 py-2 text-zinc-400">{entry.accountName || entry.vendorName || "-"}</td>
-                      <td className="px-3 py-2 text-right">
-                        {canDelete ? (
-                          <div className="flex justify-end gap-2">
-                            <form action={archiveItemAction}>
-                              <input type="hidden" name="id" value={entry.id} />
-                              <input type="hidden" name="workspaceId" value={workspaceId} />
-                              <Button type="submit" variant="ghost" size="sm" className="text-violet-200 hover:text-violet-100">
-                                <Archive className="h-3.5 w-3.5" />
-                                {t(locale, "archive")}
-                              </Button>
-                            </form>
-                            <form action={deleteItemAction}>
-                              <input type="hidden" name="id" value={entry.id} />
-                              <input type="hidden" name="workspaceId" value={workspaceId} />
-                              <Button type="submit" variant="ghost" size="sm" className="text-red-200 hover:text-red-100">
-                                <Trash2 className="h-3.5 w-3.5" />
-                                {t(locale, "delete")}
-                              </Button>
-                            </form>
-                          </div>
-                        ) : (
-                          <span className="text-xs text-zinc-600">{locale === "ru" ? "Только просмотр" : "View only"}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!filtered.length ? (
-                    <tr>
-                      <td colSpan={4} className="px-3 py-6 text-center text-zinc-500">
-                        {locale === "ru" ? "Записи не найдены." : "No entries found."}
-                      </td>
-                    </tr>
-                  ) : null}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </AccordionContent>
-      </AccordionItem>
-    </Accordion>
+    <div className="overflow-hidden rounded-lg border border-white/[0.06]">
+      <TableToolbar
+        end={
+          <span className="text-xs tabular-nums text-zinc-500">
+            {query
+              ? tx(locale, `${filtered.length} of ${entries.length}`, `${filtered.length} из ${entries.length}`)
+              : count(locale, entries.length, { one: "entry", other: "entries", ru: ["запись", "записи", "записей"] })}
+            {!canEdit ? <span className="ml-2 text-zinc-600">· {tx(locale, "View only", "Только просмотр")}</span> : null}
+          </span>
+        }
+      >
+        <SearchInput
+          size="sm"
+          value={query}
+          onChange={(next) => {
+            setQuery(next);
+            setPage(1);
+          }}
+          placeholder={tx(locale, "Filter entries", "Поиск записей")}
+          clearLabel={tx(locale, "Clear search", "Очистить поиск")}
+          className="max-w-sm flex-1"
+        />
+      </TableToolbar>
+      <Table bare minWidth={560}>
+        <TableHeader>
+          <TableRow>
+            <TableHead>{t(locale, "name")}</TableHead>
+            <TableHead>{t(locale, "category")}</TableHead>
+            <TableHead>{tx(locale, "Account / vendor", "Аккаунт / поставщик")}</TableHead>
+            {canEdit ? (
+              <TableHead align="right" className="w-[1%]">
+                <span className="sr-only">{t(locale, "actions")}</span>
+              </TableHead>
+            ) : null}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.map((entry) => (
+            <TableRow key={entry.id} interactive onClick={() => router.push(entryHref(entry))}>
+              <TableCell primary>
+                <span className="block max-w-72 truncate">{entry.name}</span>
+              </TableCell>
+              <TableCell>
+                <Badge color={entry.categoryColor} icon={<AppIcon name={entry.categoryIcon} />}>
+                  {entry.categoryName || t(locale, "uncategorized")}
+                </Badge>
+              </TableCell>
+              <TableCell>
+                {entry.accountName || entry.vendorName ? (
+                  <>
+                    <VendorAccount vendor={entry.vendorName} account={entry.accountName} className="max-w-64" />
+                  </>
+                ) : (
+                  <span className="text-zinc-600">—</span>
+                )}
+              </TableCell>
+              {canEdit ? (
+                <TableCell align="right" className="w-[1%] whitespace-nowrap">
+                  <RowActions>
+                    <RowAction
+                      label={t(locale, "archive")}
+                      icon={<Archive />}
+                      hidden="hover"
+                      disabled={pending}
+                      onClick={() => archive(entry)}
+                    />
+                    <RowActionMenu
+                      label={tx(locale, `More actions for ${entry.name}`, `Ещё действия: ${entry.name}`)}
+                      items={[
+                        { label: tx(locale, "Open entry", "Открыть запись"), icon: <ArrowUpRight />, href: entryHref(entry) },
+                        { label: t(locale, "archive"), icon: <Archive />, onSelect: () => archive(entry), disabled: pending },
+                        "separator",
+                        { label: t(locale, "delete"), icon: <Trash2 />, destructive: true, onSelect: () => setDeleteTarget(entry) },
+                      ]}
+                    />
+                  </RowActions>
+                </TableCell>
+              ) : null}
+            </TableRow>
+          ))}
+          {!rows.length ? (
+            <TableEmpty
+              colSpan={columns}
+              icon={<Inbox />}
+              title={entries.length ? tx(locale, "Nothing matches", "Ничего не найдено") : t(locale, "noEntriesYet")}
+              description={entries.length ? tx(locale, "Try a different search.", "Попробуйте другой запрос.") : undefined}
+            />
+          ) : null}
+        </TableBody>
+      </Table>
+      {filtered.length > PAGE_SIZE || pageSize !== PAGE_SIZE ? (
+        <TablePagination
+          page={currentPage}
+          totalPages={totalPages}
+          pageSize={pageSize}
+          onPage={setPage}
+          onPageSize={(size) => {
+            setPageSize(size);
+            setPage(1);
+          }}
+          total={filtered.length}
+          locale={locale}
+        />
+      ) : null}
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onOpenChange={(next) => {
+          if (!next) setDeleteTarget(null);
+        }}
+        destructive
+        pending={pending}
+        title={tx(locale, `Delete ${deleteTarget?.name ?? "entry"}?`, `Удалить «${deleteTarget?.name ?? "запись"}»?`)}
+        description={tx(locale, "The entry is deleted permanently. This cannot be undone.", "Запись будет удалена навсегда. Это действие нельзя отменить.")}
+        confirmLabel={t(locale, "delete")}
+        cancelLabel={t(locale, "cancel")}
+        onConfirm={remove}
+      />
+    </div>
   );
 }
+
+/** @deprecated Old name, kept for imports; the accordion is gone. */
+export const WorkspaceEntriesAccordionTable = WorkspaceEntriesTable;

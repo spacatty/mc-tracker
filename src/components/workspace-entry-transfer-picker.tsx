@@ -1,15 +1,19 @@
 "use client";
 
-import { HelpCircle, Plus, Search, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useFormStatus } from "react-dom";
+import { ArrowRightLeft, Copy, Loader2 } from "lucide-react";
 import { transferWorkspaceEntriesAction } from "@/app/actions";
+import { tx } from "@/components/capture/shared";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
-import { Badge } from "./ui/badge";
+import { cn } from "@/lib/utils";
+import { CurrentWorkspaceInput } from "./current-workspace-input";
+import { Alert } from "./ui/alert";
 import { Button } from "./ui/button";
 import { Checkbox } from "./ui/checkbox";
-import { Input } from "./ui/input";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
+import { Field } from "./ui/field";
+import { SearchInput } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 
 type WorkspaceEntry = {
@@ -29,6 +33,8 @@ type WorkspaceOption = {
   emoji: string;
   accessRole: "owner" | "editor" | "viewer";
 };
+
+const RESULT_LIMIT = 50;
 
 function fuzzyMatch(value: string, query: string) {
   const normalized = query.trim().toLowerCase();
@@ -50,6 +56,19 @@ function entrySignature(entry: WorkspaceEntry) {
     .toLowerCase();
 }
 
+function SubmitButton({ count, move, locale }: { count: number; move: boolean; locale: Locale }) {
+  const { pending } = useFormStatus();
+  const Icon = pending ? Loader2 : move ? ArrowRightLeft : Copy;
+  return (
+    <Button type="submit" size="sm" variant="accent" disabled={!count || pending}>
+      <Icon className={cn("h-3.5 w-3.5", pending && "animate-spin")} aria-hidden="true" />
+      {move
+        ? tx(locale, count ? `Move ${count} here` : "Move here", count ? `Перенести сюда: ${count}` : "Перенести сюда")
+        : tx(locale, count ? `Copy ${count} here` : "Copy here", count ? `Скопировать сюда: ${count}` : "Скопировать сюда")}
+    </Button>
+  );
+}
+
 export function WorkspaceEntryTransferPicker({
   targetWorkspaceId,
   targetEntries,
@@ -67,6 +86,8 @@ export function WorkspaceEntryTransferPicker({
   const [query, setQuery] = useState("");
   const [selectedSourceIds, setSelectedSourceIds] = useState<Set<number>>(new Set());
   const [moveAcross, setMoveAcross] = useState(false);
+  const sourceTriggerId = `transfer-source-${targetWorkspaceId}`;
+  const moveId = `transfer-move-${targetWorkspaceId}`;
 
   const sourceEntries = useMemo(() => {
     if (sourceWorkspaceId === 0) {
@@ -79,44 +100,51 @@ export function WorkspaceEntryTransferPicker({
   const sameWorkspaceSelected = sourceWorkspaceId === targetWorkspaceId;
   const selectedSourceEntries = sourceEntries.filter((entry) => selectedSourceIds.has(entry.id));
   const targetSignatures = useMemo(() => new Set(targetEntries.map(entrySignature)), [targetEntries]);
-  const suggestions = useMemo(
+  const candidates = useMemo(
     () =>
       sameWorkspaceSelected
         ? []
         : sourceEntries
-          .filter((entry) => !selectedSourceIds.has(entry.id))
           .filter((entry) => !targetSignatures.has(entrySignature(entry)))
-          .filter((entry) => fuzzyMatch(`${entry.name} ${entry.categoryName || ""} ${entry.vendorName || ""} ${entry.accountName || ""}`, query))
-          .slice(0, 12),
-    [query, sameWorkspaceSelected, selectedSourceIds, sourceEntries, targetSignatures],
+          .filter((entry) => fuzzyMatch(`${entry.name} ${entry.categoryName || ""} ${entry.vendorName || ""} ${entry.accountName || ""}`, query)),
+    [query, sameWorkspaceSelected, sourceEntries, targetSignatures],
   );
+  const results = candidates.slice(0, RESULT_LIMIT);
+  const allShownSelected = results.length > 0 && results.every((entry) => selectedSourceIds.has(entry.id));
+  const someShownSelected = results.some((entry) => selectedSourceIds.has(entry.id));
 
-  function addEntry(id: number) {
-    setSelectedSourceIds((current) => new Set([...current, id]));
-    setQuery("");
-  }
-
-  function removeSourceEntry(id: number) {
+  function toggle(id: number, checked: boolean) {
     setSelectedSourceIds((current) => {
       const next = new Set(current);
-      next.delete(id);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }
+
+  function toggleShown(checked: boolean) {
+    setSelectedSourceIds((current) => {
+      const next = new Set(current);
+      for (const entry of results) {
+        if (checked) next.add(entry.id);
+        else next.delete(entry.id);
+      }
       return next;
     });
   }
 
   return (
-    <form action={transferWorkspaceEntriesAction} className="space-y-3 rounded-2xl border border-white/10 bg-black/25 p-4">
+    <form action={transferWorkspaceEntriesAction} className="space-y-4">
       <input type="hidden" name="targetWorkspaceId" value={targetWorkspaceId} />
+      <CurrentWorkspaceInput />
       <input type="hidden" name="mode" value={moveAcross ? "move" : "copy"} />
+      <input type="hidden" name="sourceWorkspaceId" value={sourceWorkspaceId} />
       {[...selectedSourceIds].map((id) => <input key={id} type="hidden" name="entryIds" value={id} />)}
 
-      {!sourceWorkspaces.length ? (
-        <p className="text-sm text-zinc-500">{t(locale, "noWorkspacesYet")}</p>
-      ) : null}
-      <div className="grid gap-3 md:grid-cols-[minmax(180px,240px)_1fr]">
-        <label className="text-xs text-zinc-500">
-          {t(locale, "sourceWorkspace")}
-          <input type="hidden" name="sourceWorkspaceId" value={sourceWorkspaceId} />
+      {!sourceWorkspaces.length ? <Alert tone="info">{t(locale, "noWorkspacesYet")}</Alert> : null}
+
+      <div className="grid gap-4 sm:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+        <Field label={t(locale, "sourceWorkspace")} htmlFor={sourceTriggerId}>
           <Select
             value={String(sourceWorkspaceId)}
             onValueChange={(value) => {
@@ -125,109 +153,125 @@ export function WorkspaceEntryTransferPicker({
               setQuery("");
             }}
           >
-            <SelectTrigger className="mt-1">
+            <SelectTrigger id={sourceTriggerId}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="0">{t(locale, "allWorkspaces")}</SelectItem>
               {sourceWorkspaces.map((workspace) => (
                 <SelectItem key={workspace.id} value={String(workspace.id)}>
-                  {workspace.emoji} {workspace.name}{workspace.id === targetWorkspaceId ? (locale === "ru" ? " (текущее)" : " (current)") : ""}
+                  {workspace.emoji} {workspace.name}
+                  {workspace.id === targetWorkspaceId ? tx(locale, " (current)", " (текущее)") : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
-        </label>
-        <label className="text-xs text-zinc-500">
-          {t(locale, "addEntriesFuzzySearch")}
-          <div className="relative mt-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-zinc-600" />
-            <Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={locale === "ru" ? "Введите название, аккаунт, вендора, категорию..." : "Type name, account, vendor, category..."} className="pl-9" />
-          </div>
-        </label>
+        </Field>
+        <Field label={tx(locale, "Find entries", "Найти записи")}>
+          <SearchInput
+            value={query}
+            onChange={setQuery}
+            placeholder={tx(locale, "Name, account, vendor, category…", "Название, аккаунт, поставщик, категория…")}
+            aria-label={t(locale, "addEntriesFuzzySearch")}
+            clearLabel={tx(locale, "Clear search", "Очистить поиск")}
+          />
+        </Field>
       </div>
+
       {sameWorkspaceSelected ? (
-        <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-xs text-zinc-500">
-          {locale === "ru" ? "Выберите другое исходное пространство для добавления записей." : "Choose another source workspace to add entries."}
-        </p>
-      ) : null}
-
-      {(query || suggestions.length) && sourceWorkspaces.length ? (
-        <div className="max-h-52 overflow-y-auto rounded-xl border border-white/10 bg-zinc-950/50 p-1">
-          {suggestions.map((entry) => (
-            <button key={entry.id} type="button" onClick={() => addEntry(entry.id)} className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-zinc-300 hover:bg-white/10">
-              <span className="flex-1 truncate">{entry.name}</span>
-              <span className="truncate text-xs text-zinc-500">
-                {entry.workspaceEmoji || "📦"} {entry.workspaceName || t(locale, "workspace")} · {entry.categoryName || t(locale, "uncategorized")} · {entry.accountName || entry.vendorName || "-"}
-              </span>
-              <Plus className="h-4 w-4 text-zinc-500" />
-            </button>
-          ))}
-          {!suggestions.length ? <p className="px-3 py-5 text-center text-sm text-zinc-500">{locale === "ru" ? "Совпадений не найдено." : "No matching entries."}</p> : null}
+        <Alert tone="info">{tx(locale, "Choose another source workspace to add entries.", "Выберите другое исходное пространство, чтобы добавить записи.")}</Alert>
+      ) : sourceWorkspaces.length ? (
+        <div className="overflow-hidden rounded-lg border border-white/[0.06]">
+          <div className="flex h-9 items-center gap-3 border-b border-white/[0.06] px-4 text-[10.5px] font-semibold uppercase tracking-[0.12em] text-zinc-500">
+            <Checkbox
+              checked={allShownSelected ? true : someShownSelected ? "indeterminate" : false}
+              onCheckedChange={(next) => toggleShown(next === true)}
+              disabled={!results.length}
+              aria-label={tx(locale, "Select all shown", "Выбрать все показанные")}
+            />
+            <span className="flex-1">{t(locale, "entries")}</span>
+            <span className="normal-case tracking-normal tabular-nums">
+              {candidates.length > RESULT_LIMIT
+                ? tx(locale, `First ${RESULT_LIMIT} of ${candidates.length}`, `Первые ${RESULT_LIMIT} из ${candidates.length}`)
+                : candidates.length}
+            </span>
+          </div>
+          <ul className="max-h-64 divide-y divide-white/[0.05] overflow-y-auto">
+            {results.map((entry) => {
+              const checked = selectedSourceIds.has(entry.id);
+              const id = `transfer-${targetWorkspaceId}-${entry.id}`;
+              return (
+                <li key={entry.id}>
+                  <label
+                    htmlFor={id}
+                    className={cn(
+                      "flex cursor-pointer items-center gap-3 px-4 py-2 transition",
+                      checked ? "bg-violet-500/[0.07]" : "hover:bg-white/[0.03]",
+                    )}
+                  >
+                    <Checkbox id={id} checked={checked} onCheckedChange={(next) => toggle(entry.id, next === true)} />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[13px] font-medium text-zinc-100">{entry.name}</span>
+                      <span className="block truncate text-[11.5px] text-zinc-500">
+                        {entry.categoryName || t(locale, "uncategorized")}
+                        {entry.accountName || entry.vendorName ? ` · ${entry.accountName || entry.vendorName}` : ""}
+                      </span>
+                    </span>
+                    <span className="hidden shrink-0 truncate text-[11.5px] text-zinc-500 sm:block">
+                      {entry.workspaceEmoji || "📦"} {entry.workspaceName || t(locale, "workspace")}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+            {!results.length ? (
+              <li className="px-4 py-6 text-center text-[13px] text-zinc-500">
+                {query
+                  ? tx(locale, "No matching entries.", "Ничего не найдено.")
+                  : tx(locale, "Nothing to add: every entry is already here.", "Добавить нечего: все записи уже здесь.")}
+              </li>
+            ) : null}
+          </ul>
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2">
-        {selectedSourceEntries.map((entry) => (
-          <span key={`source-${entry.id}`} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.04] px-2.5 py-1.5 text-xs text-zinc-200">
-            <Badge variant="secondary" className="max-w-[220px] truncate">{entry.name}</Badge>
-            <Badge variant="secondary">{entry.workspaceEmoji || "📦"} {entry.workspaceName || t(locale, "workspace")}</Badge>
-            <Badge variant="secondary">{entry.categoryName || t(locale, "uncategorized")}</Badge>
-            <Badge variant="secondary">{entry.accountName || entry.vendorName || "-"}</Badge>
-            <button type="button" onClick={() => removeSourceEntry(entry.id)} className="rounded-md p-0.5 text-zinc-500 hover:bg-white/10 hover:text-zinc-200" aria-label={`${t(locale, "remove")} ${entry.name}`}>
-              <X className="h-3.5 w-3.5" />
-            </button>
-          </span>
-        ))}
-        {!selectedSourceEntries.length ? <p className="text-sm text-zinc-500">{t(locale, "noSelectedEntries")}</p> : null}
+      <div className="flex items-start gap-3">
+        <Checkbox
+          id={moveId}
+          checked={moveAcross}
+          onCheckedChange={(next) => setMoveAcross(next === true)}
+          aria-describedby={`${moveId}-description`}
+          className="mt-0.5"
+        />
+        <div className="min-w-0">
+          <label htmlFor={moveId} className="cursor-pointer text-[13px] font-medium text-zinc-200">
+            {t(locale, "moveAcrossWorkspaces")}
+          </label>
+          <p id={`${moveId}-description`} className="mt-0.5 text-[11.5px] leading-[1.125rem] text-zinc-500">
+            {moveAcross
+              ? tx(locale, "Selected entries move here and are removed from their source workspace.", "Выбранные записи переносятся сюда и удаляются из исходного пространства.")
+              : tx(locale, "Off: selected entries are copied here and stay in their source workspace.", "Выкл.: выбранные записи копируются сюда и остаются в исходном пространстве.")}
+          </p>
+        </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/10 pt-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <Badge variant="secondary">{selectedSourceEntries.length} {t(locale, "selected")}</Badge>
-          <Button
-            type="button"
-            size="sm"
-            className="border border-zinc-400/20 bg-zinc-500/10 text-zinc-200 hover:bg-zinc-500/20"
-            onClick={() => setSelectedSourceIds(new Set())}
-            disabled={!selectedSourceEntries.length}
-          >
-            {t(locale, "clearSelected")}
-          </Button>
-        </div>
-        <div className="flex gap-2">
-          <label className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-300">
-            <Checkbox checked={moveAcross} onCheckedChange={(next) => setMoveAcross(next === true)} />
-            {t(locale, "moveAcrossWorkspaces")}
-            <Popover>
-              <PopoverTrigger asChild>
-                <button type="button" className="text-zinc-500 transition hover:text-violet-200" aria-label={locale === "ru" ? "Подсказка по режиму переноса" : "Move behavior help"}>
-                  <HelpCircle className="h-3.5 w-3.5" />
-                </button>
-              </PopoverTrigger>
-              <PopoverContent align="end" className="max-w-xs text-sm text-zinc-300">
-                {locale === "ru"
-                  ? "Выкл. (по умолчанию): выбранные записи копируются в целевое пространство и остаются в исходном."
-                  : "Off (default): selected entries are copied into target workspace and remain in source workspace."}
-                <br />
-                {locale === "ru"
-                  ? "Вкл.: выбранные записи переносятся в целевое пространство и удаляются из исходного."
-                  : "On: selected entries are moved to target workspace and removed from source workspace."}
-              </PopoverContent>
-            </Popover>
-          </label>
-          <Button
-            type="submit"
-            className={moveAcross
-              ? "border border-amber-300/30 bg-amber-500/20 text-amber-50 hover:bg-amber-500/30"
-              : "border border-violet-300/30 bg-violet-500/20 text-violet-50 hover:bg-violet-500/30"}
-            disabled={!selectedSourceEntries.length}
-          >
-            {t(locale, "saveChanges")}
-          </Button>
-        </div>
+      <div className="flex flex-wrap items-center justify-end gap-2 border-t border-white/[0.06] pt-4">
+        <span className="mr-auto text-xs tabular-nums text-zinc-500" aria-live="polite">
+          {selectedSourceEntries.length
+            ? tx(locale, `${selectedSourceEntries.length} selected`, `Выбрано: ${selectedSourceEntries.length}`)
+            : t(locale, "noSelectedEntries")}
+        </span>
+        <Button
+          type="button"
+          size="sm"
+          variant="ghost"
+          onClick={() => setSelectedSourceIds(new Set())}
+          disabled={!selectedSourceEntries.length}
+        >
+          {t(locale, "clearSelected")}
+        </Button>
+        <SubmitButton count={selectedSourceEntries.length} move={moveAcross} locale={locale} />
       </div>
     </form>
   );
 }
-

@@ -1,32 +1,46 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Check, Copy } from "lucide-react";
+import { tx } from "@/components/capture/shared";
+import type { Locale } from "@/lib/i18n";
+import { Alert } from "./ui/alert";
+import { Button } from "./ui/button";
 
-export function InviteCreatedBanner({ token }: { token: string }) {
-  const [copied, setCopied] = useState(false);
-  const link = useMemo(() => {
-    if (typeof window === "undefined") return `/invite/${token}`;
-    return `${window.location.origin}/invite/${token}`;
-  }, [token]);
+const noopSubscribe = () => () => {};
 
-  return (
-    <div className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-500/10 p-4 text-sm text-fuchsia-100">
-      <span>Invite created: </span>
-      <button
-        type="button"
-        className="inline-flex max-w-full items-center gap-2 rounded-md px-1 py-0.5 font-mono hover:bg-white/10"
-        onClick={async () => {
-          await navigator.clipboard?.writeText(link);
-          setCopied(true);
-          window.setTimeout(() => setCopied(false), 1200);
-        }}
-        title="Copy invite link"
-      >
-        <span className="truncate">{link}</span>
-        {copied ? <Check className="h-3.5 w-3.5 shrink-0 text-emerald-300" /> : <Copy className="h-3.5 w-3.5 shrink-0 text-fuchsia-100/80" />}
-      </button>
-    </div>
+/** The page origin on the client, "" during SSR (no hydration mismatch). */
+export function useOrigin() {
+  return useSyncExternalStore(
+    noopSubscribe,
+    () => window.location.origin,
+    () => "",
   );
 }
 
+export function InviteCreatedBanner({ token, locale = "en" }: { token: string; locale?: Locale }) {
+  const [copied, setCopied] = useState(false);
+  const origin = useOrigin();
+  const link = `${origin}/invite/${token}`;
+
+  async function copy() {
+    await navigator.clipboard?.writeText(link);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1200);
+  }
+
+  return (
+    <Alert
+      tone="success"
+      title={tx(locale, "Invite link created", "Ссылка-приглашение создана")}
+      action={
+        <Button type="button" size="xs" variant="secondary" onClick={copy}>
+          {copied ? <Check className="h-3.5 w-3.5 text-emerald-300" aria-hidden="true" /> : <Copy className="h-3.5 w-3.5" aria-hidden="true" />}
+          {copied ? tx(locale, "Copied", "Скопировано") : tx(locale, "Copy link", "Копировать ссылку")}
+        </Button>
+      }
+    >
+      <span className="block truncate font-mono text-[12px]">{link}</span>
+    </Alert>
+  );
+}

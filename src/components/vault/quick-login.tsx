@@ -1,22 +1,38 @@
 "use client";
 
-import { ArrowUpRight, KeyRound, Loader2, Pencil } from "lucide-react";
+import { ArrowUpRight, KeyRound, Loader2, Pencil, Plus } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useEffect, useId, useRef, useState, useTransition } from "react";
 import { getQuickLoginAction, saveEntryCredentialsAction } from "@/app/vault-actions";
 import type { Locale } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 import type { QuickLoginInfo } from "@/lib/vault/types";
-import { Kbd } from "../capture/shared";
+import { Alert } from "../ui/alert";
 import { Button } from "../ui/button";
-import { Tooltip, iconActionClass } from "../ui/tooltip";
+import { Field } from "../ui/field";
 import { Input } from "../ui/input";
-import { FieldLabel, SecretRow, SetupTwoFactorNotice, TwoFactorPrompt, VaultDialog, copyText, hostOf, tx, useCredentialReveal } from "./shared";
+import { Kbd } from "../ui/kbd";
+import { rowActionClass } from "../ui/row-actions";
+import { Tooltip } from "../ui/tooltip";
+import {
+  CredentialsFieldset,
+  LegendAction,
+  PasswordInput,
+  SecretNotes,
+  SecretRow,
+  SetupTwoFactorNotice,
+  TwoFactorPrompt,
+  VaultDialog,
+  copyText,
+  hostOf,
+  tx,
+  useCredentialReveal,
+} from "./shared";
 
 /**
  * "Quick login" for one entry: the vendor's login URL and the entry's account credentials in one panel,
- * with open-site, copy and record-payment actions.
+ * with open-site and copy actions.
  */
 export function QuickLoginButton({
   workspaceId,
@@ -35,24 +51,21 @@ export function QuickLoginButton({
   const label = tx(locale, "Quick login", "Быстрый вход");
   const trigger =
     variant === "row" ? (
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className={cn("inline-flex items-center gap-1.5 rounded-md border border-violet-400/20 bg-violet-500/10 px-2.5 py-1.5 text-xs font-medium text-violet-100 transition hover:border-violet-300/35 hover:bg-violet-500/20", className)}
-      >
-        <KeyRound className="h-3.5 w-3.5" />
+      <Button type="button" variant="secondary" size="sm" onClick={() => setOpen(true)} className={className}>
+        <KeyRound className="h-3.5 w-3.5 text-violet-300" aria-hidden="true" />
         {label}
-      </button>
+      </Button>
     ) : (
       <button
         type="button"
+        aria-label={label}
         onClick={(event) => {
           event.stopPropagation();
           setOpen(true);
         }}
-        className={cn(iconActionClass, "border-violet-400/20 bg-violet-500/10 text-violet-200 hover:border-violet-300/35 hover:bg-violet-500/20", variant === "icon" && "border-transparent bg-transparent text-violet-300", className)}
+        className={cn(rowActionClass, "text-violet-300 hover:bg-violet-500/10 hover:text-violet-200", className)}
       >
-        <KeyRound className="h-3.5 w-3.5" />
+        <KeyRound aria-hidden="true" />
       </button>
     );
 
@@ -79,10 +92,35 @@ export function QuickLoginDialog({
   locale?: Locale;
   trigger?: React.ReactNode;
 }) {
+  // "Entry · vendor · account" for the header, filled in once the body has loaded.
+  const [subtitle, setSubtitle] = useState("");
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setSubtitle("");
+  }
+
   return (
-    <VaultDialog open={open} onOpenChange={onOpenChange} trigger={trigger} icon={<KeyRound className="h-4 w-4" />} title={tx(locale, "Quick login", "Быстрый вход")}>
+    <VaultDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      trigger={trigger}
+      icon={<KeyRound />}
+      title={tx(locale, "Quick login", "Быстрый вход")}
+      description={subtitle || undefined}
+      footer={
+        <Button asChild type="button" variant="ghost" size="sm">
+          <Link href={`/app/accounts?workspace=${workspaceId}`}>{tx(locale, "All accounts", "Все аккаунты")}</Link>
+        </Button>
+      }
+    >
       {/* Mounted only while open, so every opening starts fresh. */}
-      <QuickLoginBody workspaceId={workspaceId} itemId={itemId} locale={locale} />
+      <QuickLoginBody
+        workspaceId={workspaceId}
+        itemId={itemId}
+        locale={locale}
+        onInfo={(info) => setSubtitle([info.itemName, info.vendorName, info.account?.name].filter(Boolean).join(" · "))}
+      />
     </VaultDialog>
   );
 }
@@ -92,7 +130,23 @@ export function EntryCredentials({ workspaceId, itemId, locale }: { workspaceId:
   return <QuickLoginBody workspaceId={workspaceId} itemId={itemId} locale={locale} embedded />;
 }
 
-function QuickLoginBody({ workspaceId, itemId, locale, embedded = false }: { workspaceId: number; itemId: number; locale: Locale; embedded?: boolean }) {
+function Placeholder({ children }: { children: React.ReactNode }) {
+  return <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs leading-5 text-zinc-500">{children}</p>;
+}
+
+function QuickLoginBody({
+  workspaceId,
+  itemId,
+  locale,
+  embedded = false,
+  onInfo,
+}: {
+  workspaceId: number;
+  itemId: number;
+  locale: Locale;
+  embedded?: boolean;
+  onInfo?: (info: QuickLoginInfo) => void;
+}) {
   const router = useRouter();
   const [info, setInfo] = useState<QuickLoginInfo | null>(null);
   const [loadError, setLoadError] = useState("");
@@ -103,6 +157,10 @@ function QuickLoginBody({ workspaceId, itemId, locale, embedded = false }: { wor
   useEffect(() => () => {
     if (needsRefresh.current) router.refresh();
   }, [router]);
+  const onInfoRef = useRef(onInfo);
+  useEffect(() => {
+    onInfoRef.current = onInfo;
+  });
 
   async function load() {
     const result = await getQuickLoginAction(workspaceId, itemId);
@@ -111,6 +169,7 @@ function QuickLoginBody({ workspaceId, itemId, locale, embedded = false }: { wor
       return null;
     }
     setInfo(result.info);
+    onInfoRef.current?.(result.info);
     return result.info;
   }
 
@@ -123,6 +182,7 @@ function QuickLoginBody({ workspaceId, itemId, locale, embedded = false }: { wor
         return;
       }
       setInfo(result.info);
+      onInfoRef.current?.(result.info);
       // Show the credentials straight away when nothing stands in the way.
       const account = result.info.account;
       if (account && result.info.canReveal && result.info.twoFactor.unlocked && (account.hasLogin || account.hasPassword || account.hasNotes)) {
@@ -144,131 +204,114 @@ function QuickLoginBody({ workspaceId, itemId, locale, embedded = false }: { wor
     window.open(info.url, "_blank", "noopener,noreferrer");
   }
 
-  const footer =
-        info && !embedded ? (
-          <div className="-mx-5 -mb-4 mt-5 flex items-center gap-2 border-t border-white/[0.06] px-5 py-3">
-            <Link
-              href={`/app/accounts?workspace=${workspaceId}`}
-              className="ml-auto text-xs text-zinc-500 transition hover:text-zinc-200"
-            >
-              {tx(locale, "All accounts", "Все аккаунты")}
-            </Link>
-          </div>
-        ) : null;
+  if (loadError) return <Alert tone="danger">{loadError}</Alert>;
+  if (!info) {
+    return (
+      <div className="flex h-24 items-center justify-center text-zinc-500">
+        <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+        <span className="sr-only">{tx(locale, "Loading", "Загрузка")}</span>
+      </div>
+    );
+  }
+
+  const editAction =
+    account && info.canReveal && !editing && (state.status === "shown" || !hasCreds) ? (
+      <LegendAction onClick={() => setEditing(true)}>
+        {hasCreds ? <Pencil className="h-3 w-3" aria-hidden="true" /> : <Plus className="h-3 w-3" aria-hidden="true" />}
+        {hasCreds ? tx(locale, "Edit", "Изменить") : tx(locale, "Add", "Добавить")}
+      </LegendAction>
+    ) : null;
 
   return (
-    <>
-      {info && !embedded ? <p className="-mt-1 mb-4 truncate text-xs text-zinc-500">{[info.itemName, info.vendorName, account?.name].filter(Boolean).join(" · ")}</p> : null}
-      {loadError ? <p className="text-sm text-red-300">{loadError}</p> : null}
-      {!info && !loadError ? (
-        <div className="flex h-24 items-center justify-center text-zinc-500"><Loader2 className="h-4 w-4 animate-spin" /></div>
+    <div className="space-y-5">
+      {!embedded ? (
+        <Field label={tx(locale, "Login page", "Страница входа")}>
+          {info.url ? (
+            <button
+              type="button"
+              onClick={() => openSite()}
+              className="group/url flex h-9 min-w-0 items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-3 text-left text-[13px] transition hover:border-white/15 hover:bg-white/[0.05] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+            >
+              <span className="truncate text-sky-300">{hostOf(info.url)}</span>
+              <span className="truncate text-xs text-zinc-600">{info.url.replace(/^https?:\/\/[^/]+/, "").replace(/^\/$/, "")}</span>
+              <ArrowUpRight className="ml-auto h-4 w-4 shrink-0 text-zinc-500 transition group-hover/url:text-sky-300" aria-hidden="true" />
+            </button>
+          ) : (
+            <Placeholder>
+              {tx(locale, "No URL yet. Add one to the vendor on the ", "Ссылки пока нет. Добавьте её поставщику на странице ")}
+              <Link href={`/app/vendors?workspace=${workspaceId}`} className="text-zinc-300 underline decoration-white/20 underline-offset-2 hover:text-white">
+                {tx(locale, "Vendors page", "«Поставщики»")}
+              </Link>
+              .
+            </Placeholder>
+          )}
+        </Field>
       ) : null}
-      {info ? (
-        <div className="space-y-4">
-          <div hidden={embedded}>
-            <FieldLabel>{tx(locale, "Login page", "Страница входа")}</FieldLabel>
+
+      <CredentialsFieldset locale={locale} action={editAction}>
+        {editing || (!account && info.canCreateAccount) ? (
+          <CredentialsForm
+            locale={locale}
+            accountName={account?.name || info.entryAccountName}
+            askName={!account}
+            initial={credentials ? { login: credentials.login, password: credentials.password } : undefined}
+            onCancel={account ? () => setEditing(false) : undefined}
+            onSave={async (values) => {
+              const result = await saveEntryCredentialsAction({ workspaceId, itemId, ...values });
+              if (!result.ok) return result.error;
+              setEditing(false);
+              const next = await load();
+              if (next?.account) await reveal(next.account.id);
+              needsRefresh.current = true;
+              return null;
+            }}
+          />
+        ) : !account ? (
+          <Placeholder>{tx(locale, "No saved account for this entry.", "Для этой записи нет сохранённого аккаунта.")}</Placeholder>
+        ) : !info.canReveal ? (
+          <p className="text-xs text-zinc-500">{tx(locale, "Only workspace owners and editors can view credentials.", "Учётные данные видят только владельцы и редакторы пространства.")}</p>
+        ) : !hasCreds ? (
+          <Placeholder>{tx(locale, `“${account.name}” has no login or password saved yet.`, `У аккаунта «${account.name}» пока нет сохранённого логина и пароля.`)}</Placeholder>
+        ) : state.status === "shown" ? (
+          <div className="space-y-1.5">
+            <SecretRow label={tx(locale, "Login", "Логин")} value={state.credentials.login} locale={locale} />
+            <SecretRow label={tx(locale, "Password", "Пароль")} value={state.credentials.password} secret locale={locale} />
+            {state.credentials.notes ? <SecretNotes>{state.credentials.notes}</SecretNotes> : null}
             {info.url ? (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => openSite()}
-                  className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 text-left text-sm text-sky-200 transition hover:border-sky-400/25 hover:bg-sky-500/[0.06]"
-                >
-                  <span className="truncate">{hostOf(info.url)}</span>
-                  <span className="truncate text-xs text-zinc-600">{info.url.replace(/^https?:\/\/[^/]+/, "").replace(/^\/$/, "")}</span>
-                  <ArrowUpRight className="ml-auto h-4 w-4 shrink-0" />
-                </button>
+              <div className="flex flex-wrap gap-2 pt-2">
+                <Button type="button" size="sm" onClick={() => openSite("login")} disabled={!state.credentials.login}>
+                  <ArrowUpRight className="h-3.5 w-3.5" aria-hidden="true" />
+                  {tx(locale, "Copy login & open", "Копировать логин и открыть")}
+                </Button>
+                <Button type="button" variant="secondary" size="sm" onClick={() => openSite("password")} disabled={!state.credentials.password}>
+                  {tx(locale, "Copy password & open", "Копировать пароль и открыть")}
+                </Button>
               </div>
-            ) : (
-              <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-zinc-500">
-                {tx(locale, "No URL yet. Add one to the vendor on the ", "URL нет. Добавьте его поставщику на странице ")}
-                <Link href={`/app/vendors?workspace=${workspaceId}`} className="text-zinc-300 underline decoration-white/20 underline-offset-2 hover:text-white">
-                  {tx(locale, "Vendors page", "Поставщики")}
-                </Link>
-                .
-              </p>
-            )}
+            ) : null}
           </div>
-
-          <div>
-            <div className="flex items-center">
-              <FieldLabel>{tx(locale, "Credentials", "Учётные данные")}</FieldLabel>
-              {account && info.canReveal && !editing && (state.status === "shown" || !hasCreds) ? (
-                <button type="button" onClick={() => setEditing(true)} className="mb-1.5 ml-auto flex items-center gap-1 text-[11px] text-zinc-500 transition hover:text-zinc-200">
-                  <Pencil className="h-3 w-3" />
-                  {hasCreds ? tx(locale, "Edit", "Изменить") : tx(locale, "Add", "Добавить")}
-                </button>
-              ) : null}
-            </div>
-
-            {editing || (!account && info.canCreateAccount) ? (
-              <CredentialsForm
-                locale={locale}
-                accountName={account?.name || info.entryAccountName}
-                askName={!account}
-                initial={credentials ? { login: credentials.login, password: credentials.password } : undefined}
-                onCancel={account ? () => setEditing(false) : undefined}
-                onSave={async (values) => {
-                  const result = await saveEntryCredentialsAction({ workspaceId, itemId, ...values });
-                  if (!result.ok) return result.error;
-                  setEditing(false);
-                  const next = await load();
-                  if (next?.account) await reveal(next.account.id);
-                  needsRefresh.current = true;
-                  return null;
-                }}
-              />
-            ) : !account ? (
-              <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-zinc-500">
-                {tx(locale, "No saved account for this entry.", "Для этой записи нет сохранённого аккаунта.")}
-              </p>
-            ) : !info.canReveal ? (
-              <p className="text-xs text-zinc-500">{tx(locale, "Only workspace owners and editors can view credentials.", "Учётные данные видят только владельцы и редакторы.")}</p>
-            ) : !hasCreds ? (
-              <p className="rounded-lg border border-dashed border-white/10 px-3 py-2.5 text-xs text-zinc-500">
-                {tx(locale, `“${account.name}” has no login or password saved yet.`, `У «${account.name}» ещё нет логина и пароля.`)}
-              </p>
-            ) : state.status === "shown" ? (
-              <div className="space-y-1.5">
-                <SecretRow label={tx(locale, "Login", "Логин")} value={state.credentials.login} locale={locale} />
-                <SecretRow label={tx(locale, "Password", "Пароль")} value={state.credentials.password} secret locale={locale} />
-                {state.credentials.notes ? (
-                  <p className="whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 py-2 text-xs text-zinc-400">{state.credentials.notes}</p>
-                ) : null}
-                {info.url ? (
-                  <div className="flex flex-wrap gap-2 pt-1.5">
-                    <Button type="button" size="sm" onClick={() => openSite("login")} disabled={!state.credentials.login}>
-                      <ArrowUpRight className="h-3.5 w-3.5" />
-                      {tx(locale, "Copy login & open", "Копировать логин и открыть")}
-                    </Button>
-                    <Button type="button" variant="secondary" size="sm" onClick={() => openSite("password")} disabled={!state.credentials.password}>
-                      {tx(locale, "Copy password & open", "Копировать пароль и открыть")}
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            ) : state.status === "code" ? (
-              <TwoFactorPrompt locale={locale} pending={false} error={state.error} onSubmit={(code) => void reveal(account.id, code)} />
-            ) : state.status === "setup" ? (
-              <SetupTwoFactorNotice locale={locale} message={state.message} />
-            ) : state.status === "error" ? (
-              <p className="text-xs text-red-300">{state.message}</p>
-            ) : (
-              <div className="space-y-1.5">
-                <div className="flex items-center gap-2">
-                  <Button type="button" variant="secondary" size="sm" onClick={() => void reveal(account.id)} disabled={state.status === "loading"}>
-                    {state.status === "loading" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <KeyRound className="h-3.5 w-3.5" />}
-                    {tx(locale, "Show credentials", "Показать данные")}
-                  </Button>
-                  {info.twoFactor.required ? <span className="text-[11px] text-zinc-500">{tx(locale, "2FA code needed", "Нужен код 2FA")}</span> : null}
-                </div>
-              </div>
-            )}
+        ) : state.status === "code" ? (
+          <TwoFactorPrompt locale={locale} pending={false} error={state.error} onSubmit={(code) => void reveal(account.id, code)} />
+        ) : state.status === "setup" ? (
+          <SetupTwoFactorNotice locale={locale} message={state.message} />
+        ) : state.status === "error" ? (
+          <Alert tone="danger" className="text-xs">
+            {state.message}
+          </Alert>
+        ) : (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="secondary" size="sm" onClick={() => void reveal(account.id)} disabled={state.status === "loading"}>
+              {state.status === "loading" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" />
+              ) : (
+                <KeyRound className="h-3.5 w-3.5" aria-hidden="true" />
+              )}
+              {tx(locale, "Show credentials", "Показать учётные данные")}
+            </Button>
+            {info.twoFactor.required ? <span className="text-[11.5px] text-zinc-500">{tx(locale, "2FA code needed", "Нужен код 2FA")}</span> : null}
           </div>
-        </div>
-      ) : null}
-      {footer}
-    </>
+        )}
+      </CredentialsFieldset>
+    </div>
   );
 }
 
@@ -287,6 +330,7 @@ function CredentialsForm({
   onSave: (values: { accountName: string; login: string; password: string }) => Promise<string | null>;
   onCancel?: () => void;
 }) {
+  const id = useId();
   const [name, setName] = useState(accountName);
   const [login, setLogin] = useState(initial?.login || "");
   const [password, setPassword] = useState(initial?.password || "");
@@ -294,7 +338,7 @@ function CredentialsForm({
   const [pending, startTransition] = useTransition();
   return (
     <form
-      className="space-y-2"
+      className="grid gap-4"
       onSubmit={(event) => {
         event.preventDefault();
         startTransition(async () => {
@@ -303,17 +347,49 @@ function CredentialsForm({
         });
       }}
     >
-      {askName ? <Input value={name} onChange={(event) => setName(event.target.value)} placeholder={tx(locale, "Account name (as on the entry)", "Имя аккаунта (как в записи)")} /> : null}
-      <Input value={login} onChange={(event) => setLogin(event.target.value)} autoComplete="off" placeholder={tx(locale, "Login or email", "Логин или email")} autoFocus={!askName} />
-      <Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" autoComplete="new-password" placeholder={tx(locale, "Password", "Пароль")} />
-      {error ? <p className="text-xs text-red-300">{error}</p> : null}
-      <div className="flex items-center gap-2 pt-1">
-        <Button type="submit" size="sm" disabled={pending}>
-          {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-          {tx(locale, "Save encrypted", "Сохранить (зашифровано)")}
-        </Button>
-        {onCancel ? <Button type="button" variant="ghost" size="sm" onClick={onCancel}>{tx(locale, "Cancel", "Отмена")}</Button> : null}
-        <span className="ml-auto flex items-center gap-1 text-[11px] text-zinc-600"><Kbd>↵</Kbd>{tx(locale, "save", "сохранить")}</span>
+      {askName ? (
+        <Field label={tx(locale, "Account name", "Название аккаунта")} htmlFor={`${id}-name`} hint={tx(locale, "As written on the entry.", "Как указано в записи.")}>
+          <Input id={`${id}-name`} value={name} onChange={(event) => setName(event.target.value)} placeholder="ops@company" autoFocus />
+        </Field>
+      ) : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label={tx(locale, "Login", "Логин")} htmlFor={`${id}-login`}>
+          <Input
+            id={`${id}-login`}
+            value={login}
+            onChange={(event) => setLogin(event.target.value)}
+            autoComplete="off"
+            placeholder={tx(locale, "Login or email", "Логин или email")}
+            autoFocus={!askName}
+          />
+        </Field>
+        <Field label={tx(locale, "Password", "Пароль")} htmlFor={`${id}-password`}>
+          <PasswordInput
+            id={`${id}-password`}
+            locale={locale}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            autoComplete="new-password"
+          />
+        </Field>
+      </div>
+      {error ? <Alert tone="danger">{error}</Alert> : null}
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="hidden items-center gap-1.5 text-[11.5px] text-zinc-500 sm:flex">
+          <Kbd>↵</Kbd>
+          {tx(locale, "save", "сохранить")}
+        </span>
+        <div className="ml-auto flex items-center gap-2">
+          {onCancel ? (
+            <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+              {tx(locale, "Cancel", "Отмена")}
+            </Button>
+          ) : null}
+          <Button type="submit" size="sm" disabled={pending}>
+            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+            {tx(locale, "Save", "Сохранить")}
+          </Button>
+        </div>
       </div>
     </form>
   );

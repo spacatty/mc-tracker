@@ -5,7 +5,7 @@ import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { SUPPORTED_CURRENCIES } from "@/lib/currencies";
 import type { Locale } from "@/lib/i18n";
 import type { BillingPeriod, Category, PaymentType } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, softColor, softFill } from "@/lib/utils";
 import { AppIcon } from "../icons";
 import { tx } from "./shared";
 
@@ -56,7 +56,7 @@ export function PeriodPicker({ value, onChange, locale }: { value: PeriodValue; 
             value={value.customDays}
             onChange={(event) => onChange({ ...value, customDays: Math.max(1, Number(event.target.value) || 1) })}
           />
-          {tx(locale, "days", "дней")}
+          {tx(locale, "days", "дн.")}
         </label>
       ) : null}
     </div>
@@ -86,7 +86,7 @@ export function CategoryList({
             value === category.id && "bg-white/[0.06]",
           )}
         >
-          <span className="grid h-6 w-6 place-items-center rounded-md" style={{ background: `${category.color}22`, color: category.color }}>
+          <span className="grid h-6 w-6 place-items-center rounded-md" style={{ background: softFill(category.color), color: softColor(category.color) }}>
             <AppIcon name={category.icon} className="h-3.5 w-3.5" />
           </span>
           <span className="flex-1 truncate text-zinc-100">{category.name}</span>

@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/ui/page-header";
 import { AccountsManager } from "@/components/vault/vault-managers";
 import { requireUser } from "@/lib/auth";
 import { resolveWorkspaceForUser } from "@/lib/db";
@@ -15,11 +14,7 @@ export default async function AccountsPage({ searchParams }: { searchParams: Pro
   const canEdit = workspace.accessRole === "owner" || workspace.accessRole === "editor";
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={locale === "ru" ? "Аккаунты" : "Accounts"}
-        description={locale === "ru" ? "Логины к поставщикам. Пароли хранятся в зашифрованном виде." : "Logins for your vendors. Credentials are stored encrypted."}
-      />
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <AccountsManager workspaceId={workspace.id} accounts={accounts} vendors={vendors} canEdit={canEdit} locale={locale} />
     </div>
   );

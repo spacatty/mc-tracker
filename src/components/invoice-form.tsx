@@ -1,17 +1,22 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { HelpCircle } from "lucide-react";
+import { useFormStatus } from "react-dom";
+import { Loader2, Plus, ReceiptText } from "lucide-react";
 import { createInvoiceAction } from "@/app/actions";
+import { tx } from "@/components/capture/shared";
 import type { Locale } from "@/lib/i18n";
 import { t } from "@/lib/i18n";
 import type { BillingPeriod, Category, PaymentItem } from "@/lib/types";
 import { Button } from "./ui/button";
-import { CheckboxInput, SelectInput } from "./ui/hidden-input";
-import { Input } from "./ui/input";
+import { Checkbox } from "./ui/checkbox";
 import { DatePickerInput } from "./ui/date-picker";
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./ui/dialog";
+import { Field, Fieldset } from "./ui/field";
+import { Input } from "./ui/input";
+import { Kbd } from "./ui/kbd";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { EntrySearchSelect } from "./entry-search-select";
-import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import { CurrencySearchSelect } from "./currency-search-select";
 
 function addPeriod(start: string, period: BillingPeriod, customDays: number) {
@@ -25,18 +30,50 @@ function addPeriod(start: string, period: BillingPeriod, customDays: number) {
   return date.toISOString().slice(0, 10);
 }
 
-function HelpTooltip({ children, locale = "en" }: { children: React.ReactNode; locale?: Locale }) {
+/** A Checkbox with a label and a one-line description. Submits `name=on` while checked, like a native checkbox. */
+function CheckboxRow({
+  id,
+  name,
+  defaultChecked = false,
+  label,
+  description,
+}: {
+  id: string;
+  name: string;
+  defaultChecked?: boolean;
+  label: string;
+  description: string;
+}) {
+  const [checked, setChecked] = useState(defaultChecked);
   return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <button type="button" className="text-zinc-500 transition hover:text-violet-200" aria-label={locale === "ru" ? "Подробнее" : "More info"}>
-          <HelpCircle className="h-4 w-4" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent align="start" className="max-w-xs text-sm text-zinc-300">
-        {children}
-      </PopoverContent>
-    </Popover>
+    <div className="flex items-start gap-3">
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(next) => setChecked(next === true)}
+        aria-describedby={`${id}-description`}
+        className="mt-0.5"
+      />
+      {checked ? <input type="hidden" name={name} value="on" /> : null}
+      <div className="min-w-0">
+        <label htmlFor={id} className="cursor-pointer text-[13px] font-medium text-zinc-200">
+          {label}
+        </label>
+        <p id={`${id}-description`} className="mt-0.5 text-[11.5px] leading-[1.125rem] text-zinc-500">
+          {description}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+function SubmitButton({ locale }: { locale: Locale }) {
+  const { pending } = useFormStatus();
+  return (
+    <Button type="submit" size="sm" disabled={pending}>
+      {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden="true" /> : null}
+      {t(locale, "recordPayment")}
+    </Button>
   );
 }
 
@@ -45,11 +82,14 @@ export function InvoiceForm({
   categories,
   workspaceId,
   locale = "en",
+  onCancel,
 }: {
   entries: PaymentItem[];
   categories: Category[];
   workspaceId: number;
   locale?: Locale;
+  /** When set, the form renders as dialog parts (body + footer with Cancel). */
+  onCancel?: () => void;
 }) {
   const [itemId, setItemId] = useState(entries[0] ? String(entries[0].id) : "");
   const selectedEntry = useMemo(() => entries.find((entry) => String(entry.id) === itemId), [entries, itemId]);
@@ -58,17 +98,26 @@ export function InvoiceForm({
   const [paymentDate, setPaymentDate] = useState(new Date().toISOString().slice(0, 10));
   const [dueDate, setDueDate] = useState(addPeriod(paymentDate, period, customDays));
 
+  const periodOptions: Array<{ value: BillingPeriod; label: string }> = [
+    { value: "7d", label: tx(locale, "7 days", "7 дней") },
+    { value: "1m", label: tx(locale, "1 month", "1 месяц") },
+    { value: "3m", label: tx(locale, "3 months", "3 месяца") },
+    { value: "1y", label: tx(locale, "1 year", "1 год") },
+    { value: "custom", label: tx(locale, "Custom days", "Своё число дней") },
+  ];
+
   return (
-    <form action={createInvoiceAction} className="overflow-hidden rounded-lg border border-border bg-surface shadow-surface">
+    <form action={createInvoiceAction} className="flex min-h-0 flex-1 flex-col">
       <input type="hidden" name="workspaceId" value={workspaceId} />
-      <div className="border-b border-border bg-surface-muted p-5">
-        <h2 className="text-[15px] font-semibold text-white">{t(locale, "recordPayment")}</h2>
-        <p className="mt-1 text-sm text-muted-foreground">{t(locale, "recordPaymentDescription")}</p>
-      </div>
-      <div className="divide-y divide-border">
-        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_1fr] lg:items-start">
-          <legend className="sr-only">{t(locale, "stepEntry")}</legend>
-          <span className="pt-2 text-sm font-medium text-zinc-400">{t(locale, "entry")}</span>
+      <input type="hidden" name="dueDate" value={dueDate} />
+      <input type="hidden" name="vendorName" value={selectedEntry?.vendorName || ""} />
+      <input type="hidden" name="vendorUrl" value={selectedEntry?.vendorUrl || ""} />
+      <input type="hidden" name="accountName" value={selectedEntry?.accountName || ""} />
+      <input type="hidden" name="period" value={period} />
+      {period !== "custom" ? <input type="hidden" name="customPeriodDays" value={customDays} /> : null}
+
+      <DialogBody className="space-y-6">
+        <Field label={t(locale, "entry")}>
           <EntrySearchSelect
             entries={entries}
             categories={categories}
@@ -83,92 +132,177 @@ export function InvoiceForm({
               }
             }}
           />
-        </fieldset>
-        <input type="hidden" name="dueDate" value={dueDate} />
-        <input type="hidden" name="vendorName" value={selectedEntry?.vendorName || ""} />
-        <input type="hidden" name="vendorUrl" value={selectedEntry?.vendorUrl || ""} />
-        <input type="hidden" name="accountName" value={selectedEntry?.accountName || ""} />
-        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
-          <legend className="sr-only">{t(locale, "stepPaymentDates")}</legend>
-          <span className="text-sm font-medium text-zinc-400">{t(locale, "paymentDate")}</span>
-          <DatePickerInput
-            name="paymentDate"
-            value={paymentDate}
-            onChange={(value) => {
-              setPaymentDate(value);
-              setDueDate(addPeriod(value, period, customDays));
-            }}
-          />
-          <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Авто дата оплаты" : "Auto due date"}</span>
-          <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm text-zinc-300">
-            {dueDate ? new Date(`${dueDate}T00:00:00`).toLocaleDateString("en-GB") : (locale === "ru" ? "Вычисляется из периода" : "Calculated from period")}
-          </div>
-        </fieldset>
-        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
-          <legend className="sr-only">{t(locale, "stepAmount")}</legend>
-          <span className="text-sm font-medium text-zinc-400">{t(locale, "amount")}</span>
-          <Input key={`${itemId}-amount`} name="amount" type="number" step="0.01" defaultValue={selectedEntry?.amount || 0} />
-          <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Валюта" : "Currency"}</span>
-          <CurrencySearchSelect key={`${itemId}-currency`} name="currency" defaultValue={selectedEntry?.currency || "USD"} />
-        </fieldset>
-        <fieldset className="grid gap-4 p-5 lg:grid-cols-[180px_minmax(220px,1fr)_180px_minmax(220px,1fr)] lg:items-center">
-          <legend className="sr-only">{t(locale, "stepPeriod")}</legend>
-          <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Период счета" : "Invoice period"}</span>
-          <SelectInput
-            name="period"
-            defaultValue={period}
-            onValueChange={(value) => {
-              const next = value as BillingPeriod;
-              setPeriod(next);
-              setDueDate(addPeriod(paymentDate, next, customDays));
-            }}
-            options={[
-              { value: "7d", label: locale === "ru" ? "7 дней" : "7 days" },
-              { value: "1m", label: locale === "ru" ? "1 месяц" : "1 month" },
-              { value: "3m", label: locale === "ru" ? "3 месяца" : "3 months" },
-              { value: "1y", label: locale === "ru" ? "1 год" : "1 year" },
-              { value: "custom", label: locale === "ru" ? "Свои дни" : "Custom days" },
-            ]}
-          />
-          <span className="text-sm font-medium text-zinc-400">{locale === "ru" ? "Свои дни" : "Custom days"}</span>
-          {period === "custom" ? (
-            <Input
-              name="customPeriodDays"
-              type="number"
-              value={customDays}
-              onChange={(event) => {
-                const next = Number(event.target.value || 30);
-                setCustomDays(next);
-                setDueDate(addPeriod(paymentDate, period, next));
+        </Field>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label={t(locale, "paymentDate")} htmlFor="invoice-payment-date">
+            <DatePickerInput
+              name="paymentDate"
+              triggerId="invoice-payment-date"
+              value={paymentDate}
+              locale={locale}
+              onChange={(value) => {
+                setPaymentDate(value);
+                setDueDate(addPeriod(value, period, customDays));
               }}
             />
-          ) : (
-            <input type="hidden" name="customPeriodDays" value={customDays} />
-          )}
-        </fieldset>
-        <fieldset className="flex flex-wrap gap-5 p-5">
-          <legend className="mb-3 w-full text-sm font-semibold text-foreground">{t(locale, "scheduleUpdates")}</legend>
-          <span className="inline-flex items-center gap-2">
-            <CheckboxInput name="shiftDates" defaultChecked>{locale === "ru" ? "Сдвигать даты оплаты записи по счету" : "Shift entry payment dates according to invoice"}</CheckboxInput>
-            <HelpTooltip locale={locale}>
-              {locale === "ru"
-                ? "Если включено, текущий оплаченный период выбранной записи сдвигается на даты счета до вычисленной даты оплаты."
-                : "When enabled, the selected entry's current paid period becomes the invoice payment date through the calculated invoice due date. Dashboard upcoming totals and notifications will use that new due date."}
-            </HelpTooltip>
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <CheckboxInput name="shiftPaymentPeriod">{locale === "ru" ? "Также изменить период записи на период счета" : "Also change entry billing period to invoice period"}</CheckboxInput>
-            <HelpTooltip locale={locale}>
-              {locale === "ru"
-                ? "Если включено, период записи станет равен периоду счета. Например, счет на 3 месяца обновит период записи до 3 месяцев."
-                : "When enabled, the entry's recurring period is changed to this invoice period. Example: paying a 3-month invoice for 150 changes the entry to a 3-month period and updates its price to 150."}
-            </HelpTooltip>
-          </span>
-        </fieldset>
-        <div className="flex justify-end bg-surface-muted p-5">
-          <Button>{t(locale, "recordPayment")}</Button>
+          </Field>
+          <Field
+            label={tx(locale, "Due date", "Срок оплаты")}
+            hint={tx(locale, "Calculated from the payment date and period.", "Рассчитывается по дате оплаты и периоду.")}
+          >
+            <div
+              className="flex h-9 items-center rounded-lg border border-white/[0.06] bg-white/[0.02] px-3 text-sm tabular-nums text-zinc-300"
+              aria-live="polite"
+            >
+              {dueDate
+                ? new Date(`${dueDate}T00:00:00`).toLocaleDateString("en-GB")
+                : <span className="text-zinc-500">{tx(locale, "Calculated from period", "Рассчитывается по периоду")}</span>}
+            </div>
+          </Field>
+
+          <Field label={t(locale, "amount")} htmlFor="invoice-amount">
+            <Input
+              key={`${itemId}-amount`}
+              id="invoice-amount"
+              name="amount"
+              type="number"
+              step="0.01"
+              defaultValue={selectedEntry?.amount || 0}
+              className="tabular-nums"
+            />
+          </Field>
+          <Field label={tx(locale, "Currency", "Валюта")} htmlFor="invoice-currency">
+            <CurrencySearchSelect
+              key={`${itemId}-currency`}
+              name="currency"
+              triggerId="invoice-currency"
+              defaultValue={selectedEntry?.currency || "USD"}
+              locale={locale}
+            />
+          </Field>
+
+          <Field label={tx(locale, "Invoice period", "Период счёта")} htmlFor="invoice-period">
+            <Select
+              value={period}
+              onValueChange={(value) => {
+                const next = value as BillingPeriod;
+                setPeriod(next);
+                setDueDate(addPeriod(paymentDate, next, customDays));
+              }}
+            >
+              <SelectTrigger id="invoice-period">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {periodOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+          {period === "custom" ? (
+            <Field label={tx(locale, "Custom days", "Число дней")} htmlFor="invoice-custom-days">
+              <Input
+                id="invoice-custom-days"
+                name="customPeriodDays"
+                type="number"
+                min={1}
+                value={customDays}
+                className="tabular-nums"
+                onChange={(event) => {
+                  const next = Number(event.target.value || 30);
+                  setCustomDays(next);
+                  setDueDate(addPeriod(paymentDate, period, next));
+                }}
+              />
+            </Field>
+          ) : null}
         </div>
-      </div>
+
+        <Fieldset legend={t(locale, "scheduleUpdates")}>
+          <CheckboxRow
+            id={`invoice-shift-dates-${workspaceId}`}
+            name="shiftDates"
+            defaultChecked
+            label={tx(locale, "Shift the entry's payment dates", "Сдвинуть даты оплаты записи")}
+            description={tx(
+              locale,
+              "The entry's paid period becomes the payment date through the due date above; the dashboard and reminders use the new due date.",
+              "Оплаченным периодом записи станет промежуток от даты оплаты до срока, указанного выше; обзор и напоминания будут отсчитываться от нового срока.",
+            )}
+          />
+          <CheckboxRow
+            id={`invoice-shift-period-${workspaceId}`}
+            name="shiftPaymentPeriod"
+            label={tx(locale, "Also change the entry's billing period", "Также изменить период оплаты записи")}
+            description={tx(
+              locale,
+              "The entry switches to this invoice period and amount, e.g. a 3-month invoice makes it a 3-month entry.",
+              "Запись перейдёт на период и сумму этого счёта: например, после счёта за 3 месяца она станет трёхмесячной.",
+            )}
+          />
+        </Fieldset>
+      </DialogBody>
+
+      <DialogFooter
+        hint={
+          <>
+            <Kbd>Esc</Kbd> {tx(locale, "to close", "закрыть")}
+          </>
+        }
+      >
+        {onCancel ? (
+          <Button type="button" variant="ghost" size="sm" onClick={onCancel}>
+            {t(locale, "cancel")}
+          </Button>
+        ) : null}
+        <SubmitButton locale={locale} />
+      </DialogFooter>
     </form>
+  );
+}
+
+/**
+ * The page-header primary action on /app/invoices: an Aurora "Record payment" button that opens the invoice form
+ * in a dialog. The trigger is built here (not passed from the server page) to avoid a hydration mismatch.
+ * The page remounts this component (via `key`) after a successful submit, which closes the dialog.
+ */
+export function RecordPaymentDialog({
+  entries,
+  categories,
+  workspaceId,
+  locale = "en",
+}: {
+  entries: PaymentItem[];
+  categories: Category[];
+  workspaceId: number;
+  locale?: Locale;
+}) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button type="button" size="sm" onClick={() => setOpen(true)}>
+        <Plus className="h-3.5 w-3.5" aria-hidden="true" />
+        {t(locale, "recordPayment")}
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent size="lg" closeLabel={tx(locale, "Close", "Закрыть")}>
+          <DialogHeader icon={<ReceiptText />} tone="success">
+            <DialogTitle>{t(locale, "recordPayment")}</DialogTitle>
+            <DialogDescription>{t(locale, "recordPaymentDescription")}</DialogDescription>
+          </DialogHeader>
+          <InvoiceForm
+            entries={entries}
+            categories={categories}
+            workspaceId={workspaceId}
+            locale={locale}
+            onCancel={() => setOpen(false)}
+          />
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

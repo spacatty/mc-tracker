@@ -54,26 +54,29 @@ export function CurrencySearchSelect({
             role="combobox"
             aria-expanded={open}
             aria-label={ariaLabel}
-            className={cn("h-10 w-full justify-between gap-3 pr-4 text-sm", triggerClassName)}
+            className={cn(
+              "h-9 w-full justify-between gap-3 bg-white/[0.03] px-3 text-sm font-normal text-zinc-100 hover:border-white/15 hover:bg-white/[0.03] active:scale-100",
+              triggerClassName,
+            )}
           >
             <span className="truncate">
               {selected
-                ? `${showSymbol ? `${getCurrencySymbol(selected.code)} ` : ""}${selected.code} - ${selected.name}`
+                ? `${showSymbol ? `${getCurrencySymbol(selected.code)} ` : ""}${selected.code} · ${selected.name}`
                 : placeholder}
             </span>
-            <ChevronsUpDown className="h-4 w-4 shrink-0 opacity-60" />
+            <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 text-zinc-500" aria-hidden="true" />
           </Button>
         </PopoverTrigger>
-        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] p-0">
+        <PopoverContent align="start" className="w-[var(--radix-popover-trigger-width)] min-w-64 p-0">
           <Command>
-            <CommandInput placeholder={locale === "ru" ? "Поиск валюты..." : "Search currency..."} />
+            <CommandInput placeholder={locale === "ru" ? "Поиск валюты…" : "Search currency..."} />
             <CommandList>
               <CommandEmpty>{locale === "ru" ? "Валюта не найдена." : "No currency found."}</CommandEmpty>
               <CommandGroup>
                 {SUPPORTED_CURRENCIES.map((currency) => (
                   <CommandItem key={currency.code} value={`${currency.code} ${currency.name}`} onSelect={() => selectCurrency(currency.code)}>
-                    <Check className={cn("mr-2 h-4 w-4", value === currency.code ? "opacity-100" : "opacity-0")} />
-                    <span className="truncate">{getCurrencySymbol(currency.code)} {currency.code} - {currency.name}</span>
+                    <Check className={cn("mr-2 h-3.5 w-3.5 text-violet-300", value === currency.code ? "opacity-100" : "opacity-0")} aria-hidden="true" />
+                    <span className="truncate"><span className="font-medium text-zinc-100">{currency.code}</span> <span className="text-zinc-500">{getCurrencySymbol(currency.code)} · {currency.name}</span></span>
                   </CommandItem>
                 ))}
               </CommandGroup>

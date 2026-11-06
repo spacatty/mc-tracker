@@ -93,7 +93,7 @@ export function CaptureProvider({ workspaceId, locale, children }: { workspaceId
     const parts = [
       result.created.length ? tx(locale, `${result.created.length} added`, `добавлено: ${result.created.length}`) : "",
       result.updated ? tx(locale, `${result.updated} updated`, `изменено: ${result.updated}`) : "",
-      result.paid ? tx(locale, `${result.paid} payments recorded`, `оплат: ${result.paid}`) : "",
+      result.paid ? tx(locale, `${result.paid} payments recorded`, `записано оплат: ${result.paid}`) : "",
     ].filter(Boolean);
     const created = result.created;
     toast.success(parts.join(" · ") || tx(locale, "Saved", "Сохранено"), {
@@ -107,7 +107,7 @@ export function CaptureProvider({ workspaceId, locale, children }: { workspaceId
               created.forEach((id) => formData.append("ids", String(id)));
               await deleteItemsAction(formData);
               router.refresh();
-              toast(tx(locale, "Removed again", "Удалено"));
+              toast(tx(locale, "Removed again", "Добавление отменено"));
             },
           }
         : undefined,

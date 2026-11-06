@@ -7,10 +7,8 @@ import {
   resolveWorkspaceForUser,
 } from "@/lib/db";
 import { getLocale } from "@/lib/i18n-server";
-import { t } from "@/lib/i18n";
-import { PageHeader } from "@/components/ui/page-header";
 
-export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ workspace?: string }> }) {
+export default async function CategoriesPage({ searchParams }: { searchParams: Promise<{ workspace?: string; category?: string; new?: string }> }) {
   const user = await requireUser();
   const locale = await getLocale();
   const params = await searchParams;
@@ -20,14 +18,21 @@ export default async function CategoriesPage({ searchParams }: { searchParams: P
   const selectedByCategory = Object.fromEntries(
     categories.map((category) => [category.id, [...listCategoryNotificationChannelIdsForWorkspace(category.id, workspace.id, user.id)]]),
   );
+  // `?new=1` (the sidebar "+") opens the empty form; `?category=` (after a save) keeps the edited one open.
+  const requested = Number(params.category || 0);
+  const initialSelected = params.new === "1" ? "new" : categories.some((category) => category.id === requested) ? requested : undefined;
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={t(locale, "categories")}
-        description={locale === "ru" ? "Шаблоны, поля и напоминания" : "Templates, fields, and reminders"}
+    <div className="flex h-full min-h-0 flex-col gap-4">
+      <CategoryManager
+        key={`${workspace.id}-${params.new || ""}-${requested || ""}`}
+        workspaceId={workspace.id}
+        categories={categories}
+        channels={channels}
+        selectedByCategory={selectedByCategory}
+        initialSelected={initialSelected}
+        locale={locale}
       />
-      <CategoryManager workspaceId={workspace.id} categories={categories} channels={channels} selectedByCategory={selectedByCategory} locale={locale} />
     </div>
   );
 }

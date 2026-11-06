@@ -1,4 +1,3 @@
-import { PageHeader } from "@/components/ui/page-header";
 import { VendorsManager } from "@/components/vault/vault-managers";
 import { requireUser } from "@/lib/auth";
 import { resolveWorkspaceForUser } from "@/lib/db";
@@ -14,11 +13,7 @@ export default async function VendorsPage({ searchParams }: { searchParams: Prom
   const canEdit = workspace.accessRole === "owner" || workspace.accessRole === "editor";
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title={locale === "ru" ? "Поставщики" : "Vendors"}
-        description={locale === "ru" ? "Сервисы, которые вы оплачиваете, и где в них входить" : "The services you pay and where to log in to them"}
-      />
+    <div className="flex h-full min-h-0 flex-col gap-6">
       <VendorsManager workspaceId={workspace.id} vendors={vendors} canEdit={canEdit} locale={locale} />
     </div>
   );

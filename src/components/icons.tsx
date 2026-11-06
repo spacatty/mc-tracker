@@ -29,13 +29,13 @@ export function BrandLogo({ className }: { className?: string }) {
     <svg viewBox="0 0 32 32" className={className} role="img" aria-label="MC Tracker">
       <defs>
         <linearGradient id="mc-brand-front" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stopColor="#8b5cf6" />
-          <stop offset=".6" stopColor="#6366f1" />
+          <stop offset="0" stopColor="#38bdf8" />
+          <stop offset=".6" stopColor="#22d3ee" />
           <stop offset="1" stopColor="#0ea5e9" />
         </linearGradient>
       </defs>
       <rect x="9" y="3" width="20" height="14" rx="4" fill="#0ea5e9" opacity=".55" />
-      <rect x="6" y="8.5" width="20" height="14" rx="4" fill="#6366f1" opacity=".8" />
+      <rect x="6" y="8.5" width="20" height="14" rx="4" fill="#0891b2" opacity=".8" />
       <rect x="3" y="14" width="20" height="14" rx="4" fill="url(#mc-brand-front)" />
       <path d="M7.5 23.5h6" stroke="#fff" strokeWidth="2.4" strokeLinecap="round" opacity=".9" />
     </svg>

@@ -21,7 +21,7 @@ export const DropdownMenuContent = React.forwardRef<
       ref={ref}
       sideOffset={sideOffset}
       className={cn(
-        "z-50 min-w-48 overflow-hidden rounded-xl border border-white/10 bg-[#101013] p-1 text-zinc-100 shadow-[0_24px_64px_-20px_rgba(0,0,0,0.8)]",
+        "z-50 min-w-48 overflow-hidden rounded-lg border border-white/10 bg-[#18181c] p-1 text-zinc-100 shadow-[0_24px_64px_-20px_rgba(0,0,0,0.8)]",
         className,
       )}
       {...props}
@@ -30,21 +30,46 @@ export const DropdownMenuContent = React.forwardRef<
 ));
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName;
 
-export const DropdownMenuItem = React.forwardRef<
-  React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & { inset?: boolean }
->(({ className, inset, ...props }, ref) => (
-  <DropdownMenuPrimitive.Item
-    ref={ref}
-    className={cn(
-      "relative flex cursor-default select-none items-center rounded-md px-2 py-1.5 text-[13px] text-zinc-300 outline-none transition data-[disabled]:pointer-events-none data-[highlighted]:bg-white/[0.06] data-[highlighted]:text-zinc-50 data-[disabled]:opacity-50",
-      inset && "pl-8",
-      className,
-    )}
-    {...props}
-  />
-));
-DropdownMenuItem.displayName = DropdownMenuPrimitive.Item.displayName;
+export interface DropdownMenuItemProps extends React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> {
+  inset?: boolean;
+  /** Red text and red highlight; put these last, after a separator. */
+  destructive?: boolean;
+  /** Leading icon (ignored with `asChild`: put the icon inside the child instead). */
+  icon?: React.ReactNode;
+}
+
+/**
+ * @example
+ * <DropdownMenuItem icon={<Copy />} onSelect={duplicate}>Duplicate</DropdownMenuItem>
+ * <DropdownMenuItem destructive icon={<Trash2 />} onSelect={askDelete}>Delete</DropdownMenuItem>
+ */
+export const DropdownMenuItem = React.forwardRef<React.ElementRef<typeof DropdownMenuPrimitive.Item>, DropdownMenuItemProps>(
+  ({ className, inset, destructive, icon, asChild, children, ...props }, ref) => (
+    <DropdownMenuPrimitive.Item
+      ref={ref}
+      asChild={asChild}
+      className={cn(
+        "relative flex cursor-default select-none items-center gap-2 rounded-md px-2 py-1.5 text-[13px] text-zinc-300 outline-none transition data-[disabled]:pointer-events-none data-[highlighted]:bg-white/[0.06] data-[highlighted]:text-zinc-50 data-[disabled]:opacity-50",
+        "[&>svg]:h-3.5 [&>svg]:w-3.5 [&>svg]:shrink-0 [&>svg]:text-zinc-500 data-[highlighted]:[&>svg]:text-zinc-300",
+        destructive &&
+          "text-red-300 data-[highlighted]:bg-red-500/10 data-[highlighted]:text-red-200 [&>svg]:text-red-300/80 data-[highlighted]:[&>svg]:text-red-200",
+        inset && "pl-8",
+        className,
+      )}
+      {...props}
+    >
+      {asChild ? (
+        children
+      ) : (
+        <>
+          {icon}
+          {children}
+        </>
+      )}
+    </DropdownMenuPrimitive.Item>
+  ),
+);
+DropdownMenuItem.displayName = "DropdownMenuItem";
 
 export const DropdownMenuCheckboxItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.CheckboxItem>,
@@ -103,3 +128,9 @@ export const DropdownMenuSubTrigger = React.forwardRef<
   </DropdownMenuPrimitive.SubTrigger>
 ));
 DropdownMenuSubTrigger.displayName = DropdownMenuPrimitive.SubTrigger.displayName;
+
+/** Right-aligned shortcut hint inside a menu item. */
+export function DropdownMenuShortcut({ className, ...props }: React.HTMLAttributes<HTMLSpanElement>) {
+  return <span className={cn("ml-auto pl-4 text-[11px] tracking-wide text-zinc-500", className)} {...props} />;
+}
+DropdownMenuShortcut.displayName = "DropdownMenuShortcut";
