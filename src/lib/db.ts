@@ -205,17 +205,17 @@ function mapWebsiteNotification(row: DbRow): WebsiteNotification {
     readAt: row.read_at ? String(row.read_at) : null,
     itemName: row.item_name ? String(row.item_name) : undefined,
     itemHost: row.item_name
-      ? itemHost(parseJson<Record<string, unknown>>(row.item_custom_fields_json, {}), parseJson<CategoryField[]>(row.item_category_fields_json, [])) || undefined
+      ? itemHost(parseJson<Record<string, unknown>>(row.item_custom_fields_json, {}), parseJson<CategoryField[]>(row.item_category_fields_json, []), row.item_category_name ? String(row.item_category_name) : null) || undefined
       : undefined,
   };
 }
 
-/** IP or domain of an entry, read from its category's IP/Domain field. */
+/** Server IP or domain of an entry (Servers and Domains only; see lib/item-host.ts). */
 function hostForItem(item: Pick<PaymentItem, "categoryId" | "customFields">) {
   const row = item.categoryId
-    ? (getDb().prepare("SELECT fields_json FROM categories WHERE id = ?").get(item.categoryId) as DbRow | undefined)
+    ? (getDb().prepare("SELECT name, fields_json FROM categories WHERE id = ?").get(item.categoryId) as DbRow | undefined)
     : undefined;
-  return itemHost(item.customFields, parseJson<CategoryField[]>(row?.fields_json, []));
+  return itemHost(item.customFields, parseJson<CategoryField[]>(row?.fields_json, []), row?.name ? String(row.name) : null);
 }
 
 function mapInvoice(row: DbRow): Invoice {
@@ -3232,7 +3232,7 @@ export function listWebsiteNotificationsForWorkspace(workspaceId: number, userId
   requireWorkspaceViewer(workspaceId, userId);
   return (getDb()
     .prepare(
-      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json
+      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json, categories.name AS item_category_name
        FROM notifications
        LEFT JOIN items ON items.id = notifications.item_id
        LEFT JOIN categories ON categories.id = items.category_id
@@ -3255,7 +3255,7 @@ export function unreadWebsiteNotificationsForWorkspace(workspaceId: number, user
   requireWorkspaceViewer(workspaceId, userId);
   return (getDb()
     .prepare(
-      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json
+      `SELECT notifications.*, items.name AS item_name, items.custom_fields_json AS item_custom_fields_json, categories.fields_json AS item_category_fields_json, categories.name AS item_category_name
        FROM notifications
        LEFT JOIN items ON items.id = notifications.item_id
        LEFT JOIN categories ON categories.id = items.category_id

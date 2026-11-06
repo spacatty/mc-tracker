@@ -1,12 +1,5 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
-import { CalendarClock, CircleDollarSign, Gauge, Repeat, WalletCards } from "lucide-react";
-import {
-  DashboardCategoryPressureChart,
-  DashboardCategorySplitChart,
-  DashboardWorkspaceCostDominanceChart,
-  DashboardWorkspaceObjectDominanceChart,
-} from "@/components/dashboard-pie-charts";
 import { DashboardUpcomingTable } from "@/components/dashboard-upcoming-table";
 import { PageHeader } from "@/components/ui/page-header";
 import { Surface } from "@/components/ui/surface";
@@ -14,21 +7,61 @@ import { requireUser } from "@/lib/auth";
 import { dashboardStatsForWorkspace, dashboardStatsGlobalForUser, getUserDashboardPrefs, resolveWorkspaceForUser } from "@/lib/db";
 import { t } from "@/lib/i18n";
 import { getLocale } from "@/lib/i18n-server";
-import { formatMoney } from "@/lib/utils";
+import { displayDate, formatMoney } from "@/lib/utils";
 
-function StatCard({ label, value, hint, accent, icon }: { label: string; value: string; hint: string; accent: string; icon: ReactNode }) {
+function tx(locale: string, en: string, ru: string) {
+  return locale === "ru" ? ru : en;
+}
+
+/** One cell of the stats strip: label, value, and the detail that makes the number useful. */
+function Stat({ label, value, detail, tone }: { label: string; value: ReactNode; detail: ReactNode; tone?: "danger" }) {
   return (
-    <Surface className="relative overflow-hidden px-5 py-4">
-      <div className="relative flex items-center justify-between gap-3">
-        <p className="inline-flex min-w-0 items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-subtle-foreground">
-          <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md bg-white/[0.04]" style={{ color: `${accent}cc` }}>{icon}</span>
-          <span className="truncate">{label}</span>
-        </p>
+    <div className="min-w-0 px-4 py-3 first:pl-0 sm:border-l sm:border-white/[0.06] sm:first:border-l-0">
+      <p className="text-[10.5px] font-semibold uppercase tracking-[0.14em] text-zinc-500">{label}</p>
+      <p className="mt-1 flex min-w-0 items-baseline gap-2">
+        <span className={tone === "danger" ? "text-[17px] font-semibold tabular-nums text-red-300" : "text-[17px] font-semibold tabular-nums text-white"}>{value}</span>
+        <span className="truncate text-xs text-zinc-500">{detail}</span>
+      </p>
+    </div>
+  );
+}
+
+/** Horizontal bars: one stacked overview bar, then each row with amount, share and its own bar. */
+function SpendBars({ rows, currency, total }: { rows: Array<{ name: string; color: string; monthly: number }>; currency: string; total: number }) {
+  const max = Math.max(...rows.map((row) => row.monthly), 1);
+  if (!rows.length || total <= 0) return <p className="px-4 py-6 text-center text-sm text-zinc-500">—</p>;
+  return (
+    <div className="space-y-3 px-4 pb-4 pt-3">
+      <div className="flex h-2.5 gap-0.5 overflow-hidden rounded-full">
+        {rows.map((row) => <span key={row.name} style={{ flex: row.monthly, backgroundColor: row.color }} />)}
       </div>
-      <div className="relative mt-2 flex items-end justify-between gap-3">
-        <p className="text-xl font-semibold leading-none tracking-tight text-white">{value}</p>
+      <ul className="space-y-2.5">
+        {rows.map((row) => (
+          <li key={row.name} className="space-y-1">
+            <div className="flex items-center gap-2 text-[13px]">
+              <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: row.color }} />
+              <span className="min-w-0 flex-1 truncate text-zinc-300">{row.name}</span>
+              <span className="tabular-nums text-zinc-100">{formatMoney(row.monthly, currency)}</span>
+              <span className="w-10 text-right tabular-nums text-zinc-500">{Math.round((row.monthly / total) * 100)}%</span>
+            </div>
+            <div className="h-1 overflow-hidden rounded-full bg-white/[0.04]">
+              <span className="block h-full rounded-full" style={{ width: `${(row.monthly / max) * 100}%`, backgroundColor: row.color }} />
+            </div>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function SidePanel({ title, note, children }: { title: string; note?: string; children: ReactNode }) {
+  return (
+    <Surface className="overflow-hidden">
+      <div className="flex items-baseline gap-2 border-b border-white/[0.06] px-4 py-3">
+        <h2 className="text-[14px] font-semibold text-white">{title}</h2>
+        {note ? <span className="ml-auto text-xs text-zinc-500">{note}</span> : null}
       </div>
-      <p className="relative mt-1.5 truncate text-[11px] text-subtle-foreground">{hint}</p>
+      {children}
     </Surface>
   );
 }
@@ -45,86 +78,86 @@ export default async function DashboardPage({ searchParams }: { searchParams: Pr
   const { showTrend } = getUserDashboardPrefs(user.id);
   const globalHref = `/app?workspace=${workspace.id}&scope=global`;
   const workspaceHref = `/app?workspace=${workspace.id}&scope=workspace`;
+  const currency = stats.displayCurrency;
+
+  const dueIn30 = stats.upcomingDueByCategory.reduce((sum, row) => sum + row.month, 0);
+  const next = stats.upcoming.find((item) => item.daysUntilPayment >= 0);
+  const overdue = stats.upcoming.filter((item) => item.daysUntilPayment < 0);
+  const oldest = overdue.reduce((most, item) => Math.max(most, -item.daysUntilPayment), 0);
+  const change = stats.oneMonthChangePercent;
+  const spendTotal = stats.categoryBreakdown.reduce((sum, row) => sum + row.monthly, 0);
+  const workspaceTotal = stats.workspaceCostDominance.reduce((sum, row) => sum + row.monthly, 0);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <PageHeader
         eyebrow={t(locale, "overview")}
         title={t(locale, "dashboard")}
         description={t(locale, "recurringSpend")}
-      >
-          <div className="mt-3 inline-flex items-center rounded-lg border border-white/[0.06] bg-white/[0.02] p-0.5">
-            <Link
-              href={globalHref}
-              className={`rounded-md px-3 py-1 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${scope === "global" ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {t(locale, "global")}
-            </Link>
-            <Link
-              href={workspaceHref}
-              className={`rounded-md px-3 py-1 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${scope === "workspace" ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
-            >
-              {t(locale, "workspace")}
-            </Link>
+        actions={
+          <div className="inline-flex items-center rounded-lg bg-white/[0.04] p-0.5">
+            {[
+              { href: globalHref, active: scope === "global", label: tx(locale, "All workspaces", "Все пространства") },
+              { href: workspaceHref, active: scope === "workspace", label: tx(locale, "This workspace", "Это пространство") },
+            ].map((option) => (
+              <Link
+                key={option.href}
+                href={option.href}
+                className={`rounded-md px-3 py-1 text-[13px] font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60 ${option.active ? "bg-white/[0.08] text-foreground" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                {option.label}
+              </Link>
+            ))}
           </div>
-      </PageHeader>
+        }
+      />
 
-      <Surface className="overflow-hidden" role="region" aria-labelledby="upcoming-dates-title">
-        <div className="border-b border-white/[0.06] px-5 py-4">
-          <h2 id="upcoming-dates-title" className="text-[15px] font-semibold text-white">{locale === "ru" ? "Ближайшие даты" : "Upcoming dates"}</h2>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            {scope === "global"
-              ? (locale === "ru" ? "Предстоящие платежи по всем пространствам в ближайшие 2 недели." : "Upcoming payments across all your workspaces in the next 2 weeks.")
-              : (locale === "ru" ? "Предстоящие платежи для выбранного пространства в ближайшие 2 недели." : "Upcoming payments for the selected workspace in the next 2 weeks.")}
-          </p>
+      <section aria-label={tx(locale, "Summary", "Сводка")} className="grid grid-cols-2 border-b border-white/[0.06] pb-1 lg:grid-cols-4">
+        <Stat
+          label={tx(locale, "Due in 30 days", "К оплате за 30 дней")}
+          value={formatMoney(dueIn30, currency)}
+          detail={next ? tx(locale, `next ${displayDate(next.nextPaymentAt)}`, `ближайшая ${displayDate(next.nextPaymentAt)}`) : tx(locale, "none in the next 2 weeks", "ничего в ближайшие 2 недели")}
+        />
+        <Stat
+          label={tx(locale, "Overdue", "Просрочено")}
+          value={overdue.length}
+          tone={overdue.length ? "danger" : undefined}
+          detail={overdue.length ? tx(locale, `oldest ${oldest} days`, `самая старая ${oldest} дн.`) : tx(locale, "all paid", "всё оплачено")}
+        />
+        <Stat
+          label={tx(locale, "Per month", "В месяц")}
+          value={formatMoney(stats.approxMonthlySpend, currency)}
+          detail={showTrend && change ? (
+            <><span className={change > 0 ? "text-amber-300" : "text-emerald-300"}>{change > 0 ? "+" : ""}{change.toFixed(1)}%</span> {tx(locale, "vs last month", "к прошлому месяцу")}</>
+          ) : tx(locale, `≈ ${formatMoney(stats.approxYearlySpend, currency)} / year`, `≈ ${formatMoney(stats.approxYearlySpend, currency)} / год`)}
+        />
+        <Stat
+          label={tx(locale, "Active", "Активные")}
+          value={stats.recurringCount}
+          detail={tx(locale, "recurring entries", "регулярных записей")}
+        />
+      </section>
+
+      <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1.75fr)_minmax(280px,1fr)]">
+        <Surface className="min-w-0 overflow-hidden" role="region" aria-labelledby="upcoming-dates-title">
+          <div className="flex items-baseline gap-2 border-b border-white/[0.06] px-5 py-3.5">
+            <h2 id="upcoming-dates-title" className="text-[15px] font-semibold text-white">{tx(locale, "Upcoming dates", "Ближайшие даты")}</h2>
+            <span className="text-xs text-zinc-500">{tx(locale, "next 2 weeks and overdue", "2 недели вперёд и просроченные")}</span>
+          </div>
+          <DashboardUpcomingTable items={stats.upcoming} workspaceId={workspace.id} locale={locale} />
+        </Surface>
+
+        <div className="grid gap-4">
+          <SidePanel title={tx(locale, "Spend by category", "Расходы по категориям")} note={`${formatMoney(spendTotal, currency)} / ${tx(locale, "month", "мес")}`}>
+            <SpendBars rows={stats.categoryBreakdown} currency={currency} total={spendTotal} />
+          </SidePanel>
+          {scope === "global" && stats.workspaceCostDominance.length > 1 ? (
+            <SidePanel title={tx(locale, "Spend by workspace", "Расходы по пространствам")} note={`${formatMoney(workspaceTotal, currency)} / ${tx(locale, "month", "мес")}`}>
+              <SpendBars rows={stats.workspaceCostDominance} currency={currency} total={workspaceTotal} />
+            </SidePanel>
+          ) : null}
         </div>
-        <DashboardUpcomingTable items={stats.upcoming} workspaceId={workspace.id} locale={locale} />
-      </Surface>
-
-      <section className={`grid gap-3 sm:grid-cols-2 ${showTrend ? "xl:grid-cols-5" : "xl:grid-cols-4"}`}>
-        <StatCard
-          label={locale === "ru" ? "Всего" : "Total"}
-          value={formatMoney(stats.totalExpenses, stats.displayCurrency)}
-          hint={locale === "ru" ? "Разовые + регулярные" : "Single + recurring"}
-          accent="#8b5cf6"
-          icon={<CircleDollarSign className="h-3.5 w-3.5" />}
-        />
-        <StatCard
-          label={locale === "ru" ? "Ежемесячные" : "Monthly recurring"}
-          value={formatMoney(stats.monthlyRecurring, stats.displayCurrency)}
-          hint={locale === "ru" ? `Ежемесячных записей: ${stats.monthlyRecurringCount}` : `${stats.monthlyRecurringCount} monthly entries`}
-          accent="#38bdf8"
-          icon={<Repeat className="h-3.5 w-3.5" />}
-        />
-        <StatCard
-          label={locale === "ru" ? "Примерно в месяц" : "Approx monthly"}
-          value={formatMoney(stats.approxMonthlySpend, stats.displayCurrency)}
-          hint={locale === "ru" ? "Нормализованные регулярные" : "Normalized recurring"}
-          accent="#06b6d4"
-          icon={<CalendarClock className="h-3.5 w-3.5" />}
-        />
-        <StatCard
-          label={locale === "ru" ? "Примерно в год" : "Approx yearly"}
-          value={formatMoney(stats.approxYearlySpend, stats.displayCurrency)}
-          hint={locale === "ru" ? `${formatMoney(stats.approxMonthlySpend, stats.displayCurrency)} / мес` : `${formatMoney(stats.approxMonthlySpend, stats.displayCurrency)} / month`}
-          accent="#f43f5e"
-          icon={<WalletCards className="h-3.5 w-3.5" />}
-        />
-        {showTrend ? <StatCard
-          label={locale === "ru" ? "Тренд за 1 месяц" : "1-month trend"}
-          value={`${stats.oneMonthChangePercent.toFixed(1)}%`}
-          hint={locale === "ru" ? `${formatMoney(stats.oneMonthChangeAmount, stats.displayCurrency)} влияние` : `${formatMoney(stats.oneMonthChangeAmount, stats.displayCurrency)} impact`}
-          accent="#a3e635"
-          icon={<Gauge className="h-3.5 w-3.5" />}
-        /> : null}
-      </section>
-
-      <section className={`grid gap-5 ${scope === "global" ? "xl:grid-cols-2" : "xl:grid-cols-2"}`}>
-        <DashboardCategorySplitChart data={stats.categoryItemSplit} locale={locale} />
-        <DashboardCategoryPressureChart data={stats.categoryBreakdown} currency={stats.displayCurrency} locale={locale} />
-        {scope === "global" ? <DashboardWorkspaceObjectDominanceChart data={stats.workspaceObjectDominance} locale={locale} /> : null}
-        {scope === "global" ? <DashboardWorkspaceCostDominanceChart data={stats.workspaceCostDominance} currency={stats.displayCurrency} locale={locale} /> : null}
-      </section>
+      </div>
     </div>
   );
 }

@@ -1,7 +1,13 @@
 import type { CategoryField } from "./types";
 
-// Category fields whose label (or id) names a server address or domain.
-const HOST_FIELD = /\b(ip|ipv4|ipv6|ip address|domain|domain name|domains|host|hostname|server ip)\b/i;
+/*
+ * The one detail worth showing under an entry's name: the server IP for Servers, the domain for Domains.
+ * Other categories show nothing. Categories are matched by name (English or Russian).
+ */
+const SERVERS = /^(servers?|серверы?|сервера)$/i;
+const DOMAINS = /^(domains?|домены?)$/i;
+const IP_FIELD = /\b(ip|ipv4|ipv6|ip address|server ip|host|hostname)\b/i;
+const DOMAIN_FIELD = /\b(domain|domain name)\b|домен/i;
 const IPV4 = /^(\d{1,3}\.){3}\d{1,3}(:\d+)?$/;
 const DOMAIN = /^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,}$/i;
 
@@ -9,20 +15,28 @@ function text(value: unknown) {
   return typeof value === "string" || typeof value === "number" ? String(value).trim() : "";
 }
 
-/**
- * The server IP or domain of an entry, taken from its category's IP/Domain/Host field.
- * Falls back to the first custom value that looks like an IPv4 address or a domain.
- */
-export function itemHost(customFields: Record<string, unknown> | null | undefined, fields: CategoryField[] = []) {
+export function hostKind(categoryName?: string | null): "ip" | "domain" | null {
+  const name = (categoryName || "").trim();
+  if (SERVERS.test(name)) return "ip";
+  if (DOMAINS.test(name)) return "domain";
+  return null;
+}
+
+/** IP of a server or domain of a domain entry, from its category's IP/Domain field (or a value that looks like one). */
+export function itemHost(customFields: Record<string, unknown> | null | undefined, fields: CategoryField[] = [], categoryName?: string | null) {
+  const kind = hostKind(categoryName);
+  if (!kind) return "";
   const values = customFields || {};
+  const fieldPattern = kind === "ip" ? IP_FIELD : DOMAIN_FIELD;
   for (const field of fields) {
-    if (!HOST_FIELD.test(field.label) && !HOST_FIELD.test(field.id.replace(/_/g, " "))) continue;
+    if (!fieldPattern.test(field.label) && !fieldPattern.test(field.id.replace(/_/g, " "))) continue;
     const value = text(values[field.id]);
     if (value) return value;
   }
+  const valuePattern = kind === "ip" ? IPV4 : DOMAIN;
   for (const raw of Object.values(values)) {
     const value = text(raw);
-    if (IPV4.test(value) || DOMAIN.test(value)) return value;
+    if (valuePattern.test(value)) return value;
   }
   return "";
 }
