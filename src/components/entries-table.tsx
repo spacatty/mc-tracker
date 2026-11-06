@@ -394,6 +394,8 @@ export function EntriesTable({
   const [serverErrors, setServerErrors] = useState<EntryBatchRowError[]>([]);
   const [saveMessage, setSaveMessage] = useState("");
   const [isPending, startTransition] = useTransition();
+  // Row delete asks once: the first click arms the button, the second deletes.
+  const [armedDelete, setArmedDelete] = useState<number | null>(null);
   const [isExportPending, startExportTransition] = useTransition();
   const rowCounter = useRef(items.length + 1);
   const saveLockedRef = useRef(false);
@@ -1091,7 +1093,7 @@ export function EntriesTable({
                         </td>
                         {visibleFields.map((field) => <td key={field.id} className={cn("px-3 text-muted-foreground", field.bold && "font-semibold text-foreground")} style={{ color: field.color || undefined }}>{field.type === "checkbox" ? (row.customFields?.[field.id] ? tx(locale, "Yes", "Да") : tx(locale, "No", "Нет")) : String(row.customFields?.[field.id] ?? "—")}</td>)}
                         {showCategory ? <td className="px-3 text-center"><Badge variant="secondary" style={{ color: category?.color || undefined }}><AppIcon name={category?.icon} className="mr-1.5 h-3.5 w-3.5" />{category?.name || tx(locale, "Uncategorized", "Без категории")}</Badge></td> : null}
-                        <td className="px-3 text-muted-foreground"><p className="font-medium text-foreground">{row.accountName || "—"}</p><p className="max-w-48 truncate text-xs">{row.vendorName || row.vendorUrl || ""}</p></td>
+                        <td className="px-3 text-muted-foreground"><p className="max-w-48 truncate font-medium text-foreground">{row.vendorName || row.vendorUrl || "—"}</p><p className="max-w-48 truncate text-xs">{row.accountName || ""}</p></td>
                         <td className="whitespace-nowrap px-3 text-center text-muted-foreground"><span>{entryDateLabel(row.billingStartAt, locale)}</span><span className="mx-1 text-subtle-foreground">→</span><span>{entryDateLabel(row.billingEndAt, locale)}</span></td>
                         <td className="whitespace-nowrap px-3 text-right font-semibold text-foreground">{formatMoney(Number(row.amountInput), row.currency)}</td>
                         <td className="px-3 text-center"><Badge variant={row.paymentType === "recurring" ? "success" : "secondary"}>{shortBillingLabel(row, locale)}</Badge></td>
@@ -1159,13 +1161,21 @@ export function EntriesTable({
                               type="button"
                               variant="ghost"
                               size="icon"
-                              className="h-7 w-7 text-red-300"
+                              className={cn(
+                                "h-7 w-7 hover:bg-red-500/15 hover:text-red-200",
+                                armedDelete === row.id && "w-auto bg-red-500/15 px-2 text-[11px] font-medium text-red-200",
+                              )}
                               disabled={isPending}
-                              onClick={() => runItemAction(deleteItemAction, row.id!)}
-                              title={tx(locale, "Delete", "Удалить")}
-                              aria-label={tx(locale, "Delete", "Удалить")}
+                              onBlur={() => setArmedDelete(null)}
+                              onClick={() => {
+                                if (armedDelete !== row.id) return setArmedDelete(row.id!);
+                                setArmedDelete(null);
+                                runItemAction(deleteItemAction, row.id!);
+                              }}
+                              title={armedDelete === row.id ? undefined : tx(locale, "Delete", "Удалить")}
+                              aria-label={armedDelete === row.id ? tx(locale, `Confirm deleting ${row.name}`, `Подтвердить удаление ${row.name}`) : tx(locale, "Delete", "Удалить")}
                             >
-                              <Trash2 className="h-4 w-4" />
+                              {armedDelete === row.id ? tx(locale, "Delete?", "Удалить?") : <Trash2 className="h-4 w-4" />}
                             </Button>
                           </>
                         ) : null}

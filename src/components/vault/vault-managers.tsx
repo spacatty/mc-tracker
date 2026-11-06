@@ -58,7 +58,7 @@ function DeleteButton({ label, inUse = 0, locale, onConfirm }: { label: string; 
         startTransition(onConfirm);
       }}
       className={cn(
-        "rounded-md p-1.5 text-zinc-500 transition hover:bg-red-500/15 hover:text-red-200",
+        "inline-grid h-7 min-w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-red-500/15 hover:text-red-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400/40",
         armed && "bg-red-500/15 px-2 text-[11px] font-medium text-red-200",
       )}
       aria-label={tx(locale, `Delete ${label}`, `Удалить ${label}`)}
@@ -150,8 +150,8 @@ export function VendorsManager({ workspaceId, vendors, canEdit, locale }: { work
                 <TableCell className="text-center tabular-nums">{vendor.entryCount || "—"}</TableCell>
                 <TableCell>
                   {canEdit ? (
-                    <div className="flex justify-end gap-0.5 opacity-60 transition group-hover:opacity-100">
-                      <button type="button" onClick={() => setEditing(vendor)} className="rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Edit", "Изменить")}>
+                    <div className="flex justify-end gap-0.5">
+                      <button type="button" onClick={() => setEditing(vendor)} className="inline-grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40" aria-label={tx(locale, "Edit", "Изменить")} title={tx(locale, "Edit", "Изменить")}>
                         <Pencil className="h-3.5 w-3.5" />
                       </button>
                       <DeleteButton
@@ -343,13 +343,13 @@ export function AccountsManager({
                   <TableCell>
                     <div className="flex justify-end gap-0.5">
                       {canEdit ? (
-                        <button type="button" onClick={() => setViewing(account)} className="rounded-md p-1.5 text-zinc-500 transition hover:bg-violet-500/15 hover:text-violet-200" aria-label={tx(locale, "View credentials", "Показать данные")} title={tx(locale, "View credentials", "Показать данные")}>
+                        <button type="button" onClick={() => setViewing(account)} className="inline-grid h-7 w-7 place-items-center rounded-md text-violet-300/80 transition hover:bg-violet-500/15 hover:text-violet-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40" aria-label={tx(locale, "View credentials", "Показать данные")} title={tx(locale, "View credentials", "Показать данные")}>
                           <KeyRound className="h-3.5 w-3.5" />
                         </button>
                       ) : null}
                       {canEdit ? (
-                        <div className="flex gap-0.5 opacity-60 transition group-hover:opacity-100">
-                          <button type="button" onClick={() => setEditing(account)} className="rounded-md p-1.5 text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-200" aria-label={tx(locale, "Edit", "Изменить")}>
+                        <div className="flex gap-0.5">
+                          <button type="button" onClick={() => setEditing(account)} className="inline-grid h-7 w-7 place-items-center rounded-md text-zinc-500 transition hover:bg-white/[0.06] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40" aria-label={tx(locale, "Edit", "Изменить")} title={tx(locale, "Edit", "Изменить")}>
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
                           <DeleteButton

@@ -239,7 +239,7 @@ export function DashboardUpcomingTable({
                       ) : item.vendorName
                     ) : <span className="text-zinc-500">—</span>}
                   </TableCell>
-                  <TableCell className="text-zinc-300">{item.accountName || "—"}</TableCell>
+                  <TableCell className="max-w-48 truncate text-zinc-300" title={item.accountName || undefined}>{item.accountName || "—"}</TableCell>
                   <TableCell className="text-right font-semibold text-white">{formatMoney(item.amount, item.currency)}</TableCell>
                   <TableCell className="py-2">
                     <div className="flex justify-end">
