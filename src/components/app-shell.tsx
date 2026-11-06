@@ -128,8 +128,10 @@ function WorkspaceSelect({
   locale,
   onSelected,
   placement = "bottom",
+  align = "start",
 }: {
   placement?: "top" | "bottom";
+  align?: "start" | "end";
   workspaces: Workspace[];
   currentWorkspaceId?: number;
   pathname: string;
@@ -172,28 +174,28 @@ function WorkspaceSelect({
           type="button"
           title={collapsed ? (currentWorkspace ? `${t(locale, "workspace")}: ${currentWorkspace.name}` : t(locale, "workspace")) : undefined}
           className={cn(
-            // Same box as the search bar below it: one control family in the sidebar header.
-            "group flex h-8 w-full min-w-0 items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-left text-xs text-zinc-300 transition hover:border-white/[0.12] hover:text-zinc-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:border-white/[0.12]",
+            // Plain text trigger: no box, just a tint on hover or while open.
+            "group flex h-8 min-w-0 max-w-full items-center gap-2 rounded-md px-1.5 text-left text-[13px] font-medium text-zinc-200 transition hover:bg-white/[0.05] hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30 data-[state=open]:bg-white/[0.05]",
             collapsed && "w-8 justify-center px-0",
           )}
         >
-          <span className="grid h-3.5 w-3.5 shrink-0 place-items-center text-[12px] leading-none">
+          <span className="grid h-5 w-5 shrink-0 place-items-center rounded-[5px] bg-gradient-to-br from-violet-500/25 to-sky-500/15 text-[11px] leading-none">
             {currentWorkspace?.emoji || "📦"}
           </span>
           {!collapsed ? (
             <>
-              <span className="min-w-0 flex-1 truncate">{currentWorkspace?.name || t(locale, "workspace")}</span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-600 transition group-hover:text-zinc-400 group-data-[state=open]:rotate-180" />
+              <span className="min-w-0 truncate">{currentWorkspace?.name || t(locale, "workspace")}</span>
+              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-zinc-500 transition group-hover:text-zinc-300 group-data-[state=open]:rotate-180" />
             </>
           ) : null}
         </button>
       </PopoverTrigger>
       {/* Same look as the Quick Capture suggestion menu: tinted glass, small caps header, tiled rows. */}
       <PopoverContent
-        align="start"
+        align={align}
         side={collapsed ? "right" : placement}
-        sideOffset={4}
-        className="suggest-in w-[200px] overflow-hidden rounded-xl border-white/10 bg-[#18181c]/95 p-0 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)] backdrop-blur-xl"
+        sideOffset={6}
+        className="suggest-in w-[248px] overflow-hidden rounded-xl border-white/10 bg-[#18181c] p-0 shadow-[0_24px_60px_-20px_rgba(0,0,0,0.9)]"
       >
         <Command shouldFilter={false} className="rounded-none bg-transparent">
           <div className="flex items-center gap-2 px-3 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-zinc-500">
@@ -206,7 +208,7 @@ function WorkspaceSelect({
                 value={query}
                 onValueChange={setQuery}
                 placeholder={t(locale, "searchWorkspace")}
-                className="h-7 w-full rounded-md border border-white/[0.06] bg-white/[0.03] px-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-white/15"
+                className="h-7 w-full rounded-md bg-white/[0.04] px-2 text-xs text-zinc-100 outline-none ring-violet-400/40 placeholder:text-zinc-600 focus:ring-1"
               />
             </div>
           ) : null}
@@ -220,11 +222,11 @@ function WorkspaceSelect({
                   value={`${workspace.name}-${workspace.id}`}
                   onSelect={() => selectWorkspace(workspace.id)}
                   title={workspace.accessRole !== "owner" ? `${workspace.ownerUsername ? `${workspace.ownerUsername} · ` : ""}${workspace.accessRole}` : undefined}
-                  className={cn("h-8 gap-2 rounded-lg px-1.5 py-0", current && "text-zinc-50")}
+                  className={cn("h-8 gap-2.5 rounded-md px-2 py-0 text-[13px]", current && "text-zinc-50")}
                 >
-                  <span className={cn("grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03] text-xs", current && "border-white/15 bg-white/[0.08]")}>{workspace.emoji}</span>
+                  <span className="grid h-5 w-5 shrink-0 place-items-center text-[13px] leading-none">{workspace.emoji}</span>
                   <span className="min-w-0 flex-1 truncate">{workspace.name}</span>
-                  {current ? <Check className="h-3.5 w-3.5 shrink-0 text-zinc-400" /> : workspace.accessRole !== "owner" ? <Users className="h-3 w-3 shrink-0 text-zinc-600" /> : null}
+                  {current ? <Check className="h-3.5 w-3.5 shrink-0 text-violet-300" /> : workspace.accessRole !== "owner" ? <Users className="h-3 w-3 shrink-0 text-zinc-600" /> : null}
                 </CommandItem>
               );
             })}
@@ -234,16 +236,16 @@ function WorkspaceSelect({
           <Link
             href={`/app/folders${currentWorkspace ? `?workspace=${currentWorkspace.id}` : ""}`}
             onClick={() => { setOpen(false); onSelected?.(); }}
-            className="flex h-8 w-full items-center gap-2 rounded-lg px-1.5 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
+            className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100"
           >
-            <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03]"><Settings className="h-3 w-3" /></span>
+            <span className="grid h-5 w-5 shrink-0 place-items-center"><Settings className="h-3.5 w-3.5" /></span>
             <span className="truncate">{t(locale, "shareAndSpace")}</span>
           </Link>
           <JoinWorkspaceDialog
             locale={locale}
             trigger={(
-              <button type="button" className="flex h-8 w-full items-center gap-2 rounded-lg px-1.5 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100">
-                <span className="grid h-6 w-6 shrink-0 place-items-center rounded-md border border-white/[0.06] bg-white/[0.03]"><UserPlus className="h-3 w-3" /></span>
+              <button type="button" className="flex h-8 w-full items-center gap-2.5 rounded-md px-2 text-left text-[13px] text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-100">
+                <span className="grid h-5 w-5 shrink-0 place-items-center"><UserPlus className="h-3.5 w-3.5" /></span>
                 <span className="truncate">{t(locale, "joinWorkspace")}</span>
               </button>
             )}
@@ -504,6 +506,18 @@ export function AppShell({
     });
   }
 
+  const activeCategory = activeCategoryId ? workspaceCategories.find((category) => String(category.id) === activeCategoryId) : undefined;
+  const currentPage =
+    activeCategory?.name ||
+    [...primaryNav, ...vaultNav, ...workspaceItems, ...extraItems]
+      .concat([
+        { href: "/app/notifications", label: t(locale, "notifications"), icon: "Bell", accent: "" },
+        { href: "/app/categories", label: t(locale, "manageCategories"), icon: "Tags", accent: "" },
+        { href: "/app/settings", label: t(locale, "settings"), icon: "Settings", accent: "" },
+        { href: "/app/admin", label: t(locale, "admin"), icon: "Shield", accent: "" },
+      ])
+      .find((item) => (item.href === "/app" ? pathname === "/app" : pathname.startsWith(item.href)))?.label;
+
   return (
     <CaptureProvider workspaceId={currentWorkspace?.id || null} locale={locale}>
     <TableStyleSync />
@@ -535,6 +549,9 @@ export function AppShell({
             <BrandWordmark />
           </Link>
           <div className="flex items-center gap-2">
+            <button type="button" onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))} aria-label={locale === "ru" ? "Поиск" : "Search"} className="rounded-md p-2 text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60">
+              <Search className="h-4 w-4" />
+            </button>
             <Link href={withWorkspace("/app/notifications", currentWorkspace?.id || null)} aria-label={t(locale, "notifications")} className="relative rounded-md p-2 text-muted-foreground transition hover:bg-white/[0.06] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-focus-ring/60">
               <Bell className="h-4 w-4" />
               {unreadCount ? <span className="absolute -right-0.5 -top-0.5 rounded-[4px] bg-red-500/90 px-1 text-[10px] font-semibold leading-4 text-white">{unreadCount}</span> : null}
@@ -710,40 +727,39 @@ export function AppShell({
           </nav>
         </div>
 
-        <div className={cn("flex shrink-0 flex-col gap-1.5 border-t border-white/[0.06] px-3 py-2.5", collapsed && "items-center px-0")}>
+        <div className={cn("shrink-0 border-t border-white/[0.06] px-3 py-2", collapsed && "flex justify-center px-0")}>
+          <ProfileMenu user={user} locale={locale} collapsed={collapsed} workspaceId={currentWorkspace?.id || null} currentHref={currentHref} />
+        </div>
+      </aside>
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="sticky top-0 z-30 hidden h-12 shrink-0 items-center gap-1.5 border-b border-white/[0.06] bg-background/85 px-4 backdrop-blur md:flex xl:px-6">
           <WorkspaceSelect
             workspaces={workspaces}
             currentWorkspaceId={currentWorkspace?.id}
             pathname={pathname}
             searchParams={searchParams}
-            collapsed={collapsed}
+            collapsed={false}
             locale={locale}
-            placement="top"
           />
+          {currentPage ? (
+            <>
+              <span className="text-zinc-700">/</span>
+              <span className="truncate px-1.5 text-[13px] text-zinc-400">{currentPage}</span>
+            </>
+          ) : null}
           <button
             type="button"
             onClick={() => window.dispatchEvent(new Event(OPEN_PALETTE_EVENT))}
-            title={collapsed ? (locale === "ru" ? "Поиск (Ctrl /)" : "Search (Ctrl /)") : undefined}
             aria-label={locale === "ru" ? "Поиск" : "Search"}
-            className={cn(
-              "group flex h-8 w-full items-center gap-2 rounded-lg border border-white/[0.06] bg-white/[0.03] px-2.5 text-left text-xs text-zinc-500 transition hover:border-white/[0.12] hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/30",
-              collapsed && "w-8 justify-center px-0",
-            )}
+            className="ml-auto flex h-8 w-full max-w-[300px] items-center gap-2 rounded-lg bg-white/[0.04] px-2.5 text-left text-[13px] text-zinc-500 transition hover:bg-white/[0.07] hover:text-zinc-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
           >
             <Search className="h-3.5 w-3.5 shrink-0" />
-            {!collapsed ? (
-              <>
-                <span className="flex-1 truncate">{locale === "ru" ? "Поиск" : "Search"}</span>
-                <Kbd className="h-4 min-w-4 text-[9px]">Ctrl /</Kbd>
-              </>
-            ) : null}
+            <span className="flex-1 truncate">{locale === "ru" ? "Поиск записей, поставщиков…" : "Search entries, vendors…"}</span>
+            <Kbd className="h-4 min-w-4 text-[9px]">Ctrl /</Kbd>
           </button>
-        </div>
-        <div className={cn("shrink-0 border-t border-white/[0.06] px-3 py-2", collapsed && "flex justify-center px-0")}>
-          <ProfileMenu user={user} locale={locale} collapsed={collapsed} workspaceId={currentWorkspace?.id || null} currentHref={currentHref} />
-        </div>
-      </aside>
-      <main id="main-content" className="min-w-0 flex-1 px-3 py-16 sm:px-5 md:px-6 md:py-6 xl:px-8">{children}</main>
+        </header>
+        <main id="main-content" className="min-w-0 flex-1 px-3 py-16 sm:px-5 md:px-6 md:py-6 xl:px-8">{children}</main>
+      </div>
     </div>
     </CaptureProvider>
   );
