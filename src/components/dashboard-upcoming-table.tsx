@@ -326,7 +326,7 @@ export function DashboardUpcomingTable({
 
       {/* Fixed column widths so names truncate to one line instead of pushing the table sideways. */}
       <div className="hidden min-h-0 flex-1 flex-col md:flex">
-        <Table bare fill className="table-fixed">
+        <Table bare fill className={cn("table-fixed", visible.length > 0 && "mc-table-with-spacer")}>
           <colgroup>
             <col />
             <col className="w-[18%]" />
@@ -394,6 +394,11 @@ export function DashboardUpcomingTable({
               </TableRow>
             ))}
             {!visible.length ? <TableEmpty colSpan={6} icon={emptyIcon} title={emptyTitle} action={emptyAction} /> : null}
+            {visible.length ? (
+              <tr data-spacer aria-hidden="true">
+                <td colSpan={6} />
+              </tr>
+            ) : null}
           </TableBody>
           {visible.length ? (
             <TableFooter sticky>

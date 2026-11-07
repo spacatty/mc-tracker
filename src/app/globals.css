@@ -244,7 +244,7 @@ input[type="date"]::-webkit-calendar-picker-indicator {
    layer on every cell, so sticky cells keep their opaque bg-surface underneath and nothing scrolls through them. */
 @layer components {
   .mc-table > tbody > tr > td { transition: background-color 150ms, background-image 150ms; }
-  .mc-table > tbody > tr:not([data-empty]):hover > td {
+  .mc-table > tbody > tr:not([data-empty], [data-spacer]):hover > td {
     background-image: linear-gradient(rgb(255 255 255 / 0.03), rgb(255 255 255 / 0.03));
   }
   .mc-table > tbody > tr[data-selected] > td,
@@ -272,6 +272,13 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 }
 
 /* Table styles, picked from the entries toolbar and stored on <html data-table-style>. "current" sets nothing. */
+/* Keep totals at the foot of a filled table without stretching its data rows. */
+.mc-table-with-spacer { height: 100%; }
+.mc-table-with-spacer > thead > tr,
+.mc-table-with-spacer > tbody > tr,
+.mc-table-with-spacer > tfoot > tr { height: 1px; }
+.mc-table-with-spacer > tbody > tr[data-spacer] { height: auto; }
+
 /* Sheet: spreadsheet gridlines, compact rows, plain-case headers. Applies to .mc-table tables inside <main>. */
 [data-table-style="sheet"] main .mc-table { font-size: 12px; font-variant-numeric: tabular-nums; }
 [data-table-style="sheet"] main .mc-table > thead th,
@@ -283,3 +290,12 @@ input[type="date"]::-webkit-calendar-picker-indicator {
 /* Footer (totals) in the same grid: compact row, gridlines, header-tinted background. */
 [data-table-style="sheet"] main .mc-table > tfoot td,
 [data-table-style="sheet"] main .mc-table > tfoot th { border: 1px solid rgb(255 255 255 / 0.05); padding-top: 0.25rem; padding-bottom: 0.25rem; height: 2rem; font-size: 12px; background-color: color-mix(in srgb, var(--surface) 95%, white); }
+
+/* The layout spacer is not an entry: no gridlines, padding, or hover treatment in either style. */
+.mc-table.mc-table-with-spacer > tbody > tr[data-spacer] > td,
+[data-table-style="sheet"] main .mc-table > tbody > tr[data-spacer] > td {
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: none;
+}
