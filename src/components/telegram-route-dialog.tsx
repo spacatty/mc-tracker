@@ -165,8 +165,8 @@ export function TelegramRouteCardActions({
             title={tx(locale, `Delete route “${name}”?`, `Удалить маршрут «${name}»?`)}
             description={tx(
               locale,
-              "Categories that send reminders here will stop using it. This cannot be undone.",
-              "Категории, которые отправляют сюда напоминания, перестанут его использовать. Это действие нельзя отменить.",
+              "Notification units using this route will stop delivering here. This cannot be undone.",
+              "Правила уведомлений больше не смогут отправлять сообщения по этому маршруту. Это действие нельзя отменить.",
             )}
             confirmLabel={t(locale, "delete")}
             cancelLabel={tx(locale, "Cancel", "Отмена")}

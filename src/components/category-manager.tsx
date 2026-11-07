@@ -1,17 +1,16 @@
 "use client";
 
-import { Bell, Plus, Save, SearchX, Send, Trash2 } from "lucide-react";
+import { Plus, Save, SearchX, Trash2 } from "lucide-react";
 import { useId, useState } from "react";
 import { saveCategoryAction } from "@/app/actions";
 import type { Locale } from "@/lib/i18n";
 import { count, t } from "@/lib/i18n";
-import type { Category, CategoryField, NotificationChannel } from "@/lib/types";
+import type { Category, CategoryField } from "@/lib/types";
 import { cn, displayDate } from "@/lib/utils";
 import { defaultIdentifierField } from "@/lib/item-host";
 import { CategoryMark } from "./host-line";
 import { IconPicker } from "./icon-picker";
 import { Button } from "./ui/button";
-import { Checkbox } from "./ui/checkbox";
 import { Field, Fieldset } from "./ui/field";
 import { CheckboxInput } from "./ui/hidden-input";
 import { Input, SearchInput } from "./ui/input";
@@ -185,84 +184,13 @@ function FieldEditor({
   );
 }
 
-function NotificationPicker({
-  channels,
-  selectedIds,
-  locale,
-}: {
-  channels?: NotificationChannel[];
-  selectedIds: number[];
-  locale: Locale;
-}) {
-  const id = useId();
-  const [selected, setSelected] = useState(() => new Set(selectedIds));
-  const routes = channels || [];
-
-  function toggle(channelId: number) {
-    setSelected((current) => {
-      const next = new Set(current);
-      if (next.has(channelId)) next.delete(channelId);
-      else next.add(channelId);
-      return next;
-    });
-  }
-
-  if (!routes.length) {
-    return (
-      <p className="rounded-lg border border-dashed border-white/10 px-4 py-3 text-xs leading-5 text-zinc-500">
-        {tx(
-          locale,
-          "No notification routes yet. Add Telegram bot/topic routes in Settings, then assign them here.",
-          "Маршрутов уведомлений пока нет. Добавьте Telegram-маршруты в настройках, а затем выберите их здесь.",
-        )}
-      </p>
-    );
-  }
-
-  return (
-    <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-      {[...selected].map((channelId) => <input key={channelId} type="hidden" name="notificationChannelIds" value={channelId} />)}
-      {routes.map((channel) => {
-        const checked = selected.has(channel.id);
-        const checkboxId = `${id}-${channel.id}`;
-        return (
-          <label
-            key={channel.id}
-            htmlFor={checkboxId}
-            className={cn(
-              "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition",
-              checked ? "border-violet-400/30 bg-violet-500/[0.05]" : "border-white/[0.06] bg-white/[0.02] hover:border-white/10 hover:bg-white/[0.04]",
-            )}
-          >
-            <Checkbox id={checkboxId} checked={checked} onCheckedChange={() => toggle(channel.id)} className="mt-0.5" />
-            <span className="mt-0.5 shrink-0 text-violet-300" aria-hidden="true">
-              {channel.type === "website" ? <Bell className="h-4 w-4" /> : <Send className="h-4 w-4" />}
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-[13px] font-medium text-zinc-100">{channel.title}</span>
-              <span className="mt-0.5 block text-[11.5px] text-zinc-500">
-                {channel.type === "website" ? tx(locale, "Website inbox", "Входящие на сайте") : `${tx(locale, "Telegram chat", "Telegram-чат")} ${channel.chatId || "-"}`}
-                {channel.topicId ? ` · ${tx(locale, "topic", "тема")} ${channel.topicId}` : channel.type === "telegram" ? ` · ${tx(locale, "main chat", "основной чат")}` : ""}
-              </span>
-            </span>
-          </label>
-        );
-      })}
-    </div>
-  );
-}
-
 function CategoryForm({
   category,
-  channels,
-  selectedNotificationIds = [],
   workspaceId,
   locale = "en",
   takenNames = [],
 }: {
   category?: Category;
-  channels?: NotificationChannel[];
-  selectedNotificationIds?: number[];
   workspaceId: number;
   locale?: Locale;
   /** Names already used by the workspace's other categories (lower-cased), to block duplicates before saving. */
@@ -354,13 +282,6 @@ function CategoryForm({
         </NativeSelect>
       </Fieldset>
 
-      <Fieldset
-        legend={tx(locale, "Notification routes", "Маршруты уведомлений")}
-        description={tx(locale, "Pick the website inbox or Telegram routes that get this category’s reminders.", "Выберите входящие на сайте или Telegram-маршруты для напоминаний этой категории.")}
-      >
-        <NotificationPicker channels={channels} selectedIds={selectedNotificationIds} locale={locale} />
-      </Fieldset>
-
       <div className="flex justify-end border-t border-white/[0.06] pt-4">
         <Button type="submit" size="sm" disabled={nameTaken || !name.trim()}>
           {category ? <Save className="h-3.5 w-3.5" aria-hidden="true" /> : <Plus className="h-3.5 w-3.5" aria-hidden="true" />}
@@ -373,15 +294,11 @@ function CategoryForm({
 
 export function CategoryManager({
   categories,
-  channels,
-  selectedByCategory,
   workspaceId,
   locale = "en",
   initialSelected,
 }: {
   categories: Category[];
-  channels?: NotificationChannel[];
-  selectedByCategory: Record<number, number[]>;
   workspaceId: number;
   locale?: Locale;
   /** A category id, or "new" for the empty form; defaults to the first category. */
@@ -468,8 +385,6 @@ export function CategoryManager({
         <CategoryForm
           key={current?.id ?? "new"}
           category={current}
-          channels={channels}
-          selectedNotificationIds={current ? selectedByCategory[current.id] || [] : []}
           workspaceId={workspaceId}
           locale={locale}
           takenNames={categories.filter((candidate) => candidate.id !== current?.id).map((candidate) => candidate.name.trim().toLowerCase())}

@@ -26,9 +26,10 @@ import type {
   WorkspaceRole,
   WebsiteNotification,
 } from "./types";
+import { DEFAULT_TEMPLATE, renderMessage, sampleMessageValues } from "./notification-config";
 import { ensureSupportedCurrency } from "./currencies";
 import { addBillingPeriod, normalizeMonthlyAmount, nowIso, slugify } from "./utils";
-import { itemHost, titleWithHost } from "./item-host";
+import { itemHost } from "./item-host";
 import {
   buildEntrySignature,
   categoryKey,
@@ -1089,7 +1090,6 @@ export function upsertCategoryForWorkspace(formData: FormData, workspaceId: numb
       id,
       workspaceId,
     );
-    saveCategoryNotificationChannels(id, workspaceId, formData.getAll("notificationChannelIds").map(Number));
     return id;
   }
 
@@ -1100,18 +1100,7 @@ export function upsertCategoryForWorkspace(formData: FormData, workspaceId: numb
     )
     .run(workspaceId, name, icon, color, Number(maxSort.sort || 0) + 1, JSON.stringify(fields), identifierField, now, now);
   const categoryId = Number(result.lastInsertRowid);
-  saveCategoryNotificationChannels(categoryId, workspaceId, formData.getAll("notificationChannelIds").map(Number));
   return categoryId;
-}
-
-function saveCategoryNotificationChannels(categoryId: number, workspaceId: number, channelIds: number[]) {
-  const db = getDb();
-  db.prepare("DELETE FROM category_notification_channels WHERE category_id = ?").run(categoryId);
-  const validChannelIds = new Set(
-    (db.prepare("SELECT id FROM notification_channels WHERE workspace_id = ?").all(workspaceId) as DbRow[]).map((row) => Number(row.id)),
-  );
-  const insert = db.prepare("INSERT OR IGNORE INTO category_notification_channels (category_id, channel_id) VALUES (?, ?)");
-  channelIds.filter((channelId) => validChannelIds.has(channelId)).forEach((channelId) => insert.run(categoryId, channelId));
 }
 
 export function listCategoryNotificationChannelIds(categoryId: number) {
@@ -3358,21 +3347,11 @@ export function deleteNotificationChannelForWorkspace(id: number, workspaceId: n
 export async function sendTelegramTest(channelId: number) {
   const channel = getDb().prepare("SELECT * FROM notification_channels WHERE id = ? AND type = 'telegram'").get(channelId) as DbRow | undefined;
   if (!channel) throw new Error("Telegram channel not found.");
-  const sampleMessage = [
-    "🧪 <b>MC Tracker Test Notification</b>",
-    "<b>Macy base</b> <i>(Servers)</i>",
-    "",
-    "📅 <b>Status:</b> Due in 12 days",
-    "🗓 <b>Due date:</b> 13/05/2026",
-    "💰 <b>Amount:</b> 85 USD",
-    "👤 <b>Account:</b> amelle",
-    "🏷 <b>Vendor:</b> inferno",
-    '🔗 <b>URL:</b> <a href="https://example-host.com/server/macy-base">https://example-host.com/server/macy-base</a>',
-  ].join("\n");
+  const sampleMessage = renderMessage(DEFAULT_TEMPLATE, sampleMessageValues());
   await sendTelegramMessage(mapNotificationChannel(channel), sampleMessage);
 }
 
-async function sendTelegramMessage(channel: NotificationChannel, text: string) {
+export async function sendTelegramMessage(channel: NotificationChannel, text: string) {
   const payload: Record<string, string | number> = {
     chat_id: channel.chatId,
     text,
@@ -3384,11 +3363,15 @@ async function sendTelegramMessage(channel: NotificationChannel, text: string) {
     method: "POST";
     headers: { "Content-Type": string };
     body: string;
+    headersTimeout: number;
+    bodyTimeout: number;
     dispatcher?: InstanceType<typeof ProxyAgent>;
   } = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
+    headersTimeout: 20_000,
+    bodyTimeout: 20_000,
   };
   if (channel.proxyUrl) {
     options.dispatcher = new ProxyAgent(channel.proxyUrl);
@@ -3404,157 +3387,9 @@ async function sendTelegramMessage(channel: NotificationChannel, text: string) {
   }
 }
 
-function escapeHtml(value: string) {
-  return value
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function telegramValue(value: string | number | null | undefined, fallback = "—") {
-  const normalized = String(value ?? "").trim();
-  return escapeHtml(normalized || fallback);
-}
-
-function telegramVendorLink(url: string) {
-  const normalized = url.trim();
-  if (!normalized) return "—";
-  if (/^https?:\/\//i.test(normalized)) {
-    const safeUrl = escapeHtml(normalized);
-    return `<a href="${safeUrl}">${safeUrl}</a>`;
-  }
-  return telegramValue(normalized);
-}
-
-function resolveReminderDays(diffDays: number) {
-  if (diffDays <= 0) return 0;
-  if (diffDays <= 1) return 1;
-  if (diffDays <= 3) return 3;
-  if (diffDays <= 7) return 7;
-  if (diffDays <= 14) return 14;
-  return null;
-}
-
 export async function runNotificationCron() {
-  const db = getDb();
-  const today = dayStart(new Date());
-  const items = listItems().filter((item) => item.paymentType === "recurring" && item.billingEndAt && item.categoryId && item.workspaceId);
-  let sent = 0;
-  let skipped = 0;
-  type NotificationCandidate = {
-    item: PaymentItem;
-    channel: NotificationChannel;
-    target: Date;
-    targetKey: string;
-    diffDays: number;
-    reminderDays: number;
-  };
-  const candidates = new Map<string, NotificationCandidate>();
-
-  for (const item of items) {
-    const target = currentDueDate(item);
-    if (!target) continue;
-    const diffDays = daysBetween(today, target);
-    const reminderDays = resolveReminderDays(diffDays);
-    if (reminderDays === null || !item.categoryId || !item.workspaceId) continue;
-
-    const channels = (db
-      .prepare(
-        `SELECT DISTINCT notification_channels.*
-         FROM notification_channels
-         LEFT JOIN category_notification_channels ON notification_channels.id = category_notification_channels.channel_id
-         WHERE notification_channels.workspace_id = ?
-           AND (notification_channels.type = 'website' OR category_notification_channels.category_id = ?)`,
-      )
-      .all(item.workspaceId, item.categoryId) as DbRow[]).map(mapNotificationChannel);
-    const dueKey = target.toISOString().slice(0, 10);
-    const targetKey = diffDays < 0 ? `${dueKey}:overdue:${today.toISOString().slice(0, 10)}` : dueKey;
-
-    for (const channel of channels) {
-      const candidateKey = `${item.id}:${channel.id}:${targetKey}`;
-      const previous = candidates.get(candidateKey);
-      const candidate: NotificationCandidate = {
-        item,
-        channel,
-        target,
-        targetKey,
-        diffDays,
-        reminderDays,
-      };
-      if (!previous || candidate.reminderDays < previous.reminderDays) {
-        candidates.set(candidateKey, candidate);
-      }
-    }
-  }
-
-  for (const candidate of candidates.values()) {
-    const { item, channel, target, targetKey, diffDays, reminderDays } = candidate;
-    const isDueToday = diffDays === 0;
-    const isOverdue = diffDays < 0;
-    const alreadyDelivered = db
-      .prepare(
-        `SELECT MIN(reminder_days) as reminder_days
-         FROM notification_deliveries
-         WHERE item_id = ? AND channel_id = ? AND target_date = ?`,
-      )
-      .get(item.id, channel.id, targetKey) as DbRow | undefined;
-    const deliveredReminderDays = Number(alreadyDelivered?.reminder_days ?? NaN);
-    if (Number.isFinite(deliveredReminderDays) && deliveredReminderDays <= reminderDays) {
-      skipped += 1;
-      continue;
-    }
-
-    try {
-      db.prepare(
-        "INSERT INTO notification_deliveries (item_id, category_id, channel_id, reminder_days, target_date, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-      ).run(item.id, item.categoryId, channel.id, reminderDays, targetKey, nowIso());
-    } catch {
-      skipped += 1;
-      continue;
-    }
-
-    const itemTitle = titleWithHost(item.name, hostForItem(item));
-    const title = isOverdue
-        ? `Hey dude, ${itemTitle} is missing payment`
-        : isDueToday
-          ? `${itemTitle} payment is due today`
-          : `${itemTitle} payment is due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
-    const body = `${item.name} (${item.categoryName || "category"}) is due on ${target.toLocaleDateString("en-GB")}. Amount: ${item.amount} ${item.currency}.`;
-
-    if (channel.type === "website") {
-      db.prepare("INSERT INTO notifications (workspace_id, title, body, item_id, category_id, created_at) VALUES (?, ?, ?, ?, ?, ?)").run(
-        item.workspaceId,
-        title,
-        body,
-        item.id,
-        item.categoryId,
-        nowIso(),
-      );
-    } else {
-      const dueLabel = isOverdue
-        ? `Overdue by ${Math.abs(diffDays)} day${Math.abs(diffDays) === 1 ? "" : "s"}`
-        : isDueToday
-          ? "Due today"
-          : `Due in ${diffDays} day${diffDays === 1 ? "" : "s"}`;
-      const telegramMessage = [
-        "🔔 <b>Payment reminder</b>",
-        `<b>${telegramValue(itemTitle)}</b> <i>(${telegramValue(item.categoryName || "category")})</i>`,
-        "",
-        `📅 <b>Status:</b> ${escapeHtml(dueLabel)}`,
-        `🗓 <b>Due date:</b> ${escapeHtml(target.toLocaleDateString("en-GB"))}`,
-        `💰 <b>Amount:</b> ${telegramValue(item.amount)} ${telegramValue(item.currency)}`,
-        `👤 <b>Account:</b> ${telegramValue(item.accountName)}`,
-        `🏷 <b>Vendor:</b> ${telegramValue(item.vendorName)}`,
-        `🔗 <b>URL:</b> ${telegramVendorLink(item.vendorUrl)}`,
-      ].join("\n");
-      await sendTelegramMessage(channel, telegramMessage);
-    }
-    sent += 1;
-  }
-
-  return { sent, skipped };
+  const { runNotificationCenter } = await import("./notification-center");
+  return runNotificationCenter();
 }
 
 export async function testExternalConnection(url: string) {

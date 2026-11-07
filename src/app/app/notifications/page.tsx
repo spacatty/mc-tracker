@@ -1,3 +1,5 @@
+import { NotificationCenter } from "@/components/notification-center";
+import { notificationCenterData } from "@/lib/notification-center";
 import { Archive, CheckCheck, Inbox } from "lucide-react";
 import { deleteReadNotificationsAction, markAllNotificationsReadAction } from "@/app/actions";
 import { ClearInboxButton, NotificationsList } from "@/components/notifications-list";
@@ -36,7 +38,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   const ru = locale === "ru";
 
   return (
-    <div className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col gap-6">
+    <NotificationCenter data={notificationCenterData(user.id)} workspaceId={workspace.id} locale={locale} unreadCount={unreadNotifications.length} inbox={<>
       {!notifications.length ? (
         <EmptyState
           icon={<Inbox />}
@@ -69,6 +71,6 @@ export default async function NotificationsPage({ searchParams }: { searchParams
           )}
         />
       )}
-    </div>
+    </>} />
   );
 }

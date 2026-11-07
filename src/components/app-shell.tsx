@@ -541,7 +541,7 @@ export function AppShell({
     activeCategory?.name ||
     [...primaryNav, ...vaultNav, ...workspaceItems, ...extraItems]
       .concat([
-        { href: "/app/notifications", label: t(locale, "notifications"), icon: "Bell", accent: "" },
+        { href: "/app/notifications", label: t(locale, "notificationsCenter"), icon: "Bell", accent: "" },
         { href: "/app/categories", label: t(locale, "categories"), icon: "Tags", accent: "" },
         { href: "/app/settings", label: t(locale, "settings"), icon: "Settings", accent: "" },
         { href: "/app/admin", label: t(locale, "admin"), icon: "Shield", accent: "" },
@@ -557,7 +557,7 @@ export function AppShell({
         ...primaryNav,
         ...workspaceItems,
         ...extraItems,
-        { href: "/app/notifications", label: t(locale, "notifications"), icon: "Bell", accent: "" },
+        { href: "/app/notifications", label: t(locale, "notificationsCenter"), icon: "Bell", accent: "" },
         { href: "/app/categories", label: t(locale, "categories"), icon: "Tags", accent: "" },
         { href: "/app/settings", label: t(locale, "settings"), icon: "Settings", accent: "" },
         ...(user.role === "admin" || user.role === "superadmin" ? [{ href: "/app/admin", label: t(locale, "admin"), icon: "Shield", accent: "" }] : []),
@@ -710,14 +710,14 @@ export function AppShell({
               ))}
               <Link
                 href={withWorkspace("/app/notifications", currentWorkspace?.id || null)}
-                title={collapsed ? t(locale, "notifications") : undefined}
+                title={collapsed ? t(locale, "notificationsCenter") : undefined}
                 className={sidebarRowClass(pathname === "/app/notifications", collapsed)}
               >
                 <span className="relative shrink-0">
                   <Bell className="h-4 w-4 text-rose-300/75 transition group-hover:brightness-125" />
                   {collapsed && unreadCount ? <span className="absolute -right-0.5 -top-0.5 h-1.5 w-1.5 rounded-full bg-red-400" aria-hidden="true" /> : null}
                 </span>
-                {!collapsed ? <span className="flex-1 truncate">{t(locale, "notifications")}</span> : null}
+                {!collapsed ? <span className="flex-1 truncate">{t(locale, "notificationsCenter")}</span> : null}
                 {!collapsed && unreadCount ? (
                   <span className="rounded-md bg-red-500/10 px-1.5 text-[11px] font-semibold leading-[18px] tabular-nums text-red-200 ring-1 ring-inset ring-red-400/20">{unreadCount}</span>
                 ) : null}

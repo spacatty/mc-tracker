@@ -241,12 +241,12 @@ export function TableStyleToggle({ locale }: { locale: Locale }) {
     save(STYLE_KEY, next);
   }
   return (
-    <div className="flex items-center justify-between gap-3 px-2 py-1.5">
+    <div className="space-y-2 px-2 py-2">
       <span className="flex items-center gap-2 text-[13px] text-zinc-300">
         <Rows3 className="h-3.5 w-3.5 text-zinc-500" />
         {tx(locale, "Tables", "Таблицы")}
       </span>
-      <span className="inline-flex gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
+      <span className="grid w-full grid-cols-2 gap-0.5 rounded-lg bg-white/[0.04] p-0.5">
         {STYLES.map((option) => (
           <button
             key={option}
@@ -255,7 +255,7 @@ export function TableStyleToggle({ locale }: { locale: Locale }) {
             aria-pressed={style === option}
             title={styleHint(option, locale)}
             className={cn(
-              "h-6 rounded-md px-2 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
+              "h-7 min-w-0 rounded-md px-2 text-[11px] font-semibold transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40",
               style === option ? "bg-white/[0.08] text-white" : "text-zinc-400 hover:text-zinc-200",
             )}
           >

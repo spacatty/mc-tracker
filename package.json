@@ -10,7 +10,8 @@
     "build": "next build",
     "start": "next start -p 4271",
     "lint": "eslint",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:notifications": "node --test tests/notifications.test.cjs"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

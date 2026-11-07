@@ -1,3 +1,5 @@
+import { TelegramTemplateEditor } from "@/components/telegram-template-editor";
+import { notificationCenterData } from "@/lib/notification-center";
 import { Send } from "lucide-react";
 import { TelegramRouteCardActions, TelegramRouteDialog } from "@/components/telegram-route-dialog";
 import { Badge } from "@/components/ui/badge";
@@ -22,7 +24,7 @@ export default async function TelegramRoutesPage({ searchParams }: { searchParam
     <div className="space-y-6">
       {canEdit && telegramChannels.length ? (
         <div className="flex items-center justify-between gap-3">
-          <p className="text-[13px] text-zinc-500">{ru ? "Один маршрут — одна тема супергруппы. В настройках категории выбирается, куда отправлять её напоминания." : "One route per supergroup topic. Categories pick which routes get their reminders."}</p>
+          <p className="text-[13px] text-zinc-500">{ru ? "Боты и чаты — получатели сообщений. Выбирайте их в Центре уведомлений." : "Bots and chats are delivery destinations. Choose them in the Notification Center."}</p>
           <TelegramRouteDialog workspaceId={workspace.id} locale={locale} />
         </div>
       ) : null}
@@ -58,11 +60,12 @@ export default async function TelegramRoutesPage({ searchParams }: { searchParam
           icon={<Send />}
           title={t(locale, "noTelegramRoutesYet")}
           description={ru
-            ? "Добавьте бота и чат, затем выберите маршрут в настройках категории."
-            : "Add a bot and a chat, then pick the route in a category's settings."}
+            ? "Добавьте бота и чат, затем выберите маршрут в Центре уведомлений."
+            : "Add a bot and a chat, then choose the route in the Notification Center."}
           action={canEdit ? <TelegramRouteDialog workspaceId={workspace.id} locale={locale} /> : null}
         />
       )}
+      <TelegramTemplateEditor data={notificationCenterData(user.id)} locale={locale} />
     </div>
   );
 }

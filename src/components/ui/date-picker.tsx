@@ -25,6 +25,7 @@ export function DatePickerInput({
   ariaLabel,
   locale = "en",
   triggerClassName,
+  min,
   invalid = false,
   size = "md",
 }: {
@@ -36,6 +37,7 @@ export function DatePickerInput({
   ariaLabel?: string;
   locale?: Locale;
   triggerClassName?: string;
+  min?: string;
   invalid?: boolean;
   size?: "sm" | "md";
 }) {
@@ -46,10 +48,12 @@ export function DatePickerInput({
   const selected = controlled
     ? (value ? new Date(`${value}T00:00:00`) : undefined)
     : uncontrolledSelected;
+  const minimum = min ? new Date(`${min}T00:00:00`) : undefined;
   const formatted = selected ? format(selected, "yyyy-MM-dd") : "";
   const emptyLabel = placeholder ?? (locale === "ru" ? "Выбрать дату" : "Pick a date");
 
   function select(date?: Date) {
+    if (date && minimum && date < minimum) return;
     if (!controlled) setUncontrolledSelected(date);
     onChange?.(date ? format(date, "yyyy-MM-dd") : "");
   }
@@ -77,7 +81,7 @@ export function DatePickerInput({
           </button>
         </PopoverTrigger>
         <PopoverContent align="start" className="w-auto overflow-hidden rounded-xl p-0">
-          <DateCalendar selected={selected} onSelect={select} locale={locale} />
+          <DateCalendar selected={selected} onSelect={select} locale={locale} minDate={minimum} />
         </PopoverContent>
       </Popover>
     </>
@@ -90,13 +94,17 @@ export function DateCalendar({
   onSelect,
   locale = "en",
   showClear = true,
+  minDate,
 }: {
   selected?: Date;
   onSelect: (date?: Date) => void;
   locale?: Locale;
   showClear?: boolean;
+  minDate?: Date;
 }) {
   const select = onSelect;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
   const dateFnsLocale = locale === "ru" ? ruLocale : enGB;
   return (
     <>
@@ -110,6 +118,7 @@ export function DateCalendar({
       </div>
       <DayPicker
         mode="single"
+        disabled={minDate ? { before: minDate } : undefined}
         selected={selected}
         onSelect={select}
         showOutsideDays
@@ -147,8 +156,9 @@ export function DateCalendar({
           <div className="mt-2 flex items-center justify-between border-t border-white/[0.06] pt-2">
             <button
               type="button"
-              onClick={() => select(new Date())}
-              className="rounded-md px-2.5 py-1.5 text-xs font-medium text-violet-200 transition hover:bg-violet-500/10 hover:text-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
+              onClick={() => select(today)}
+              disabled={Boolean(minDate && today < minDate)}
+              className="rounded-md px-2.5 py-1.5 text-xs font-medium disabled:pointer-events-none disabled:opacity-40 text-violet-200 transition hover:bg-violet-500/10 hover:text-violet-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-400/40"
             >
               {locale === "ru" ? "Сегодня" : "Today"}
             </button>
